@@ -1,19 +1,12 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Candidate and field positions are immutable server snapshot indices. */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { Label } from "../../components/ui/label";
+import "./styles.css";
 import { useTranslation } from "react-i18next";
-import { defaultBrowse, libraryApi } from "../../api/library";
-import { providerApi } from "../../api/providers";
-import {
-  type MergePreview,
-  type OutputPreview,
-  type SearchPreview,
-  scraperApi,
-  scraperOutputApi,
-  type VideoKind,
-  type VideoMetadata,
-} from "../../api/scraper";
+import type { VideoKind } from "../../api/scraper";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
+import { Select } from "../../components/ui/select";
 import {
   Empty,
   ErrorNotice,
@@ -22,215 +15,65 @@ import {
   useFormat,
 } from "../library/shared";
 import "./translations";
+import { providerChoices, value } from "./scraper-model";
 import { VideoSourceDetails } from "./source-detail";
+import { useScraper } from "./use-scraper";
 
-function value(v: unknown): string {
-  return typeof v === "string" ? v : (JSON.stringify(v) ?? "");
-}
-const providerChoices = ["tmdb", "anilist", "wikipedia.html"];
 export function ScraperPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const format = useFormat();
-  const client = useQueryClient();
-  const [kind, setKind] = useState<VideoKind>("movie");
-  const [title, setTitle] = useState("");
-  const [year, setYear] = useState("");
-  const [namespace, setNamespace] = useState("");
-  const [externalId, setExternalId] = useState("");
-  const [providers, setProviders] = useState<string[]>(["tmdb"]);
-  const [search, setSearch] = useState<SearchPreview>();
-  const [metadata, setMetadata] = useState<VideoMetadata>();
-  const [candidateIndex, setCandidateIndex] = useState<number>();
-  const [selectedFields, setSelectedFields] = useState<string[]>([]);
-  const [selectedArtwork, setSelectedArtwork] = useState<number[]>([]);
-  const [target, setTarget] = useState("");
-  const [localSearch, setLocalSearch] = useState("");
-  const [localQuery, setLocalQuery] = useState("");
-  const [preview, setPreview] = useState<MergePreview>();
-  const [output, setOutput] = useState<OutputPreview>();
-  const [invalid, setInvalid] = useState(false);
-  const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
-  useEffect(() => {
-    const id = output?.preview_id;
-    if (!id) return;
-    return () => {
-      // Replacing or leaving a preview releases backend leases and never writes.
-      void Promise.resolve(scraperOutputApi.discard(id)).catch(() => {
-        // Backend leases expire independently if the desktop connection is gone.
-      });
-    };
-  }, [output?.preview_id]);
-  const snapshot = useQuery({
-    queryKey: ["providers"],
-    queryFn: providerApi.snapshot,
-  });
-  const history = useQuery({
-    queryKey: ["scraper-history"],
-    queryFn: scraperOutputApi.history,
-  });
-  const local = useQuery({
-    queryKey: ["scraper-local", metadata?.kind, localQuery],
-    enabled: Boolean(metadata),
-    queryFn: () =>
-      libraryApi.toolsMedia({
-        ...defaultBrowse(false),
-        kind: metadata?.kind === "tv" ? "tv_series" : (metadata?.kind ?? null),
-        query: localQuery || null,
-        limit: 48,
-      }),
-  });
-  function clearDetail() {
-    setMetadata(undefined);
-    setCandidateIndex(undefined);
-    setPreview(undefined);
-    setOutput(undefined);
-    setTarget("");
-    setThumbnails({});
-    run.reset();
-    detail.reset();
-    artworkLoad.reset();
-    merge.reset();
-    outputPlan.reset();
-    confirm.reset();
-    write.reset();
-  }
-  const run = useMutation({
-    mutationFn: () =>
-      scraperApi.search({
-        query: {
-          kind,
-          title: title.trim(),
-          year: year === "" ? null : Number(year),
-          external_ids: externalId.trim()
-            ? [{ namespace: namespace.trim(), value: externalId.trim() }]
-            : [],
-          language: i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
-        },
-        providers,
-      }),
-    onSuccess: (result) => {
-      setSearch(result);
-      void client.invalidateQueries({ queryKey: ["scraper-history"] });
-    },
-  });
-  const restore = useMutation({
-    mutationFn: scraperApi.searchPreview,
-    onSuccess: (result, runId) => {
-      clearDetail();
-      setSearch(result);
-      const saved = history.data?.find((entry) => entry.id === runId);
-      if (saved) {
-        setKind(saved.query.kind);
-        setTitle(saved.query.title);
-        setYear(saved.query.year === null ? "" : String(saved.query.year));
-        setNamespace(saved.query.external_ids[0]?.namespace ?? "");
-        setExternalId(saved.query.external_ids[0]?.value ?? "");
-        setProviders([
-          ...new Set(
-            result.candidates.map(
-              (candidate) => candidate.candidate.data.provider_id,
-            ),
-          ),
-        ]);
-      }
-    },
-  });
-  const detail = useMutation({
-    mutationFn: ({ runId, index }: { runId: string; index: number }) =>
-      scraperApi.detail(runId, index),
-    onSuccess: (result) => {
-      setMetadata(result);
-      setSelectedFields(result.data.fields.map((f) => f.key));
-      setSelectedArtwork([]);
-    },
-  });
-  const artworkLoad = useMutation({
-    mutationFn: (index: number) =>
-      scraperApi.artworkPreview(
-        search?.run_id ?? "",
-        candidateIndex ?? 0,
-        index,
-      ),
-    onSuccess: (result, index) =>
-      setThumbnails((old) => ({ ...old, [index]: result.thumbnail })),
-  });
-  const merge = useMutation({
-    mutationFn: () =>
-      scraperApi.preview({
-        run_id: search?.run_id ?? "",
-        candidate_index: candidateIndex ?? 0,
-        media_item_id: target,
-        selected_fields: selectedFields,
-        selected_artwork: selectedArtwork,
-      }),
-    onSuccess: setPreview,
-  });
-  const confirm = useMutation({
-    mutationFn: () => scraperApi.confirm(preview?.preview_id ?? ""),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["media"] });
-      void client.invalidateQueries({ queryKey: ["detail"] });
-      void client.invalidateQueries({ queryKey: ["video-source-detail"] });
-      void client.invalidateQueries({ queryKey: ["scraper-history"] });
-    },
-  });
-  const outputPlan = useMutation({
-    mutationFn: () => scraperOutputApi.preview(target),
-    onSuccess: setOutput,
-  });
-  const discard = useMutation({
-    mutationFn: () => scraperOutputApi.discard(output?.preview_id ?? ""),
-    onSuccess: () => {
-      setOutput(undefined);
-      write.reset();
-    },
-  });
-  const write = useMutation({
-    mutationFn: () => scraperOutputApi.execute(output?.preview_id ?? ""),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["media"] });
-      void client.invalidateQueries({ queryKey: ["detail"] });
-      void client.invalidateQueries({ queryKey: ["video-source-detail"] });
-    },
-  });
-  const busy =
-    discard.isPending ||
-    artworkLoad.isPending ||
-    restore.isPending ||
-    run.isPending ||
-    detail.isPending ||
-    merge.isPending ||
-    confirm.isPending ||
-    outputPlan.isPending ||
-    write.isPending;
-  const error =
-    discard.error ??
-    restore.error ??
-    artworkLoad.error ??
-    run.error ??
-    detail.error ??
-    merge.error ??
-    confirm.error ??
-    outputPlan.error ??
-    write.error;
-  const available = (id: string) =>
-    snapshot.data?.providers.some(
-      (p) => p.descriptor.id === id && p.config.enabled,
-    );
-  const supported = (id: string) =>
-    snapshot.data?.providers.some(
-      (provider) =>
-        provider.descriptor.id === id &&
-        provider.descriptor.media_kinds.includes(
-          kind === "tv" ? "tv_series" : kind,
-        ),
-    );
-  const selectCandidate = (index: number) => {
-    if (!search) return;
-    clearDetail();
-    setCandidateIndex(index);
-    detail.mutate({ runId: search.run_id, index });
-  };
+  const {
+    kind,
+    setKind,
+    title,
+    setTitle,
+    year,
+    setYear,
+    namespace,
+    setNamespace,
+    externalId,
+    setExternalId,
+    providers,
+    setProviders,
+    search,
+    setSearch,
+    metadata,
+    candidateIndex,
+    selectedFields,
+    setSelectedFields,
+    selectedArtwork,
+    setSelectedArtwork,
+    target,
+    setTarget,
+    localSearch,
+    setLocalSearch,
+    setLocalQuery,
+    preview,
+    setPreview,
+    output,
+    setOutput,
+    invalid,
+    setInvalid,
+    thumbnails,
+    snapshot,
+    history,
+    local,
+    run,
+    restore,
+    detail,
+    artworkLoad,
+    merge,
+    confirm,
+    outputPlan,
+    discard,
+    write,
+    busy,
+    error,
+    available,
+    supported,
+    selectCandidate,
+    clearDetail,
+  } = useScraper();
   return (
     <>
       <PageHeading title={t("scraper")} />
@@ -259,9 +102,9 @@ export function ScraperPage() {
         }}
       >
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <label className="filter-field">
+          <Label className="filter-field">
             <span>{t("type")}</span>
-            <select
+            <Select
               value={kind}
               onChange={(e) => {
                 setKind(e.target.value as VideoKind);
@@ -284,20 +127,20 @@ export function ScraperPage() {
                   )}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="filter-field">
+            </Select>
+          </Label>
+          <Label className="filter-field">
             <span>{t("scraperTitle")}</span>
-            <input
+            <Input
               value={title}
               maxLength={256}
               onChange={(e) => setTitle(e.target.value)}
               disabled={busy}
             />
-          </label>
-          <label className="filter-field">
+          </Label>
+          <Label className="filter-field">
             <span>{t("scraperYear")}</span>
-            <input
+            <Input
               type="number"
               min={1800}
               max={2200}
@@ -305,33 +148,32 @@ export function ScraperPage() {
               onChange={(e) => setYear(e.target.value)}
               disabled={busy}
             />
-          </label>
-          <label className="filter-field">
+          </Label>
+          <Label className="filter-field">
             <span>{t("scraperExternalNamespace")}</span>
-            <input
+            <Input
               value={namespace}
               maxLength={32}
               onChange={(e) => setNamespace(e.target.value)}
               disabled={busy}
             />
-          </label>
-          <label className="filter-field">
+          </Label>
+          <Label className="filter-field">
             <span>{t("scraperExternalId")}</span>
-            <input
+            <Input
               value={externalId}
               maxLength={128}
               onChange={(e) => setExternalId(e.target.value)}
               disabled={busy}
             />
-          </label>
+          </Label>
         </div>
         <fieldset className="my-4">
           <legend className="mb-2 font-medium">{t("scraperProviders")}</legend>
           <div className="flex flex-wrap gap-5">
             {providerChoices.map((id) => (
-              <label key={id} className="flex items-center gap-2">
-                <input
-                  type="checkbox"
+              <Label key={id} className="flex items-center gap-2">
+                <Checkbox
                   checked={providers.includes(id)}
                   disabled={busy || !available(id) || !supported(id)}
                   onChange={(e) =>
@@ -345,7 +187,7 @@ export function ScraperPage() {
                 <span>
                   {id} {!available(id) && `(${t("disabled")})`}
                 </span>
-              </label>
+              </Label>
             ))}
           </div>
         </fieldset>
@@ -437,9 +279,8 @@ export function ScraperPage() {
           <fieldset className="mt-6">
             <legend className="font-medium">{t("scraperFields")}</legend>
             {metadata.data.fields.map((field, index) => (
-              <label className="scraper-field-choice" key={index}>
-                <input
-                  type="checkbox"
+              <Label className="scraper-field-choice" key={index}>
+                <Checkbox
                   checked={selectedFields.includes(field.key)}
                   disabled={busy}
                   onChange={(e) => {
@@ -467,7 +308,7 @@ export function ScraperPage() {
                     {value(field.value)}
                   </span>
                 </span>
-              </label>
+              </Label>
             ))}
           </fieldset>
           <fieldset className="mt-6">
@@ -477,9 +318,8 @@ export function ScraperPage() {
             </p>
             <div className="scraper-artwork-grid">
               {metadata.data.artwork.map((art, index) => (
-                <label className="scraper-artwork-choice" key={index}>
-                  <input
-                    type="checkbox"
+                <Label className="scraper-artwork-choice" key={index}>
+                  <Checkbox
                     checked={selectedArtwork.includes(index)}
                     disabled={busy}
                     onChange={(e) => {
@@ -532,19 +372,19 @@ export function ScraperPage() {
                       {t("scraperLoadArtwork")}
                     </Button>
                   </span>
-                </label>
+                </Label>
               ))}
             </div>
           </fieldset>
           <div className="mt-6 border-t border-border pt-5">
-            <label className="filter-field">
+            <Label className="filter-field">
               <span>{t("scraperTargetSearch")}</span>
-              <input
+              <Input
                 value={localSearch}
                 onChange={(e) => setLocalSearch(e.target.value)}
                 disabled={busy}
               />
-            </label>
+            </Label>
             <Button
               className="mt-2"
               variant="outline"
@@ -553,9 +393,9 @@ export function ScraperPage() {
             >
               {t("scraperLocalSearch")}
             </Button>
-            <label className="filter-field mt-4">
+            <Label className="filter-field mt-4">
               <span>{t("scraperTarget")}</span>
-              <select
+              <Select
                 value={target}
                 disabled={busy || local.isPending}
                 onChange={(e) => {
@@ -572,8 +412,8 @@ export function ScraperPage() {
                     {card.media.title} · {card.media.year ?? t("unknownYear")}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Label>
             {local.error && <ErrorNotice error={local.error} />}
             <Button
               className="mt-4"

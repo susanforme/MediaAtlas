@@ -1,7 +1,9 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Immutable provider snapshots can lack unique season/episode identifiers. */
+import "./styles.css";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { scraperApi, type VideoMetadata } from "../../api/scraper";
+import { Details, DetailsSummary } from "../../components/ui/details";
 import { ErrorNotice, Loading, useFormat } from "../library/shared";
 import "./translations";
 
@@ -72,10 +74,10 @@ export function VideoSourceDetails({ metadata }: { metadata: VideoMetadata }) {
             {t("scraperOrder")}: {t(`scraperOrder_${metadata.data.order}`)}
           </h3>
           {metadata.data.seasons.map((season, index) => (
-            <details className="mt-3" key={index}>
-              <summary>
+            <Details className="mt-3" key={index}>
+              <DetailsSummary>
                 {t("season")} {number(season.season_number)} · {season.title}
-              </summary>
+              </DetailsSummary>
               <ol className="mt-2 space-y-2 pl-5">
                 {season.episodes.map((episode, i) => (
                   <li key={i}>
@@ -89,7 +91,7 @@ export function VideoSourceDetails({ metadata }: { metadata: VideoMetadata }) {
                   </li>
                 ))}
               </ol>
-            </details>
+            </Details>
           ))}
         </div>
       )}

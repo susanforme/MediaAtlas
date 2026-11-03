@@ -1,4 +1,5 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Diagnostic rows have no local state; multiple requests can share one origin and attempt. */
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
@@ -9,6 +10,10 @@ import {
   providerApi,
 } from "../../api/providers";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Details, DetailsSummary } from "../../components/ui/details";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
 import {
   Empty,
   ErrorNotice,
@@ -51,8 +56,8 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
     },
   });
   return (
-    <details className="mt-5">
-      <summary>{t("providerConfig")}</summary>
+    <Details className="mt-5">
+      <DetailsSummary>{t("providerConfig")}</DetailsSummary>
       <form
         className="mt-4"
         onSubmit={(event) => {
@@ -70,9 +75,9 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {numericFields.map(([key, label, min, max]) => (
-            <label className="filter-field" key={key}>
+            <Label className="filter-field" key={key}>
               <span>{t(label)}</span>
-              <input
+              <Input
                 type="number"
                 min={min}
                 max={max}
@@ -87,7 +92,7 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
                   }))
                 }
               />
-            </label>
+            </Label>
           ))}
         </div>
         <Button className="mt-4" type="submit" disabled={save.isPending}>
@@ -97,7 +102,7 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
         {save.isError && <ErrorNotice error={save.error} />}{" "}
         {save.isSuccess && <p role="status">{t("providerConfigSaved")}</p>}
       </form>
-    </details>
+    </Details>
   );
 }
 function ProviderCard({ provider }: { provider: ProviderView }) {
@@ -143,15 +148,14 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
           .map((cap) => t(`providerCapability_${cap}`, { defaultValue: cap }))
           .join(" · ")}
       </p>
-      <label className="mb-4 flex items-center gap-2">
-        <input
-          type="checkbox"
+      <Label className="mb-4 flex items-center gap-2">
+        <Checkbox
           checked={provider.config.enabled}
           disabled={enabled.isPending}
           onChange={(event) => enabled.mutate(event.target.checked)}
         />
         {t("providerEnabled")}
-      </label>
+      </Label>
       {provider.descriptor.fixture ? (
         <form
           onSubmit={(event) => {
@@ -160,15 +164,15 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
           }}
           className="flex flex-wrap items-end gap-3"
         >
-          <label className="filter-field flex-1">
+          <Label className="filter-field flex-1">
             <span>{t("providerQuery")}</span>
-            <input
+            <Input
               maxLength={200}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               autoComplete="off"
             />
-          </label>
+          </Label>
           <Button
             type="submit"
             disabled={
@@ -180,12 +184,12 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
         </form>
       ) : (
         <div className="flex flex-wrap gap-3">
-          <Link to="/scraper" className="action-link">
-            {t("providerOpenScraper")}
-          </Link>
-          <Link to="/settings" className="action-link">
-            {t("providerOpenAuthSettings")}
-          </Link>
+          <Button asChild variant="outline">
+            <Link to="/scraper">{t("providerOpenScraper")}</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/settings">{t("providerOpenAuthSettings")}</Link>
+          </Button>
         </div>
       )}
       {provider.descriptor.fixture && start.isSuccess && (
@@ -194,8 +198,8 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
         </p>
       )}
       <ProviderConfiguration provider={provider} />
-      <details className="mt-4">
-        <summary>{t("providerDetails")}</summary>
+      <Details className="mt-4">
+        <DetailsSummary>{t("providerDetails")}</DetailsSummary>
         <dl className="mt-3 space-y-2 text-sm">
           <div>
             <dt>{t("providerLicense")}</dt>
@@ -244,13 +248,15 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
           ).map(
             ([label, url]) =>
               url && (
-                <a key={label} href={url} target="_blank" rel="noreferrer">
-                  {t(label)}
-                </a>
+                <Button asChild variant="link" key={label}>
+                  <a href={url} target="_blank" rel="noreferrer">
+                    {t(label)}
+                  </a>
+                </Button>
               ),
           )}
         </div>
-      </details>
+      </Details>
       {enabled.isError && <ErrorNotice error={enabled.error} />}
       {provider.descriptor.fixture && start.isError && (
         <ErrorNotice error={start.error} />
@@ -272,7 +278,7 @@ export function ProvidersPage() {
           retry={() => void snapshot.refetch()}
         />
       ) : snapshot.data.providers.length ? (
-        <div className="space-y-4">
+        <div className="grid items-start gap-5 2xl:grid-cols-2">
           {snapshot.data.providers.map((provider) => (
             <ProviderCard key={provider.descriptor.id} provider={provider} />
           ))}

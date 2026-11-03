@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { databaseMaintenanceApi as api } from "../../api/maintenance";
 import i18n from "../../i18n";
@@ -120,4 +126,41 @@ it("discards privacy-bound previews after locking", async () => {
     screen.queryByRole("button", { name: "Confirm database backup" }),
   ).not.toBeInTheDocument();
   expect(api.backupConfirm).not.toHaveBeenCalled();
+});
+
+it("does not reveal a diagnostic result that arrives after privacy is locked", async () => {
+  privacy.includeAdult = true;
+  let complete!: (result: Awaited<ReturnType<typeof api.diagnostics>>) => void;
+  vi.mocked(api.diagnostics).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        complete = resolve;
+      }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const content = () => (
+    <QueryClientProvider client={client}>
+      <MaintenancePage />
+    </QueryClientProvider>
+  );
+  const mounted = render(content());
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Export safe diagnostics" }),
+  );
+  expect(api.diagnostics).toHaveBeenCalledOnce();
+  privacy.includeAdult = false;
+  mounted.rerender(content());
+  await act(async () => {
+    complete({
+      id: "diagnostics",
+      path: "/synthetic/private-diagnostics.txt",
+      bytes: 128,
+    });
+  });
+  expect(
+    screen.queryByDisplayValue("/synthetic/private-diagnostics.txt"),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByText("Diagnostics saved")).not.toBeInTheDocument();
 });

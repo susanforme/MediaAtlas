@@ -1,17 +1,20 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
 import { defaultBrowse, libraryApi } from "../../api/library";
 import {
   maintenanceApi,
-  type OrganizationPlan,
   type OrganizationStrategy,
-  organizationApi,
 } from "../../api/organization";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { useOrganization } from "./use-organization";
 import "./translations";
 
 const ScraperPage = lazy(() =>
@@ -25,122 +28,34 @@ export function OrganizationPanel({
   adult?: boolean;
 }) {
   const { t } = useTranslation();
-  const client = useQueryClient();
-  const api = useMemo(() => organizationApi(adult), [adult]);
-  const [target, setTarget] = useState("");
-  const [template, setTemplate] = useState("{title} ({year})/{stem}.{ext}");
-  const [strategy, setStrategy] = useState<OrganizationStrategy>("preserve");
-  const [plan, setPlan] = useState<OrganizationPlan>();
-  const [rollback, setRollback] = useState(false);
-  const [historyId, setHistoryId] = useState("");
-  const current = useRef<OrganizationPlan | undefined>(undefined);
-  const active = useRef(true);
-  const requestEpoch = useRef(0);
-  const prefix = adult ? ["adult", "organization"] : ["organization"];
-  const roots = useQuery({
-    queryKey: adult ? ["adult", "roots"] : ["roots", false],
-    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
-  });
-  const history = useQuery({
-    queryKey: [...prefix, "history"],
-    queryFn: api.history,
-    refetchInterval: 2500,
-  });
-  const journal = useQuery({
-    queryKey: [...prefix, "logs", historyId],
-    queryFn: () => api.logs(historyId),
-    refetchInterval: 2500,
-    enabled: !!historyId,
-  });
-  const savedPlan = useQuery({
-    queryKey: [...prefix, "plan", historyId],
-    queryFn: () => api.plan(historyId),
-    enabled: !!historyId,
-  });
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-      requestEpoch.current += 1;
-      const old = current.current;
-      if (old) void api.discard(old.id).catch(() => {});
-    };
-  }, [api]);
-  function replace(
-    value: OrganizationPlan,
-    isRollback: boolean,
-    epoch: number,
-  ) {
-    if (!active.current || epoch !== requestEpoch.current) {
-      void api.discard(value.id).catch(() => {});
-      return;
-    }
-    const old = current.current;
-    if (old) void api.discard(old.id).catch(() => {});
-    current.current = value;
-    setPlan(value);
-    setRollback(isRollback);
-  }
-  const preview = useMutation({
-    mutationFn: async () => {
-      discard();
-      const epoch = requestEpoch.current;
-      const value = await api.preview({
-        media_item_id: mediaId,
-        target_root_id: target,
-        template,
-        strategy,
-      });
-      return { value, epoch };
-    },
-    onSuccess: ({ value, epoch }) => replace(value, false, epoch),
-  });
-  const restore = useMutation({
-    mutationFn: async (id: string) => {
-      discard();
-      const epoch = requestEpoch.current;
-      const value = await api.rollbackPreview(id);
-      return { value, epoch };
-    },
-    onSuccess: ({ value, epoch }) => replace(value, true, epoch),
-  });
-  const execute = useMutation({
-    mutationFn: () =>
-      rollback
-        ? api.rollbackExecute(plan?.id ?? "")
-        : api.execute(plan?.id ?? ""),
-    onSuccess: () => {
-      if (!active.current) return;
-      requestEpoch.current += 1;
-      current.current = undefined;
-      setPlan(undefined);
-      void client.invalidateQueries({ queryKey: prefix });
-    },
-  });
-  const cancel = useMutation({
-    mutationFn: () => api.cancel(plan?.id ?? ""),
-    onSuccess: () => {
-      if (!active.current) return;
-      requestEpoch.current += 1;
-      current.current = undefined;
-      setPlan(undefined);
-      void history.refetch();
-    },
-  });
-  function discard() {
-    requestEpoch.current += 1;
-    const old = current.current;
-    current.current = undefined;
-    setPlan(undefined);
-    if (old) void api.discard(old.id).catch(() => {});
-  }
+  const {
+    rollback,
+    target,
+    setTarget,
+    template,
+    setTemplate,
+    strategy,
+    setStrategy,
+    plan,
+    historyId,
+    setHistoryId,
+    roots,
+    history,
+    journal,
+    savedPlan,
+    preview,
+    restore,
+    execute,
+    cancel,
+    discard,
+  } = useOrganization(mediaId, adult);
   return (
     <section className="panel space-y-4">
       <h2 className="section-title">{t("organize")}</h2>
       <div className="filter-grid">
-        <label className="filter-field">
+        <Label className="filter-field">
           <span>{t("organizeTarget")}</span>
-          <select
+          <Select
             disabled={
               preview.isPending ||
               restore.isPending ||
@@ -165,11 +80,11 @@ export function OrganizationPanel({
                   {r.name}
                 </option>
               ))}
-          </select>
-        </label>
-        <label className="filter-field">
+          </Select>
+        </Label>
+        <Label className="filter-field">
           <span>{t("organizeTemplate")}</span>
-          <input
+          <Input
             disabled={
               preview.isPending ||
               restore.isPending ||
@@ -182,10 +97,10 @@ export function OrganizationPanel({
               setTemplate(e.target.value);
             }}
           />
-        </label>
-        <label className="filter-field">
+        </Label>
+        <Label className="filter-field">
           <span>{t("organizeStrategy")}</span>
-          <select
+          <Select
             disabled={
               preview.isPending ||
               restore.isPending ||
@@ -203,8 +118,8 @@ export function OrganizationPanel({
                 {t(`mode_${s}`)}
               </option>
             ))}
-          </select>
-        </label>
+          </Select>
+        </Label>
       </div>
       <Button
         disabled={
@@ -404,9 +319,9 @@ export function LocalCandidates({
   });
   return (
     <section className="space-y-5">
-      <label className="filter-field">
+      <Label className="filter-field">
         <span>{t("toolsSearch")}</span>
-        <input
+        <Input
           type="search"
           value={query}
           onChange={(e) => {
@@ -415,16 +330,16 @@ export function LocalCandidates({
             setCursors([null]);
           }}
         />
-      </label>
+      </Label>
       {media.isPending ? (
         <Loading />
       ) : media.error ? (
         <ErrorNotice error={media.error} />
       ) : (
         <>
-          <label className="filter-field">
+          <Label className="filter-field">
             <span>{t("toolsSelect")}</span>
-            <select
+            <Select
               value={selected}
               onChange={(e) => setSelected(e.target.value)}
             >
@@ -434,8 +349,8 @@ export function LocalCandidates({
                   {c.media.title}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Label>
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -508,13 +423,12 @@ function Maintenance() {
   return (
     <>
       <section className="panel space-y-4">
-        <h2>{t("watcherTitle")}</h2>
+        <h2 className="section-title">{t("watcherTitle")}</h2>
         <p>{t("watcherHelp")}</p>
         {watchers.data?.map((w) => (
           <div key={w.root_id}>
-            <label className="flex gap-3">
-              <input
-                type="checkbox"
+            <Label className="flex gap-3">
+              <Checkbox
                 checked={w.opted_in}
                 disabled={configure.isPending}
                 onChange={(e) =>
@@ -523,7 +437,7 @@ function Maintenance() {
               />
               {t("watcherEnable")}:{" "}
               {roots.data?.find((r) => r.id === w.root_id)?.name ?? w.root_id}
-            </label>
+            </Label>
             <p>
               {t(w.active ? "watcherActive" : "watcherInactive")}
               {w.pending_rescan ? ` · ${t("watcherPending")}` : ""}
@@ -535,7 +449,7 @@ function Maintenance() {
         {configure.error && <ErrorNotice error={configure.error} />}
       </section>
       <section className="panel space-y-4">
-        <h2>{t("healthIssues")}</h2>
+        <h2 className="section-title">{t("healthIssues")}</h2>
         <Button
           disabled={health.isPending}
           onClick={() => {
@@ -555,12 +469,11 @@ function Maintenance() {
                   .map((issue) => t(`issue_${issue}`, { defaultValue: issue }))
                   .join(" · ")}
               </p>
-              <a
-                className="action-link"
-                href={`/tools?media=${encodeURIComponent(i.media_id)}`}
-              >
-                {t("toolsRepair")}
-              </a>
+              <Button asChild variant="link">
+                <a href={`/tools?media=${encodeURIComponent(i.media_id)}`}>
+                  {t("toolsRepair")}
+                </a>
+              </Button>
             </li>
           ))}
         </ul>
@@ -586,15 +499,19 @@ export function MediaToolsPage() {
   return (
     <>
       <PageHeading title={t("videoTools")}>
-        <Link to="/library" className="action-link">
-          {t("library")}
-        </Link>
+        <Button asChild variant="outline">
+          <Link to="/library">{t("library")}</Link>
+        </Button>
       </PageHeading>
-      <div className="flex gap-3 mb-6">
+      <fieldset
+        className="mb-7 flex flex-wrap gap-2"
+        aria-label={t("videoTools")}
+      >
         {(["local", "scraper", "health"] as const).map((v) => (
           <Button
             key={v}
-            variant={v === tab ? "default" : "outline"}
+            variant={v === tab ? "secondary" : "ghost"}
+            aria-pressed={v === tab}
             onClick={() => setTab(v)}
           >
             {t(
@@ -606,7 +523,7 @@ export function MediaToolsPage() {
             )}
           </Button>
         ))}
-      </div>
+      </fieldset>
       {tab === "local" ? (
         <LocalCandidates />
       ) : tab === "scraper" ? (

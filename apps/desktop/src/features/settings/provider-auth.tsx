@@ -1,136 +1,38 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { DesktopError } from "../../api/desktop";
-import {
-  type AuthMethod,
-  type AuthStorage,
-  providerAuthApi,
-} from "../../api/provider-auth";
+import type { AuthMethod, AuthStorage } from "../../api/provider-auth";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
 import { usePrivacy } from "../library/context";
 import { ErrorNotice } from "../library/shared";
+import { useProviderAuth } from "./use-provider-auth";
 import "./auth-translations";
 
 function AuthEditor({ providerId }: { providerId: string }) {
   const { t } = useTranslation();
-  const client = useQueryClient();
-  const active = useRef(false);
-  const [method, setMethod] = useState<AuthMethod>("bearer");
-  const [storage, setStorage] = useState<AuthStorage>("system");
-  const [secret, setSecret] = useState("");
-  const [affiliate, setAffiliate] = useState("");
-  const [pending, setPending] = useState<"save" | "clear" | null>(null);
-  const [outcome, setOutcome] = useState<
-    "saved" | "cleared" | "save_failed" | "clear_failed" | null
-  >(null);
-  const [error, setError] = useState<unknown>();
-  const [invalid, setInvalid] = useState(false);
-  const status = useQuery({
-    queryKey: ["provider-auth", providerId],
-    queryFn: () => providerAuthApi.status(providerId),
-    retry: false,
-  });
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  useEffect(() => {
-    if (status.data) {
-      setMethod(
-        status.data.supported_methods.includes(status.data.method)
-          ? status.data.method
-          : status.data.supported_methods[0],
-      );
-    }
-  }, [status.data]);
-  const needsSecret = status.data?.supported_methods.some(
-    (value) => value !== "none",
-  );
-  async function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (pending) return;
-    const submitted =
-      method === "affiliate"
-        ? JSON.stringify({
-            api_id: secret.trim(),
-            affiliate_id: affiliate.trim(),
-          })
-        : secret.trim();
-    const valid =
-      secret.trim().length > 0 &&
-      (method !== "affiliate" || affiliate.trim().length > 0) &&
-      !/\s/.test(submitted) &&
-      [...submitted].every(
-        (character) =>
-          character.charCodeAt(0) >= 32 && character.charCodeAt(0) !== 127,
-      );
-    setInvalid(!valid);
-    if (!valid) {
-      setSecret("");
-      setAffiliate("");
-      return;
-    }
-    setSecret("");
-    setAffiliate("");
-    setPending("save");
-    setOutcome(null);
-    setError(undefined);
-    try {
-      const saved = await providerAuthApi.save({
-        provider_id: providerId,
-        method,
-        storage,
-        secret: submitted,
-      });
-      if (!saved.configured) throw new DesktopError("invalid_response");
-      if (active.current) {
-        client.setQueryData(["provider-auth", providerId], saved);
-        setOutcome("saved");
-      }
-    } catch (failure: unknown) {
-      if (active.current) {
-        setError(failure);
-        setOutcome("save_failed");
-      }
-    } finally {
-      if (active.current) {
-        setSecret("");
-        setAffiliate("");
-        setPending(null);
-      }
-    }
-  }
-  async function clear() {
-    if (pending) return;
-    setSecret("");
-    setAffiliate("");
-    setPending("clear");
-    setOutcome(null);
-    setError(undefined);
-    setInvalid(false);
-    try {
-      const cleared = await providerAuthApi.clear(providerId);
-      if (cleared.configured) throw new DesktopError("invalid_response");
-      if (active.current) {
-        client.setQueryData(["provider-auth", providerId], cleared);
-        setOutcome("cleared");
-      }
-    } catch (failure: unknown) {
-      if (active.current) {
-        setError(failure);
-        setOutcome("clear_failed");
-      }
-    } finally {
-      if (active.current) {
-        setSecret("");
-        setAffiliate("");
-        setPending(null);
-      }
-    }
-  }
+  const {
+    method,
+    setMethod,
+    storage,
+    setStorage,
+    secret,
+    setSecret,
+    affiliate,
+    setAffiliate,
+    pending,
+    outcome,
+    setOutcome,
+    error,
+    setError,
+    invalid,
+    setInvalid,
+    status,
+    needsSecret,
+    save,
+    clear,
+  } = useProviderAuth(providerId);
   if (status.isPending)
     return (
       <p role="status" className="mt-4 text-sm text-muted-foreground">
@@ -200,9 +102,9 @@ function AuthEditor({ providerId }: { providerId: string }) {
         onSubmit={(event) => void save(event)}
         noValidate
       >
-        <label className="filter-field">
+        <Label className="filter-field">
           <span>{t("providerAuthMethod")}</span>
-          <select
+          <Select
             value={method}
             disabled={pending !== null}
             onChange={(event) => {
@@ -227,11 +129,11 @@ function AuthEditor({ providerId }: { providerId: string }) {
                   )}
                 </option>
               ))}
-          </select>
-        </label>
-        <label className="filter-field">
+          </Select>
+        </Label>
+        <Label className="filter-field">
           <span>{t("providerAuthStorage")}</span>
-          <select
+          <Select
             value={storage}
             disabled={pending !== null}
             onChange={(event) => {
@@ -242,9 +144,9 @@ function AuthEditor({ providerId }: { providerId: string }) {
           >
             <option value="system">{t("providerAuthSystem")}</option>
             <option value="session_only">{t("providerAuthSession")}</option>
-          </select>
-        </label>
-        <label className="filter-field">
+          </Select>
+        </Label>
+        <Label className="filter-field">
           <span>
             {t(
               method === "affiliate"
@@ -252,7 +154,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
                 : "providerAuthSecret",
             )}
           </span>
-          <input
+          <Input
             type="password"
             name="provider-credential"
             autoComplete="off"
@@ -265,11 +167,11 @@ function AuthEditor({ providerId }: { providerId: string }) {
               setInvalid(false);
             }}
           />
-        </label>
+        </Label>
         {method === "affiliate" && (
-          <label className="filter-field">
+          <Label className="filter-field">
             <span>{t("providerAuthAffiliateId")}</span>
-            <input
+            <Input
               type="password"
               name="provider-affiliate"
               autoComplete="off"
@@ -282,7 +184,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
                 setInvalid(false);
               }}
             />
-          </label>
+          </Label>
         )}
         {status.data.configured && (
           <p className="text-sm text-muted-foreground">
@@ -357,9 +259,9 @@ export function ProviderAuthSettings() {
       <h2 id="provider-auth-title" className="section-title">
         {t("providerAuthTitle")}
       </h2>
-      <label className="filter-field">
+      <Label className="filter-field">
         <span>{t("providerAuthProvider")}</span>
-        <select
+        <Select
           value={selectedProvider}
           onChange={(event) => setProvider(event.target.value)}
         >
@@ -372,8 +274,8 @@ export function ProviderAuthSettings() {
               <option value="wikidata">{t("providerAuthWikidata")}</option>
             </>
           )}
-        </select>
-      </label>
+        </Select>
+      </Label>
       <AuthEditor key={selectedProvider} providerId={selectedProvider} />
     </section>
   );
