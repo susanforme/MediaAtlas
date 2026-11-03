@@ -28,6 +28,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let startup_started = std::time::Instant::now();
             let log_dir = app.path().app_log_dir().map_err(|_| {
                 io::Error::other("Application log directory could not be resolved.")
             })?;
@@ -68,8 +69,6 @@ pub fn run() {
                     data_dir.join("artwork-cache").join("general"),
                 )
                 .map_err(|_| mediaatlas_infrastructure::library::RepositoryError::Database)?;
-                mediaatlas_infrastructure::library_ready::backfill_local_nfo(&repository).await?;
-                let scans = ScanService::new(repository.clone());
                 let providers =
                     mediaatlas_infrastructure::providers::ProviderService::new(repository.clone())
                         .await?;
@@ -112,6 +111,7 @@ pub fn run() {
                 )
                 .with_auth_service(auth.clone());
                 scraper.initialize().await?;
+                let scans = ScanService::new(repository.clone()).with_scraper(scraper.clone());
                 let music = mediaatlas_infrastructure::music_library::MusicLibraryService::new(
                     repository.clone(),
                 );
@@ -178,7 +178,6 @@ pub fn run() {
                     repository.clone(),
                     scans.clone(),
                 );
-                watcher.restore().await?;
                 Ok::<_, mediaatlas_infrastructure::library::RepositoryError>(state::DesktopState {
                     repository: repository.clone(),
                     maintenance,
@@ -259,7 +258,38 @@ pub fn run() {
                     }
                 }
             });
+            // Legacy NFO reads and recursive watcher registration may touch slow or
+            // offline media disks. Neither is a prerequisite for rendering the UI.
+            let background_repository = desktop.repository.clone();
+            let background_watcher = desktop.watcher.clone();
             app.manage(desktop);
+            mediaatlas_infrastructure::log_startup_stage(
+                mediaatlas_infrastructure::StartupStage::Services,
+                startup_started.elapsed(),
+                true,
+            );
+            tauri::async_runtime::spawn(async move {
+                let started = std::time::Instant::now();
+                let result = mediaatlas_infrastructure::library_ready::backfill_local_nfo(
+                    &background_repository,
+                )
+                .await;
+                mediaatlas_infrastructure::log_startup_stage(
+                    mediaatlas_infrastructure::StartupStage::LegacyMetadata,
+                    started.elapsed(),
+                    result.is_ok(),
+                );
+            });
+            tauri::async_runtime::spawn(async move {
+                let started = std::time::Instant::now();
+                // Watcher status retains individual Root failures for the UI.
+                let result = background_watcher.restore().await;
+                mediaatlas_infrastructure::log_startup_stage(
+                    mediaatlas_infrastructure::StartupStage::Watchers,
+                    started.elapsed(),
+                    result.is_ok(),
+                );
+            });
             mediaatlas_infrastructure::log_app_ready();
             let info = mediaatlas_application::get_app_info(env!("CARGO_PKG_VERSION"))?;
             app.emit(APP_READY_EVENT, AppInfoDto::from(info))?;
@@ -357,6 +387,7 @@ pub fn run() {
             commands::library_summary,
             commands::library_facets,
             commands::scan_start,
+            commands::library_sync,
             commands::scan_list_tasks,
             commands::scan_get_preview,
             commands::scan_confirm,

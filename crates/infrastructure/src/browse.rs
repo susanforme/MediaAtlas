@@ -24,7 +24,6 @@ const POSTER: &str = "EXISTS(SELECT 1 FROM artworks a WHERE a.media_item_id=m.id
 const BACKDROP: &str =
     "EXISTS(SELECT 1 FROM artworks a WHERE a.media_item_id=m.id AND a.kind='backdrop')";
 const NFO: &str = "EXISTS(SELECT 1 FROM media_files f WHERE f.media_item_id=m.id AND lower(f.relative_path) LIKE '%.nfo')";
-const METADATA: &str = "EXISTS(SELECT 1 FROM metadata_values v WHERE v.media_item_id=m.id)";
 // Identity collision is a review signal, never an instruction to merge works.
 const DUPLICATE: &str = "EXISTS(SELECT 1 FROM external_ids x JOIN external_ids y ON x.provider_id=y.provider_id AND x.namespace=y.namespace AND x.external_id=y.external_id WHERE x.media_item_id=m.id AND y.media_item_id<>m.id)";
 
@@ -445,7 +444,8 @@ impl BrowseService {
 
     pub async fn summary(&self, input: &BrowseQuery) -> Result<LibrarySummaryView> {
         validate_query(input)?;
-        let mut sql = QueryBuilder::new(format!("SELECT count(*) total,sum(NOT ({POSTER})) missing_poster,sum(NOT ({NFO})) missing_nfo,sum(NOT ({METADATA})) incomplete_metadata FROM media_items m WHERE 1=1"));
+        let metadata = crate::library_ready::metadata_complete_predicate("m");
+        let mut sql = QueryBuilder::new(format!("SELECT count(*) total,sum(NOT ({POSTER})) missing_poster,sum(NOT ({NFO})) missing_nfo,sum(NOT ({metadata})) incomplete_metadata FROM media_items m WHERE 1=1"));
         filter(&mut sql, input)?;
         self.completion_filter(&mut sql);
         let row = sql.build().fetch_one(self.repo.pool()).await?;
@@ -537,7 +537,17 @@ fn strip_extended_windows_prefix(path: String) -> String {
 }
 
 fn select_media() -> String {
-    format!("SELECT m.*,{POSTER} has_poster,{BACKDROP} has_backdrop,{NFO} has_nfo,{METADATA} has_metadata,{DUPLICATE} duplicate FROM media_items m WHERE 1=1")
+    let metadata = crate::library_ready::metadata_complete_predicate("m");
+    let refresh = refresh_status_predicate();
+    format!("SELECT m.*,{POSTER} has_poster,{BACKDROP} has_backdrop,{NFO} has_nfo,{metadata} has_metadata,{DUPLICATE} duplicate,{refresh} refresh_status FROM media_items m WHERE 1=1")
+}
+
+fn refresh_status_predicate() -> String {
+    let ancestor = crate::library_ready::typed_descendant("refresh_parent", "m");
+    let parents = crate::library_ready::ancestor_ids("m");
+    // A late cancellation/failure from an older worker must not replace the
+    // outcome of the newer refresh. Row insertion order breaks same-ms ties.
+    format!("(SELECT CASE refresh.state WHEN 'pending' THEN 'metadata_pending' WHEN 'failed' THEN CASE WHEN refresh.reason='artwork_failed' THEN 'metadata_artwork_failed' ELSE 'metadata_failed' END WHEN 'needs_review' THEN CASE WHEN refresh.reason='provider_unconfigured' THEN 'metadata_unconfigured' ELSE 'metadata_needs_review' END ELSE NULL END FROM library_refresh_items refresh JOIN scrape_tasks refresh_task ON refresh_task.id=refresh.task_id WHERE refresh.media_item_id IN (SELECT m.id UNION SELECT refresh_parent.id FROM media_items refresh_parent WHERE refresh_parent.id IN ({parents}) AND ({ancestor})) ORDER BY refresh_task.created_at DESC,refresh_task.rowid DESC LIMIT 1)")
 }
 
 fn visibility(sql: &mut QueryBuilder<'_, Sqlite>, include_adult: bool) {
@@ -612,7 +622,22 @@ fn filter(sql: &mut QueryBuilder<'_, Sqlite>, input: &BrowseQuery) -> Result<()>
             "missing_poster" => format!("NOT ({POSTER})"),
             "missing_backdrop" => format!("NOT ({BACKDROP})"),
             "missing_nfo" => format!("NOT ({NFO})"),
-            "incomplete_metadata" => format!("NOT ({METADATA})"),
+            "incomplete_metadata" => format!(
+                "NOT ({})",
+                crate::library_ready::metadata_complete_predicate("m")
+            ),
+            "metadata_pending" => format!("{}='metadata_pending'", refresh_status_predicate()),
+            "metadata_failed" => format!(
+                "({0}='metadata_artwork_failed' OR (NOT ({1}) AND {0}='metadata_failed'))",
+                refresh_status_predicate(),
+                crate::library_ready::metadata_complete_predicate("m")
+            ),
+            "metadata_needs_review" | "metadata_unconfigured" => format!(
+                "NOT ({}) AND {}='{}'",
+                crate::library_ready::metadata_complete_predicate("m"),
+                refresh_status_predicate(),
+                health
+            ),
             "duplicate" => DUPLICATE.to_owned(),
             _ => return Err(RepositoryError::InvalidInput),
         };
@@ -696,6 +721,15 @@ fn health(row: &SqliteRow) -> Result<Vec<String>> {
     }
     if get::<bool>(row, "duplicate")? {
         out.push("duplicate".into());
+    }
+    if let Some(state) = get::<Option<String>>(row, "refresh_status")? {
+        // An earlier failed automatic attempt must not label a subsequently
+        // corrected item as unresolved. A currently running refresh is real work.
+        if state == "metadata_artwork_failed" {
+            out.push("metadata_failed".into());
+        } else if state == "metadata_pending" || !get::<bool>(row, "has_metadata")? {
+            out.push(state);
+        }
     }
     Ok(out)
 }

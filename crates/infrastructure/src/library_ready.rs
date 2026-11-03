@@ -1,4 +1,4 @@
-//! Completion evidence is independent from the P2 filename-derived local fields.
+//! Local availability is independent from metadata completion.
 use crate::library::{LibraryRepository, RepositoryError};
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
 use cap_std::{
@@ -31,6 +31,11 @@ pub(crate) fn typed_descendant(parent: &str, child: &str) -> String {
     let season_safe = ordinary_node("sm");
     format!("(({parent_safe}) AND ({child_safe}) AND (({parent}.kind IN ('tv_series','tv_season') AND {child}.kind IN ('tv_episode','anime') AND EXISTS(SELECT 1 FROM media_relations rel WHERE rel.parent_id={parent}.id AND rel.child_id={child}.id AND rel.relation_type='episode')) OR ({parent}.kind='tv_series' AND {child}.kind IN ('tv_episode','anime') AND EXISTS(SELECT 1 FROM media_relations sr JOIN media_items sm ON sm.id=sr.child_id AND sm.kind='tv_season' JOIN media_relations er ON er.parent_id=sm.id AND er.relation_type='episode' WHERE sr.parent_id={parent}.id AND sr.relation_type='season' AND er.child_id={child}.id AND ({season_safe})))))")
 }
+/// Resolve only the two supported hierarchy levels before inspecting metadata.
+/// This keeps per-card metadata checks bounded by relations rather than the library.
+pub(crate) fn ancestor_ids(alias: &str) -> String {
+    format!("SELECT ar.parent_id FROM media_relations ar WHERE ar.child_id={alias}.id UNION SELECT pr.parent_id FROM media_relations cr JOIN media_relations pr ON pr.child_id=cr.parent_id WHERE cr.child_id={alias}.id")
+}
 pub(crate) fn ancestor_isolation(alias: &str) -> String {
     format!("NOT EXISTS(SELECT 1 FROM media_relations ar JOIN media_items am ON am.id=ar.parent_id WHERE ar.child_id={alias}.id AND (am.kind='adult_video' OR am.adult_isolated=1 OR EXISTS(SELECT 1 FROM media_files af JOIN library_roots rr ON rr.id=af.root_id WHERE af.media_item_id=am.id AND rr.kind='adult_video'))) AND NOT EXISTS(SELECT 1 FROM media_relations cr JOIN media_relations pr ON pr.child_id=cr.parent_id JOIN media_items am ON am.id=pr.parent_id WHERE cr.child_id={alias}.id AND (am.kind='adult_video' OR am.adult_isolated=1 OR EXISTS(SELECT 1 FROM media_files af JOIN library_roots rr ON rr.id=af.root_id WHERE af.media_item_id=am.id AND rr.kind='adult_video')))")
 }
@@ -41,16 +46,24 @@ fn ordinary_node(alias: &str) -> String {
 fn metadata_evidence(alias: &str) -> String {
     format!("(EXISTS(SELECT 1 FROM local_metadata_provenance p WHERE p.media_item_id={alias}.id) OR ({alias}.kind<>'adult_video' AND EXISTS(SELECT 1 FROM video_metadata_sources v WHERE v.media_item_id={alias}.id)) OR ({alias}.kind='adult_video' AND EXISTS(SELECT 1 FROM adult_metadata_sources a WHERE a.media_item_id={alias}.id)))")
 }
+/// Filename-derived local fields do not establish metadata completion. The
+/// health indicator is independent from whether a local item can be browsed.
+pub(crate) fn metadata_complete_predicate(alias: &str) -> String {
+    let own = metadata_evidence(alias);
+    let inherited = metadata_evidence("metadata_parent");
+    let typed = typed_descendant("metadata_parent", alias);
+    let parents = ancestor_ids(alias);
+    format!("(({own}) OR EXISTS(SELECT 1 FROM metadata_values mv WHERE mv.media_item_id={alias}.id AND (mv.is_user_modified=1 OR (mv.provider_id IS NOT NULL AND mv.provider_id<>'local'))) OR ({alias}.kind IN ('tv_episode','anime') AND EXISTS(SELECT 1 FROM media_items metadata_parent WHERE metadata_parent.id IN ({parents}) AND ({typed}) AND ({inherited}))))")
+}
 fn direct_ready(alias: &str) -> String {
     let extensions = VIDEO_EXTENSIONS
         .iter()
         .map(|e| format!("lower(f.relative_path) LIKE '%.{e}'"))
         .collect::<Vec<_>>()
         .join(" OR ");
-    let own = metadata_evidence(alias);
-    let inherited = metadata_evidence("parent_source");
-    let typed = typed_descendant("parent_source", alias);
-    format!("{alias}.kind IN ('movie','tv_episode','anime','music_video','concert','adult_video') AND (({own}) OR ({alias}.kind IN ('tv_episode','anime') AND EXISTS(SELECT 1 FROM media_items parent_source WHERE parent_source.adult_isolated=0 AND ({typed}) AND ({inherited})))) AND EXISTS(SELECT 1 FROM media_files f JOIN library_roots lr ON lr.id=f.root_id WHERE f.media_item_id={alias}.id AND lr.enabled=1 AND (lr.kind IS NULL OR lr.kind={alias}.kind OR (lr.kind IN ('tv_series','tv_season') AND {alias}.kind IN ('tv_episode','anime'))) AND ({extensions}))")
+    // Both libraries follow actual local files. Adult visibility is separately
+    // restricted by the explicit grant and isolated browse/open scope.
+    format!("{alias}.kind IN ('movie','tv_episode','anime','music_video','concert','adult_video') AND EXISTS(SELECT 1 FROM media_files f JOIN library_roots lr ON lr.id=f.root_id WHERE f.media_item_id={alias}.id AND lr.enabled=1 AND (lr.kind IS NULL OR lr.kind={alias}.kind OR (lr.kind IN ('tv_series','tv_season') AND {alias}.kind IN ('tv_episode','anime'))) AND ({extensions}))")
 }
 pub(crate) async fn record_local(
     tx: &mut Transaction<'_, Sqlite>,
@@ -65,7 +78,7 @@ pub(crate) async fn record_local(
 
 /// Backfill only actual safely-read, validated legacy NFO metadata that was already
 /// indexed by an explicit scan confirmation. Filename-derived `provider_id=local`
-/// rows alone never become ready. No network or source writes are performed.
+/// rows alone never establish metadata completion. No network or source writes are performed.
 pub async fn backfill_local_nfo(repo: &LibraryRepository) -> Result<u64, RepositoryError> {
     backfill_nfo_lane(repo, None).await
 }

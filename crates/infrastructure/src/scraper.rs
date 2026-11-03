@@ -1,4 +1,5 @@
 //! Persistent, typed scraping with explicit review and protected metadata writes.
+pub(crate) mod automatic;
 use crate::{
     library::{LibraryRepository, RepositoryError},
     network::{CancellationToken, NetworkEngine},
@@ -71,6 +72,14 @@ impl ScraperService {
         &self,
         request: ScraperSearchRequest,
     ) -> Result<SearchPreview, RepositoryError> {
+        self.search_cancellable(request, CancellationToken::new())
+            .await
+    }
+    async fn search_cancellable(
+        &self,
+        request: ScraperSearchRequest,
+        cancellation: CancellationToken,
+    ) -> Result<SearchPreview, RepositoryError> {
         validate_query(&request.query)?;
         if request.providers.is_empty() || request.providers.len() > 3 {
             return Err(RepositoryError::InvalidInput);
@@ -129,10 +138,7 @@ impl ScraperService {
             sqlx::query("INSERT INTO scrape_runs(id,task_id,provider_id,config_snapshot,state,started_at) VALUES (?,?,?,?,'running',?)").bind(Uuid::new_v4().to_string()).bind(id.to_string()).bind(&job.provider_id).bind(json(&job.config)?).bind(now.timestamp_millis()).execute(&mut *tx).await?;
         }
         tx.commit().await?;
-        let cancel = self
-            .providers
-            .attach_cancellation(id, CancellationToken::new())
-            .await;
+        let cancel = self.providers.attach_cancellation(id, cancellation).await;
         let mut result = SearchPreview {
             schema_version: 1,
             run_id: id,
@@ -220,6 +226,15 @@ impl ScraperService {
         run_id: Uuid,
         index: usize,
     ) -> Result<VideoMetadata, RepositoryError> {
+        self.detail_cancellable(run_id, index, CancellationToken::new())
+            .await
+    }
+    async fn detail_cancellable(
+        &self,
+        run_id: Uuid,
+        index: usize,
+        cancellation: CancellationToken,
+    ) -> Result<VideoMetadata, RepositoryError> {
         let (query, jobs, search) = self.session(run_id).await?;
         let candidate = &search
             .candidates
@@ -243,7 +258,7 @@ impl ScraperService {
         job.operation = "detail".into();
         let cancel = self
             .providers
-            .attach_cancellation(run_id, CancellationToken::new())
+            .attach_cancellation(run_id, cancellation)
             .await;
         if self.session(run_id).await.is_err() {
             self.providers.detach_cancellation(run_id).await;
@@ -389,6 +404,13 @@ impl ScraperService {
         Ok(preview)
     }
     pub async fn confirm(&self, id: Uuid) -> Result<MergeResult, RepositoryError> {
+        self.confirm_inner(id, None).await
+    }
+    async fn confirm_inner(
+        &self,
+        id: Uuid,
+        automatic: Option<&automatic::AutomaticContext>,
+    ) -> Result<MergeResult, RepositoryError> {
         let _guard = self.gate.lock().await;
         let row = sqlx::query("SELECT * FROM video_merge_previews WHERE id=?")
             .bind(id.to_string())
@@ -421,7 +443,10 @@ impl ScraperService {
         let mut artworks = vec![];
         let cancel = self
             .providers
-            .attach_cancellation(run_id, CancellationToken::new())
+            .attach_cancellation(
+                run_id,
+                automatic.map(|a| a.cancel.clone()).unwrap_or_default(),
+            )
             .await;
         if self.session(run_id).await.is_err() {
             self.providers.detach_cancellation(run_id).await;
@@ -443,6 +468,9 @@ impl ScraperService {
         self.providers.detach_cancellation(run_id).await;
         self.session(run_id).await?;
         let mut tx = self.repo.pool().begin().await?;
+        if let Some(context) = automatic {
+            context.validate_tx(&mut tx, media.id).await?;
+        }
         let current=sqlx::query("SELECT kind,title,original_title,year,updated_at,adult_isolated FROM media_items WHERE id=?").bind(media.id.to_string()).fetch_one(&mut *tx).await?;
         if current.try_get::<String, _>("kind")? != metadata_kind(&detail).as_str()
             || current.try_get::<String, _>("title")? != expected.title
@@ -528,6 +556,14 @@ impl ScraperService {
             sqlx::query("INSERT INTO artworks(id,media_item_id,kind,cache_path,source_url,provider_id,width,height,content_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(Uuid::new_v4().to_string()).bind(media.id.to_string()).bind(art.kind).bind(cached.cache_path).bind(art.url).bind(art.source_provider).bind(i64::from(cached.width)).bind(i64::from(cached.height)).bind(cached.content_hash).bind(Utc::now().timestamp_millis()).execute(&mut *tx).await?;
         }
         sqlx::query("INSERT INTO video_metadata_sources(media_item_id,media_kind,metadata_json,merge_preview_id,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(media_item_id) DO UPDATE SET media_kind=excluded.media_kind,metadata_json=excluded.metadata_json,merge_preview_id=excluded.merge_preview_id,updated_at=excluded.updated_at").bind(media.id.to_string()).bind(media.kind.as_str()).bind(json(&detail)?).bind(id.to_string()).bind(Utc::now().timestamp_millis()).execute(&mut *tx).await?;
+        // Resolving an automatic refresh exception manually clears its live
+        // attention state; task/search history still retains the original run.
+        sqlx::query("UPDATE library_refresh_items SET state='matched',reason='identified',run_id=?,updated_at=? WHERE media_item_id=? AND state IN ('pending','needs_review','failed')")
+            .bind(run_id.to_string()).bind(Utc::now().timestamp_millis()).bind(media.id.to_string()).execute(&mut *tx).await?;
+        sqlx::query("UPDATE scan_sessions SET matched_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='matched'),review_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='needs_review'),metadata_failed_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='failed') WHERE mode='automatic' AND task_id IN (SELECT task_id FROM library_refresh_items WHERE media_item_id=?)")
+            .bind(media.id.to_string()).execute(&mut *tx).await?;
+        sqlx::query("UPDATE scrape_tasks SET state='succeeded',updated_at=MAX(updated_at,?) WHERE state='waiting_for_user' AND id IN (SELECT s.task_id FROM scan_sessions s JOIN library_refresh_items i ON i.task_id=s.task_id WHERE i.media_item_id=? AND s.mode='automatic' AND s.review_count=0 AND s.metadata_failed_count=0 AND NOT EXISTS(SELECT 1 FROM scan_candidates c WHERE c.task_id=s.task_id AND c.status='pending'))")
+            .bind(Utc::now().timestamp_millis()).bind(media.id.to_string()).execute(&mut *tx).await?;
         let result = MergeResult {
             schema_version: 1,
             preview_id: id,
@@ -978,6 +1014,319 @@ mod tests {
             is_locked: true,
         }
     }
+    async fn settle_automatic(
+        scans: &crate::scan_service::ScanService,
+        id: Uuid,
+    ) -> mediaatlas_application::library::ScanTaskView {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let task = scans
+                    .list_tasks(false)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .find(|t| t.id == id)
+                    .unwrap();
+                if !matches!(task.state, TaskState::Queued | TaskState::Running) {
+                    return task;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+    #[tokio::test]
+    async fn automatic_library_refresh_searches_and_merges_unique_match_without_sidecar_writes() {
+        let s = setup().await;
+        let protected = local_value(
+            s.media.id,
+            "overview",
+            Some("zh-CN"),
+            serde_json::json!("My protected overview"),
+        );
+        s.repo
+            .save_metadata_value(&protected, MetadataWriteMode::User)
+            .await
+            .unwrap();
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let original = std::fs::read(s.dir.path().join("Example.mkv")).unwrap();
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        let finished = settle_automatic(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::Succeeded);
+        assert_eq!(finished.matched_count, 1);
+        assert_eq!(
+            s.repo.get_media(s.media.id).await.unwrap().unwrap().title,
+            "Provider title"
+        );
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
+        assert_eq!(
+            s.repo
+                .list_metadata_values(s.media.id)
+                .await
+                .unwrap()
+                .iter()
+                .find(|v| v.field_key == "overview")
+                .unwrap()
+                .value,
+            serde_json::json!("My protected overview")
+        );
+        assert_eq!(
+            std::fs::read(s.dir.path().join("Example.mkv")).unwrap(),
+            original
+        );
+        assert!(!s.dir.path().join("Example.nfo").exists());
+        let searches = s.service.history().await.unwrap().len();
+        let second = scans.start_automatic(root.id).await.unwrap();
+        assert_eq!(
+            settle_automatic(&scans, second.id).await.state,
+            TaskState::Succeeded
+        );
+        assert_eq!(
+            s.service.history().await.unwrap().len(),
+            searches,
+            "existing metadata is not re-fetched or overwritten on every refresh"
+        );
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn automatic_refresh_unknown_year_is_visible_but_waits_for_identification() {
+        let s = setup().await;
+        sqlx::query("UPDATE media_items SET year=NULL WHERE id=?")
+            .bind(s.media.id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        let finished = settle_automatic(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::WaitingForUser);
+        assert_eq!(finished.review_count, 1);
+        assert_eq!(finished.matched_count, 0);
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_none());
+        let status: String =
+            sqlx::query_scalar("SELECT reason FROM library_refresh_items WHERE task_id=?")
+                .bind(task.id.to_string())
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(status, "ambiguous_match");
+        let run = s.service.history().await.unwrap().remove(0);
+        let preview = s
+            .service
+            .preview(selection(run.id, s.media.id))
+            .await
+            .unwrap();
+        s.service.confirm(preview.preview_id).await.unwrap();
+        let resolved = scans
+            .list_tasks(false)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|t| t.id == task.id)
+            .unwrap();
+        assert_eq!(resolved.review_count, 0);
+        assert_eq!(resolved.matched_count, 1);
+        assert_eq!(resolved.state, TaskState::Succeeded);
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    async fn wait_for_automatic_detail(repo: &LibraryRepository) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let details: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM video_scrape_sessions WHERE search_json IS NOT NULL",
+                )
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+                if details > 0 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn automatic_refresh_identifies_a_yearless_series_once_for_multiple_episodes() {
+        let s = setup().await;
+        let path = s.dir.path().join("shows");
+        std::fs::create_dir(&path).unwrap();
+        for episode in ["Example.Show.S01E01.mkv", "Example.Show.S01E02.mkv"] {
+            std::fs::write(path.join(episode), b"read-only episode fixture").unwrap();
+        }
+        let root = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("cache"))
+            .save_root(&mediaatlas_application::library::RootInput {
+                id: None,
+                name: "Shows".into(),
+                path: path.to_string_lossy().into_owned(),
+                kind: Some(MediaKind::TvSeries),
+                enabled: true,
+                exclude_patterns: vec![],
+            })
+            .await
+            .unwrap();
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.root.id).await.unwrap();
+        let finished = settle_automatic(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::Succeeded);
+        assert_eq!(finished.imported_count, 2);
+        assert_eq!(finished.matched_count, 1);
+        assert_eq!(s.service.history().await.unwrap().len(), 1);
+        let count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM video_metadata_sources WHERE media_kind='tv_series'",
+        )
+        .fetch_one(s.repo.pool())
+        .await
+        .unwrap();
+        assert_eq!(count, 1);
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn automatic_refresh_cancellation_stops_network_and_does_not_publish_late_metadata() {
+        let s = setup().await;
+        s.slow.store(true, Ordering::SeqCst);
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        wait_for_automatic_detail(&s.repo).await;
+        assert_eq!(
+            scans.cancel(task.id).await.unwrap().state,
+            TaskState::Cancelled
+        );
+        tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                let pending: i64 = sqlx::query_scalar("SELECT count(*) FROM library_refresh_items WHERE task_id=? AND state='pending'")
+                    .bind(task.id.to_string()).fetch_one(s.repo.pool()).await.unwrap();
+                if pending == 0 { break; }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        }).await.unwrap();
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_none());
+        assert_eq!(
+            s.repo.get_media(s.media.id).await.unwrap().unwrap().title,
+            "Example"
+        );
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn automatic_refresh_rechecks_privacy_after_network_response() {
+        let s = setup().await;
+        s.slow.store(true, Ordering::SeqCst);
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        wait_for_automatic_detail(&s.repo).await;
+        sqlx::query("UPDATE media_items SET adult_isolated=1 WHERE id=?")
+            .bind(s.media.id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        let finished = settle_automatic(&scans, task.id).await;
+        assert_eq!(finished.metadata_failed_count, 1);
+        let written: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM video_metadata_sources WHERE media_item_id=?")
+                .bind(s.media.id.to_string())
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(written, 0);
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn automatic_refresh_never_searches_a_direct_target_with_an_isolated_ancestor() {
+        let s = setup().await;
+        let now = Utc::now();
+        let ancestor = MediaItem {
+            id: Uuid::new_v4(),
+            kind: MediaKind::AdultVideo,
+            title: "Isolated parent".into(),
+            original_title: None,
+            year: None,
+            created_at: now,
+            updated_at: now,
+        };
+        s.repo.save_media(&ancestor).await.unwrap();
+        sqlx::query("INSERT INTO media_relations(parent_id,child_id,relation_type) VALUES(?,?,'anime_base')")
+            .bind(ancestor.id.to_string()).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        settle_automatic(&scans, task.id).await;
+        assert!(
+            s.service.history().await.unwrap().is_empty(),
+            "isolated ancestors must be checked before network search"
+        );
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn manual_identification_wins_over_a_late_automatic_result() {
+        let s = setup().await;
+        let manual = s.service.search(request()).await.unwrap();
+        s.service.detail(manual.run_id, 0).await.unwrap();
+        s.slow.store(true, Ordering::SeqCst);
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let searched: i64 = sqlx::query_scalar(
+                    "SELECT count(*) FROM video_scrape_sessions WHERE search_json IS NOT NULL",
+                )
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+                if searched > 1 {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let manual_preview = s
+            .service
+            .preview(selection(manual.run_id, s.media.id))
+            .await
+            .unwrap();
+        s.service.confirm(manual_preview.preview_id).await.unwrap();
+        let finished = settle_automatic(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::Succeeded);
+        assert_eq!(finished.metadata_failed_count, 0);
+        assert_eq!(finished.review_count, 0);
+        let owner: String =
+            sqlx::query_scalar("SELECT run_id FROM library_refresh_items WHERE task_id=?")
+                .bind(task.id.to_string())
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(owner, manual.run_id.to_string());
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
     #[tokio::test]
     async fn real_mock_tmdb_search_detail_merge_and_preserve_output_are_persistent_and_idempotent()
     {
@@ -1324,6 +1673,64 @@ mod tests {
         .unwrap();
         (search.run_id, server, started)
     }
+
+    #[tokio::test]
+    async fn automatic_refresh_retries_failed_artwork_without_replacing_saved_metadata() {
+        let s = setup().await;
+        let (manual_run, image_server, _) = gallery_fixture(&s).await;
+        let gallery = s.service.detail(manual_run, 0).await.unwrap();
+        s.slow.store(true, Ordering::SeqCst);
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        async fn inject_next_gallery(s: &Setup, previous: usize, gallery: &VideoMetadata) {
+            let run = tokio::time::timeout(Duration::from_secs(5), async {
+                loop {
+                    let runs = s.service.history().await.unwrap();
+                    if runs.len() > previous {
+                        return runs[0].id;
+                    }
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            // Synthetic provider detail fixture inserted before the delayed
+            // adapter finishes; production still uses immutable adapter results.
+            sqlx::query("INSERT OR IGNORE INTO video_scrape_details(task_id,candidate_index,detail_json) VALUES (?,0,?)")
+                .bind(run.to_string()).bind(json(gallery).unwrap()).execute(s.repo.pool()).await.unwrap();
+        }
+        let mut broken = gallery.clone();
+        if let VideoMetadata::Movie(detail) = &mut broken {
+            for art in &mut detail.artwork {
+                art.url = "http://127.0.0.1:1/unavailable.png".into();
+            }
+        }
+        let first = scans.start_automatic(root.id).await.unwrap();
+        inject_next_gallery(&s, 1, &broken).await;
+        let failed = settle_automatic(&scans, first.id).await;
+        assert_eq!(failed.metadata_failed_count, 1);
+        assert!(
+            s.service.media_detail(s.media.id).await.unwrap().is_some(),
+            "a bad image does not discard matching metadata"
+        );
+        assert!(s.repo.list_artworks(s.media.id).await.unwrap().is_empty());
+        let before = s.repo.get_media(s.media.id).await.unwrap().unwrap().title;
+        let second = scans.start_automatic(root.id).await.unwrap();
+        inject_next_gallery(&s, 2, &gallery).await;
+        let repaired = settle_automatic(&scans, second.id).await;
+        assert_eq!(repaired.state, TaskState::Succeeded);
+        assert_eq!(repaired.metadata_failed_count, 0);
+        assert_eq!(s.repo.list_artworks(s.media.id).await.unwrap().len(), 2);
+        assert_eq!(
+            s.repo.get_media(s.media.id).await.unwrap().unwrap().title,
+            before
+        );
+        assert!(!s.dir.path().join("Example.nfo").exists());
+        image_server.abort();
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
     #[tokio::test]
     async fn concurrent_gallery_requests_share_cancellation_and_never_apply_library_changes() {
         let s = setup().await;
@@ -1660,12 +2067,23 @@ mod tests {
             })
             .await
             .unwrap();
-        assert!(browse
-            .list_media(&Default::default())
+        let before = browse
+            .list_media(&BrowseQuery {
+                root_id: Some(root.root.id),
+                kind: Some(MediaKind::TvSeries),
+                ..Default::default()
+            })
             .await
-            .unwrap()
+            .unwrap();
+        assert_eq!(
+            before.items.len(),
+            2,
+            "both local series are visible before enrichment"
+        );
+        assert!(before
             .items
-            .is_empty());
+            .iter()
+            .all(|item| item.health.contains(&"incomplete_metadata".to_owned())));
         let series = browse
             .tools_list_media(&BrowseQuery {
                 kind: Some(MediaKind::TvSeries),
@@ -1706,8 +2124,23 @@ mod tests {
             ..Default::default()
         };
         let ready = browse.list_media(&query).await.unwrap();
-        assert_eq!(ready.items.len(), 1);
-        assert_eq!(ready.items[0].media.title, "Confirmed show");
+        assert_eq!(ready.items.len(), 2);
+        let confirmed = ready
+            .items
+            .iter()
+            .find(|item| item.media.id == series.id)
+            .unwrap();
+        assert_eq!(confirmed.media.title, "Confirmed show");
+        assert!(!confirmed.health.contains(&"incomplete_metadata".to_owned()));
+        let other = ready
+            .items
+            .iter()
+            .find(|item| item.media.title == "Other Show")
+            .unwrap();
+        assert!(
+            other.health.contains(&"incomplete_metadata".to_owned()),
+            "metadata evidence does not transfer to unrelated local series"
+        );
         assert_eq!(
             browse.facets(&query).await.unwrap().genres[0].value,
             "Drama"
@@ -1796,6 +2229,13 @@ mod tests {
             .execute(s.repo.pool())
             .await
             .unwrap();
+        // Restore this fixture's ordinary classification explicitly: removing a
+        // private association intentionally does not clear the isolation marker.
+        sqlx::query("UPDATE media_items SET adult_isolated=0 WHERE id=?")
+            .bind(series.id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
         // Intermediate Season scope is checked too, not just source Series and leaf.
         let season: String = sqlx::query_scalar(
             "SELECT parent_id FROM media_relations WHERE child_id=? AND relation_type='episode'",
@@ -1828,15 +2268,23 @@ mod tests {
             .execute(s.repo.pool())
             .await
             .unwrap();
-        assert!(browse.list_media(&query).await.unwrap().items.is_empty());
+        assert!(browse
+            .list_media(&query)
+            .await
+            .unwrap()
+            .items
+            .iter()
+            .all(|item| item.media.id != series.id));
         for file in &detail.files {
-            assert!(browse
+            let leaf = browse
                 .get_media(&MediaDetailInput {
                     media_id: file.media_item_id,
-                    include_adult: false
+                    include_adult: false,
                 })
                 .await
-                .is_err());
+                .unwrap();
+            assert!(leaf.health.contains(&"incomplete_metadata".to_owned()), "arbitrary parent relations do not transfer metadata to independently available local episodes");
+            assert!(native.open(file.id).await.unwrap().requested);
         }
         s.server.abort();
     }

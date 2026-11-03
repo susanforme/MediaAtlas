@@ -164,6 +164,46 @@ pub async fn library_facets(
 }
 
 #[tauri::command]
+pub async fn library_sync(
+    state: State<'_, DesktopState>,
+    input: StartInput,
+) -> Result<ApiResponse<ScanTaskView>, ErrorDto> {
+    state
+        .adult_privacy
+        .authorize_root(input.root_id)
+        .await
+        .map_err(storage_error)?;
+    let root = state
+        .repository
+        .get_root(input.root_id)
+        .await
+        .map_err(storage_error)?
+        .ok_or_else(|| storage_error(RepositoryError::NotFound))?;
+    let result = if root.kind == Some(mediaatlas_domain::MediaKind::AdultVideo) {
+        let grant = state.adult_privacy.access().await.map_err(storage_error)?;
+        let settings = state
+            .adult_privacy
+            .settings()
+            .await
+            .map_err(storage_error)?;
+        state
+            .scans
+            .start_automatic_adult(
+                input.root_id,
+                state
+                    .adult_scraper
+                    .clone()
+                    .with_automatic_artwork(settings.covers_visible),
+                grant,
+            )
+            .await
+    } else {
+        state.scans.start_automatic(input.root_id).await
+    };
+    result.map(ApiResponse::new).map_err(storage_error)
+}
+
+#[tauri::command]
 pub async fn scan_start(
     state: State<'_, DesktopState>,
     input: StartInput,

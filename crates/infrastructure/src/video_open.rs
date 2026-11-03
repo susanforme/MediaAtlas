@@ -599,22 +599,14 @@ mod tests {
         assert!(opener.calls.lock().unwrap().is_empty());
     }
     #[tokio::test]
-    async fn bare_filename_and_revoked_or_wrong_adult_lane_cannot_dispatch() {
+    async fn local_file_opens_before_enrichment_while_adult_lane_remains_protected() {
         let (_dir, repo, file, _root, opener) = fixture().await;
         let ordinary = VideoOpenService::with_opener(repo.clone(), opener.clone());
         sqlx::query("DELETE FROM local_metadata_provenance")
             .execute(repo.pool())
             .await
             .unwrap();
-        assert_eq!(
-            ordinary.open(file.id).await,
-            Err(RepositoryError::InvalidInput)
-        );
-        sqlx::query("INSERT INTO local_metadata_provenance VALUES(?,'nfo','fixture',0)")
-            .bind(file.media_item_id.to_string())
-            .execute(repo.pool())
-            .await
-            .unwrap();
+        assert!(ordinary.open(file.id).await.unwrap().requested);
         sqlx::query("UPDATE media_items SET kind='adult_video',adult_isolated=1")
             .execute(repo.pool())
             .await
@@ -646,6 +638,6 @@ mod tests {
             fresh.open(file.id).await,
             Err(RepositoryError::InvalidInput)
         );
-        assert_eq!(opener.calls.lock().unwrap().len(), 1);
+        assert_eq!(opener.calls.lock().unwrap().len(), 2);
     }
 }

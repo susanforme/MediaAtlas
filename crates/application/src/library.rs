@@ -174,6 +174,11 @@ pub struct ScanTaskView {
     pub imported_count: u64,
     pub warnings: u64,
     pub error_code: Option<String>,
+    pub mode: String,
+    pub phase: String,
+    pub matched_count: u64,
+    pub review_count: u64,
+    pub metadata_failed_count: u64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

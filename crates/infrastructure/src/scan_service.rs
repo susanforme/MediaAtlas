@@ -1,5 +1,7 @@
-//! Persistent local scan workflow. Workers read files; confirmation only changes SQLite.
+//! Persistent local scan workflow. Automatic refresh indexes and enriches only
+//! application data; manual scan previews remain available for isolated workflows.
 
+mod automatic;
 mod importer;
 
 use chrono::{DateTime, Utc};
@@ -23,12 +25,19 @@ use uuid::Uuid;
 
 use crate::library::{LibraryRepository, RepositoryError};
 
+type AdultAutomatic = (
+    crate::adult_scraper::AdultScraperService,
+    crate::media_output::AdultOutputAccess,
+);
+
 #[derive(Clone)]
 pub struct ScanService {
     repo: LibraryRepository,
     cancellations: Arc<Mutex<HashMap<Uuid, Arc<AtomicBool>>>>,
     gate: Arc<tokio::sync::Mutex<()>>,
     events: broadcast::Sender<ScanTaskView>,
+    scraper: Option<crate::scraper::ScraperService>,
+    network_cancellations: Arc<Mutex<HashMap<Uuid, crate::network::CancellationToken>>>,
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -57,6 +66,8 @@ impl ScanService {
             cancellations: Arc::new(Mutex::new(HashMap::new())),
             gate: Arc::new(tokio::sync::Mutex::new(())),
             events,
+            scraper: None,
+            network_cancellations: Arc::default(),
         }
     }
 
@@ -64,25 +75,60 @@ impl ScanService {
         self.events.subscribe()
     }
 
-    pub async fn start(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
-        self.start_inner(root_id, None).await
+    pub fn with_scraper(mut self, scraper: crate::scraper::ScraperService) -> Self {
+        self.scraper = Some(scraper);
+        self
     }
 
-    /// Watcher-only read pipeline. Revalidate its exact live Root generation and
+    /// A user-requested library refresh indexes local files and enriches metadata
+    /// in the application database. It never creates media sidecars or moves files.
+    pub async fn start_automatic(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
+        self.start_inner(root_id, None, true, None).await
+    }
+
+    /// Adult refresh uses a revocable grant, isolated adapters and cache. Merely
+    /// passing an adult Root to the ordinary entry point never grants access.
+    pub async fn start_automatic_adult(
+        &self,
+        root_id: Uuid,
+        scraper: crate::adult_scraper::AdultScraperService,
+        access: crate::media_output::AdultOutputAccess,
+    ) -> Result<ScanTaskView, RepositoryError> {
+        access.ensure()?;
+        self.start_inner(
+            root_id,
+            None,
+            true,
+            Some((scraper.with_access(access.clone()), access)),
+        )
+        .await
+    }
+
+    pub async fn start(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
+        self.start_inner(root_id, None, false, None).await
+    }
+
+    /// Watcher refresh pipeline. Revalidate its exact live Root generation and
     /// opt-in under the SQLite writer reservation before creating any task.
     pub async fn start_watched(
         &self,
         expected: &LibraryRoot,
     ) -> Result<ScanTaskView, RepositoryError> {
-        self.start_inner(expected.id, Some(expected)).await
+        self.start_inner(expected.id, Some(expected), self.scraper.is_some(), None)
+            .await
     }
 
     async fn start_inner(
         &self,
         root_id: Uuid,
         expected: Option<&LibraryRoot>,
+        automatic: bool,
+        adult: Option<AdultAutomatic>,
     ) -> Result<ScanTaskView, RepositoryError> {
         let _gate = self.gate.lock().await;
+        if let Some((_, access)) = &adult {
+            access.ensure()?;
+        }
         let mut tx = self.repo.pool().begin().await?;
         // Acquire the writer reservation before the Root/settings snapshot. A
         // reclassification or path change cannot race the final task insertion.
@@ -93,6 +139,15 @@ impl ScanService {
         let snapshot = snapshot_tx(&mut tx, root_id).await?;
         if !snapshot.root.enabled {
             return Err(RepositoryError::InvalidInput);
+        }
+        if automatic {
+            let isolated: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM media_files f JOIN media_items m ON m.id=f.media_item_id WHERE f.root_id=? AND (m.adult_isolated=1 OR m.kind='adult_video'))")
+                .bind(root_id.to_string()).fetch_one(&mut *tx).await?;
+            if (snapshot.root.kind == Some(MediaKind::AdultVideo)) != adult.is_some()
+                || (adult.is_none() && isolated)
+            {
+                return Err(RepositoryError::InvalidInput);
+            }
         }
         if let Some(expected) = expected {
             if &snapshot.root != expected
@@ -114,37 +169,102 @@ impl ScanService {
             }
         }
         let active: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND (t.state IN ('queued','running') OR (? AND t.state='waiting_for_user'))")
-            .bind(root_id.to_string()).bind(expected.is_some()).fetch_one(&mut *tx).await?;
+            .bind(root_id.to_string()).bind(expected.is_some() && !automatic).fetch_one(&mut *tx).await?;
         if active > 0 {
             return Err(RepositoryError::Conflict);
+        }
+        if automatic {
+            // Replace stale discovery/review sessions. Their candidates and
+            // metadata results remain history, not an extra approval gate.
+            sqlx::query("UPDATE scrape_tasks SET state='cancelled',updated_at=? WHERE state='waiting_for_user' AND id IN (SELECT task_id FROM scan_sessions WHERE root_id=?)")
+                .bind(Utc::now().timestamp_millis()).bind(root_id.to_string()).execute(&mut *tx).await?;
         }
         let id = Uuid::new_v4();
         let now = Utc::now().timestamp_millis();
         sqlx::query("INSERT INTO scrape_tasks (id,kind,state,input_snapshot,created_at,updated_at) VALUES (?,'scan_library','queued',?,?,?)")
             .bind(id.to_string()).bind(serde_json::json!({"root_id":root_id,"schema_version":1}).to_string()).bind(now).bind(now).execute(&mut *tx).await?;
         sqlx::query(
-            "INSERT INTO scan_sessions (task_id,root_id,root_snapshot_json) VALUES (?,?,?)",
+            "INSERT INTO scan_sessions (task_id,root_id,root_snapshot_json,mode) VALUES (?,?,?,?)",
         )
         .bind(id.to_string())
         .bind(root_id.to_string())
         .bind(serde_json::to_string(&snapshot).map_err(|_| RepositoryError::InvalidInput)?)
+        .bind(if automatic { "automatic" } else { "manual" })
         .execute(&mut *tx)
         .await?;
+        if let Some((_, access)) = &adult {
+            access.ensure()?;
+        }
         tx.commit().await?;
         let cancellation = Arc::new(AtomicBool::new(false));
         self.cancellations
             .lock()
             .map_err(|_| RepositoryError::Database)?
             .insert(id, Arc::clone(&cancellation));
+        let network_cancel = crate::network::CancellationToken::new();
+        self.network_cancellations
+            .lock()
+            .map_err(|_| RepositoryError::Database)?
+            .insert(id, network_cancel.clone());
         self.emit(id).await;
         let service = self.clone();
         tokio::spawn(async move {
-            if service.run(id, snapshot, cancellation).await.is_err() {
+            let grant_monitor = adult.as_ref().map(|(_, access)| {
+                let access = access.clone();
+                let flag = cancellation.clone();
+                let network = network_cancel.clone();
+                tokio::spawn(async move {
+                    loop {
+                        if access.ensure().is_err() {
+                            flag.store(true, Ordering::Release);
+                            network.cancel();
+                            break;
+                        }
+                        tokio::select! {
+                            _ = network.cancelled() => break,
+                            _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+                        }
+                    }
+                })
+            });
+            if let Err(error) = service
+                .run(id, snapshot, cancellation, automatic, network_cancel, adult)
+                .await
+            {
                 let _ = service
-                    .finish(id, "failed", Some("scan_failed"), None)
+                    .finish(
+                        id,
+                        if matches!(
+                            error,
+                            RepositoryError::Provider(
+                                mediaatlas_domain::ProviderFailure::Cancelled
+                            )
+                        ) {
+                            "cancelled"
+                        } else {
+                            "failed"
+                        },
+                        if matches!(
+                            error,
+                            RepositoryError::Provider(
+                                mediaatlas_domain::ProviderFailure::Cancelled
+                            )
+                        ) {
+                            None
+                        } else {
+                            Some("scan_failed")
+                        },
+                        None,
+                    )
                     .await;
             }
+            if let Some(monitor) = grant_monitor {
+                monitor.abort();
+            }
             if let Ok(mut registry) = service.cancellations.lock() {
+                registry.remove(&id);
+            }
+            if let Ok(mut registry) = service.network_cancellations.lock() {
                 registry.remove(&id);
             }
         });
@@ -226,6 +346,14 @@ impl ScanService {
             {
                 flag.store(true, Ordering::Release);
             }
+            if let Some(token) = self
+                .network_cancellations
+                .lock()
+                .map_err(|_| RepositoryError::Database)?
+                .get(&task_id)
+            {
+                token.cancel();
+            }
             sqlx::query("UPDATE scrape_tasks SET state='cancelled',updated_at=? WHERE id=? AND state IN ('queued','running','waiting_for_user')")
                 .bind(Utc::now().timestamp_millis()).bind(task_id.to_string()).execute(self.repo.pool()).await?;
             self.emit(task_id).await;
@@ -237,11 +365,27 @@ impl ScanService {
         // Only the composition root calls this once before accepting any new work.
         sqlx::query("UPDATE scrape_tasks SET state='interrupted',updated_at=? WHERE kind='scan_library' AND state IN ('queued','running') AND id IN (SELECT task_id FROM scan_sessions)")
             .bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?;
+        sqlx::query("UPDATE library_refresh_items SET state='needs_review',reason='interrupted',updated_at=? WHERE state='pending' AND task_id IN (SELECT id FROM scrape_tasks WHERE state='interrupted')")
+            .bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?;
+        sqlx::query("UPDATE scan_sessions SET review_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='needs_review') WHERE mode='automatic'")
+            .execute(self.repo.pool()).await?;
         Ok(())
     }
 
     pub async fn confirm(&self, input: &ConfirmInput) -> Result<ConfirmResult, RepositoryError> {
+        self.confirm_inner(input, false, None).await
+    }
+
+    async fn confirm_inner(
+        &self,
+        input: &ConfirmInput,
+        automatic: bool,
+        adult_access: Option<&crate::media_output::AdultOutputAccess>,
+    ) -> Result<ConfirmResult, RepositoryError> {
         let _gate = self.gate.lock().await;
+        if let Some(access) = adult_access {
+            access.ensure()?;
+        }
         if input.candidate_ids.is_empty()
             || input.candidate_ids.len() > 200
             || input.candidate_ids.iter().collect::<HashSet<_>>().len() != input.candidate_ids.len()
@@ -249,10 +393,18 @@ impl ScanService {
             return Err(RepositoryError::InvalidInput);
         }
         let task = self.get_task(input.task_id).await?;
-        if !matches!(task.state, TaskState::WaitingForUser | TaskState::Succeeded) {
+        if if automatic {
+            task.state != TaskState::Running || task.mode != "automatic"
+        } else {
+            task.mode == "automatic"
+                || !matches!(task.state, TaskState::WaitingForUser | TaskState::Succeeded)
+        } {
             return Err(RepositoryError::Conflict);
         }
         let saved = self.saved_snapshot(input.task_id).await?;
+        if automatic && (saved.root.kind == Some(MediaKind::AdultVideo)) != adult_access.is_some() {
+            return Err(RepositoryError::InvalidInput);
+        }
         let current = self.snapshot(saved.root.id).await?;
         if !same_config(&saved, &current) || !current.root.enabled {
             return Err(RepositoryError::Conflict);
@@ -280,6 +432,9 @@ impl ScanService {
             .await
             .map_err(|_| RepositoryError::Database)??;
         let mut tx = self.repo.pool().begin().await?;
+        if let Some(access) = adult_access {
+            access.ensure()?;
+        }
         // Config is checked once more after acquiring the SQLite write transaction.
         let root_row =
             sqlx::query("SELECT path,path_style,kind,enabled FROM library_roots WHERE id=?")
@@ -313,7 +468,11 @@ impl ScanService {
             .bind(input.task_id.to_string())
             .fetch_one(&mut *tx)
             .await?;
-        if !matches!(current_state.as_str(), "waiting_for_user" | "succeeded") {
+        if if automatic {
+            current_state != "running"
+        } else {
+            !matches!(current_state.as_str(), "waiting_for_user" | "succeeded")
+        } {
             return Err(RepositoryError::Conflict);
         }
         let mut result = ConfirmResult::default();
@@ -340,8 +499,13 @@ impl ScanService {
         .await?;
         sqlx::query("UPDATE scan_sessions SET imported_count=(SELECT count(*) FROM scan_candidates WHERE task_id=? AND status='imported') WHERE task_id=?")
             .bind(input.task_id.to_string()).bind(input.task_id.to_string()).execute(&mut *tx).await?;
-        sqlx::query("UPDATE scrape_tasks SET state=?,updated_at=? WHERE id=? AND state IN ('waiting_for_user','succeeded')")
+        if !automatic {
+            sqlx::query("UPDATE scrape_tasks SET state=?,updated_at=? WHERE id=? AND state IN ('waiting_for_user','succeeded')")
             .bind(if remaining==0 {"succeeded"} else {"waiting_for_user"}).bind(Utc::now().timestamp_millis()).bind(input.task_id.to_string()).execute(&mut *tx).await?;
+        }
+        if let Some(access) = adult_access {
+            access.ensure()?;
+        }
         tx.commit().await?;
         self.emit(input.task_id).await;
         Ok(result)
@@ -392,6 +556,9 @@ impl ScanService {
         id: Uuid,
         snapshot: RootSnapshot,
         cancel: Arc<AtomicBool>,
+        automatic: bool,
+        network_cancel: crate::network::CancellationToken,
+        adult: Option<AdultAutomatic>,
     ) -> Result<(), RepositoryError> {
         sqlx::query(
             "UPDATE scrape_tasks SET state='running',updated_at=? WHERE id=? AND state='queued'",
@@ -488,6 +655,11 @@ impl ScanService {
                 if cancel.load(Ordering::Acquire) || stats.cancelled {
                     return self.finish(id, "cancelled", None, None).await;
                 }
+                if automatic {
+                    return self
+                        .complete_automatic(id, &snapshot, &cancel, network_cancel, adult)
+                        .await;
+                }
                 let pending: i64 = sqlx::query_scalar(
                     "SELECT count(*) FROM scan_candidates WHERE task_id=? AND status='pending'",
                 )
@@ -536,6 +708,12 @@ impl ScanService {
             .bind(id.to_string())
             .execute(&mut *tx)
             .await?;
+        if matches!(state, "failed" | "cancelled") {
+            sqlx::query("UPDATE library_refresh_items SET state='needs_review',reason=?,updated_at=? WHERE task_id=? AND state='pending'")
+                .bind(if state == "cancelled" { "cancelled" } else { "interrupted" }).bind(Utc::now().timestamp_millis()).bind(id.to_string()).execute(&mut *tx).await?;
+            sqlx::query("UPDATE scan_sessions SET review_count=(SELECT count(*) FROM library_refresh_items WHERE task_id=? AND state='needs_review') WHERE task_id=?")
+                .bind(id.to_string()).bind(id.to_string()).execute(&mut *tx).await?;
+        }
         if let Some(root_id) = root_id {
             sqlx::query("INSERT INTO root_settings(root_id,last_scan_at) VALUES(?,?) ON CONFLICT(root_id) DO UPDATE SET last_scan_at=excluded.last_scan_at").bind(root_id.to_string()).bind(Utc::now().timestamp_millis()).execute(&mut *tx).await?;
         }
@@ -605,6 +783,11 @@ fn task_from_row(row: &SqliteRow) -> Result<ScanTaskView, RepositoryError> {
         error_code: row
             .try_get("error_code")
             .map_err(|_| RepositoryError::CorruptData)?,
+        mode: text(row, "mode")?,
+        phase: text(row, "phase")?,
+        matched_count: nonnegative(row, "matched_count")?,
+        review_count: nonnegative(row, "review_count")?,
+        metadata_failed_count: nonnegative(row, "metadata_failed_count")?,
         created_at: time(row, "created_at")?,
         updated_at: time(row, "updated_at")?,
     })

@@ -1,5 +1,7 @@
-//! Independent adult catalog review and provenance. Every mutation is explicitly confirmed.
+//! Independent adult catalog review and automatic refresh, with revocable access.
 //! Desktop composition supplies an adult-only cache and checks its unlock grant before each call.
+pub(crate) mod automatic;
+
 use crate::{
     adult_providers::AdultProviderHub,
     library::{LibraryRepository, RepositoryError},
@@ -31,6 +33,7 @@ pub struct AdultScraperService {
     gate: Arc<Mutex<()>>,
     auth: Option<crate::provider_auth::ProviderAuthService>,
     access: Option<crate::media_output::AdultOutputAccess>,
+    automatic_artwork: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AdultHistoryEntry {
@@ -64,6 +67,7 @@ impl AdultScraperService {
             gate: Arc::default(),
             auth: None,
             access: None,
+            automatic_artwork: false,
         }
     }
     pub fn with_auth_service(mut self, auth: crate::provider_auth::ProviderAuthService) -> Self {
@@ -72,6 +76,10 @@ impl AdultScraperService {
     }
     pub fn with_access(mut self, access: crate::media_output::AdultOutputAccess) -> Self {
         self.access = Some(access);
+        self
+    }
+    pub fn with_automatic_artwork(mut self, enabled: bool) -> Self {
+        self.automatic_artwork = enabled;
         self
     }
     fn ensure_access(&self) -> Result<()> {
@@ -96,6 +104,14 @@ impl AdultScraperService {
         Ok(())
     }
     pub async fn search(&self, request: AdultSearchRequest) -> Result<AdultSearchPreview> {
+        self.search_cancellable(request, CancellationToken::new())
+            .await
+    }
+    async fn search_cancellable(
+        &self,
+        request: AdultSearchRequest,
+        cancellation: CancellationToken,
+    ) -> Result<AdultSearchPreview> {
         self.ensure_access()?;
         validate_query(&request.query)?;
         if request.providers.is_empty() || request.providers.len() > 2 {
@@ -145,12 +161,12 @@ impl AdultScraperService {
         }
         self.ensure_access()?;
         tx.commit().await?;
-        let cancel = self
-            .providers
-            .attach_cancellation(id, CancellationToken::new())
-            .await;
+        let cancel = self.providers.attach_cancellation(id, cancellation).await;
         let fetched = self.fetch_search(&request, &jobs, id, &cancel).await;
         self.providers.detach_cancellation(id).await;
+        if fetched.is_err() && cancel.is_cancelled() {
+            let _ = self.providers.cancel(id).await;
+        }
         fetched
     }
     async fn fetch_search(
@@ -271,6 +287,15 @@ impl AdultScraperService {
         Ok(self.session(id).await?.2)
     }
     pub async fn detail(&self, run_id: Uuid, index: usize) -> Result<AdultDetail> {
+        self.detail_cancellable(run_id, index, CancellationToken::new())
+            .await
+    }
+    async fn detail_cancellable(
+        &self,
+        run_id: Uuid,
+        index: usize,
+        cancellation: CancellationToken,
+    ) -> Result<AdultDetail> {
         let (query, jobs, search) = self.session(run_id).await?;
         let candidate = &search
             .candidates
@@ -298,7 +323,7 @@ impl AdultScraperService {
         job.operation = "detail".into();
         let cancel = self
             .providers
-            .attach_cancellation(run_id, CancellationToken::new())
+            .attach_cancellation(run_id, cancellation)
             .await;
         let result = self
             .fetch_detail(run_id, index, candidate, &job, &cancel)
@@ -455,6 +480,13 @@ impl AdultScraperService {
         Ok(preview)
     }
     pub async fn confirm(&self, id: Uuid) -> Result<MergeResult> {
+        self.confirm_inner(id, None).await
+    }
+    async fn confirm_inner(
+        &self,
+        id: Uuid,
+        automatic: Option<&crate::scraper::automatic::AutomaticContext>,
+    ) -> Result<MergeResult> {
         self.ensure_access()?;
         let _gate = self.gate.lock().await;
         let row = sqlx::query("SELECT * FROM adult_merge_previews WHERE id=?")
@@ -485,11 +517,16 @@ impl AdultScraperService {
         job.operation = "adult_artwork".into();
         let cancel = self
             .providers
-            .attach_cancellation(run_id, CancellationToken::new())
+            .attach_cancellation(
+                run_id,
+                automatic
+                    .map(|context| context.cancel.clone())
+                    .unwrap_or_default(),
+            )
             .await;
         let result = self
             .confirm_with_token(
-                id, run_id, &preview, &detail, &expected, &roots, &job, &cancel,
+                id, run_id, &preview, &detail, &expected, &roots, &job, &cancel, automatic,
             )
             .await;
         self.providers.detach_cancellation(run_id).await;
@@ -506,6 +543,7 @@ impl AdultScraperService {
         roots: &[RootSnapshot],
         job: &ProviderJob,
         cancel: &CancellationToken,
+        automatic: Option<&crate::scraper::automatic::AutomaticContext>,
     ) -> Result<MergeResult> {
         self.session(run_id).await?;
         let mut artworks = vec![];
@@ -518,6 +556,9 @@ impl AdultScraperService {
             artworks.push((art.clone(), cached.map_err(RepositoryError::Provider)?));
         }
         let mut tx = self.repo.pool().begin().await?;
+        if let Some(context) = automatic {
+            context.validate_tx(&mut tx, expected.id).await?;
+        }
         // This transaction acquires SQLite's write lock before reading mutable prerequisites.
         let changed=sqlx::query("UPDATE adult_merge_previews SET state='running' WHERE id=? AND state IN ('planned','interrupted')").bind(id.to_string()).execute(&mut *tx).await?;
         if changed.rows_affected() != 1 {
@@ -604,6 +645,14 @@ impl AdultScraperService {
             sqlx::query("INSERT INTO artworks(id,media_item_id,kind,cache_path,source_url,provider_id,width,height,content_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)").bind(Uuid::new_v4().to_string()).bind(expected.id.to_string()).bind(art.kind).bind(cached.cache_path).bind(art.url).bind(art.source_provider).bind(i64::from(cached.width)).bind(i64::from(cached.height)).bind(cached.content_hash).bind(Utc::now().timestamp_millis()).execute(&mut *tx).await?;
         }
         sqlx::query("INSERT INTO adult_metadata_sources(media_item_id,metadata_json,merge_preview_id,updated_at) VALUES (?,?,?,?) ON CONFLICT(media_item_id) DO UPDATE SET metadata_json=excluded.metadata_json,merge_preview_id=excluded.merge_preview_id,updated_at=excluded.updated_at").bind(expected.id.to_string()).bind(json(detail)?).bind(id.to_string()).bind(Utc::now().timestamp_millis()).execute(&mut *tx).await?;
+        // Manual identification also resolves the corresponding automatic
+        // exception, without exposing adult task details to ordinary views.
+        sqlx::query("UPDATE library_refresh_items SET state='matched',reason='identified',run_id=?,updated_at=? WHERE media_item_id=? AND state IN ('pending','needs_review','failed')")
+            .bind(run_id.to_string()).bind(Utc::now().timestamp_millis()).bind(expected.id.to_string()).execute(&mut *tx).await?;
+        sqlx::query("UPDATE scan_sessions SET matched_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='matched'),review_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='needs_review'),metadata_failed_count=(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=scan_sessions.task_id AND i.state='failed') WHERE mode='automatic' AND task_id IN (SELECT task_id FROM library_refresh_items WHERE media_item_id=?)")
+            .bind(expected.id.to_string()).execute(&mut *tx).await?;
+        sqlx::query("UPDATE scrape_tasks SET state='succeeded',updated_at=MAX(updated_at,?) WHERE state='waiting_for_user' AND id IN (SELECT s.task_id FROM scan_sessions s JOIN library_refresh_items i ON i.task_id=s.task_id WHERE i.media_item_id=? AND s.mode='automatic' AND s.review_count=0 AND s.metadata_failed_count=0 AND NOT EXISTS(SELECT 1 FROM scan_candidates c WHERE c.task_id=s.task_id AND c.status='pending'))")
+            .bind(Utc::now().timestamp_millis()).bind(expected.id.to_string()).execute(&mut *tx).await?;
         let result = MergeResult {
             schema_version: 1,
             preview_id: id,
@@ -1116,6 +1165,347 @@ mod tests {
             root,
             run,
         }
+    }
+    async fn automatic_context(
+        s: &Setup,
+        access: crate::media_output::AdultOutputAccess,
+    ) -> crate::scraper::automatic::AutomaticContext {
+        let task_id = Uuid::new_v4();
+        let now = Utc::now().timestamp_millis();
+        sqlx::query("INSERT INTO scrape_tasks(id,kind,state,input_snapshot,created_at,updated_at) VALUES (?,'scan_library','running','{}',?,?)")
+            .bind(task_id.to_string()).bind(now).bind(now).execute(s.repo.pool()).await.unwrap();
+        sqlx::query("INSERT INTO scan_sessions(task_id,root_id,root_snapshot_json,mode,phase) VALUES(?,?,?,'automatic','metadata')")
+            .bind(task_id.to_string()).bind(s.root.id.to_string()).bind(serde_json::json!({"root":s.root,"exclude_patterns":[]}).to_string()).execute(s.repo.pool()).await.unwrap();
+        let file = s.repo.list_files(s.media.id).await.unwrap().remove(0);
+        sqlx::query("INSERT INTO scan_candidates(id,task_id,root_id,kind,relative_path,normalized_relative_path,payload_json,status,existing_media_id) VALUES(?,?,?,'adult_video',?,?,'{}','imported',?)")
+            .bind(Uuid::new_v4().to_string()).bind(task_id.to_string()).bind(s.root.id.to_string()).bind(&file.relative_path).bind(&file.relative_path).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        sqlx::query("INSERT INTO library_refresh_items(task_id,media_item_id,state,updated_at) VALUES(?,?,'pending',?)")
+            .bind(task_id.to_string()).bind(s.media.id.to_string()).bind(now).execute(s.repo.pool()).await.unwrap();
+        sqlx::query("INSERT INTO metadata_values(id,media_item_id,field_key,locale,value_json,provider_id,is_user_modified,is_locked) VALUES(?,?,'catalog_number','','\"SYN-001\"','local',0,0)")
+            .bind(Uuid::new_v4().to_string()).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        crate::scraper::automatic::AutomaticContext {
+            root: s.root.clone(),
+            exclusions: vec![],
+            task_id,
+            cancel: CancellationToken::new(),
+            adult_access: Some(access),
+        }
+    }
+    async fn automatic_mock(
+        s: &mut Setup,
+        slow_detail: bool,
+    ) -> (
+        tokio::task::JoinHandle<()>,
+        Arc<std::sync::atomic::AtomicBool>,
+    ) {
+        use crate::provider_auth::{AuthSaveInput, ProviderAuthService};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let detail_started = started.clone();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let mut bytes = vec![0; 32768];
+                let count = socket.read(&mut bytes).await.unwrap();
+                if String::from_utf8_lossy(&bytes[..count]).contains("cid=") {
+                    detail_started.store(true, std::sync::atomic::Ordering::Release);
+                    if slow_detail {
+                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                    }
+                }
+                let body=serde_json::json!({"result":{"status":200,"items":[{"content_id":"syn00001","product_id":"SYN-001","title":"Synthetic automatic work","date":"2026-01-01","volume":"90","iteminfo":{"maker":[{"id":1,"name":"Synthetic Studio"}]}}]}}).to_string();
+                let response=format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
+                let _ = socket.write_all(response.as_bytes()).await;
+            }
+        });
+        for descriptor in AdultProviderHub::descriptors() {
+            s.providers
+                .register_adult_descriptor(descriptor)
+                .await
+                .unwrap();
+        }
+        s.providers
+            .update_config(
+                "dmm",
+                &ProviderConfig {
+                    enabled: true,
+                    interval_ms: 0,
+                    max_retries: 0,
+                    timeout_ms: 3000,
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let credentials = Arc::new(CredentialStore::new());
+        let auth = ProviderAuthService::new(s.repo.clone(), credentials.clone());
+        auth.save(AuthSaveInput {
+            provider_id: "dmm".into(),
+            method: "affiliate".into(),
+            storage: "session_only".into(),
+            secret: r#"{"api_id":"synthetic-api","affiliate_id":"synthetic-affiliate"}"#.into(),
+        })
+        .await
+        .unwrap();
+        let hub = AdultProviderHub::new(s.providers.engine(), credentials)
+            .with_auth_service(auth.clone())
+            .with_mock_endpoints(&format!("{base}/dmm"), &format!("{base}/wikidata"));
+        s.service = AdultScraperService::new(
+            s.repo.clone(),
+            s.providers.clone(),
+            Arc::new(hub),
+            s.providers.engine(),
+            s._dir.path().join("adult-cache"),
+        )
+        .with_auth_service(auth);
+        (server, started)
+    }
+    #[tokio::test]
+    async fn automatic_adult_catalog_enrichment_preserves_fields_and_never_writes_sidecars() {
+        let mut s = setup().await;
+        let (server, _) = automatic_mock(&mut s, false).await;
+        let access = crate::media_output::AdultOutputAccess::new();
+        let context = automatic_context(&s, access.clone()).await;
+        let protected = local_value(
+            s.media.id,
+            "title",
+            serde_json::json!("Protected local title"),
+        );
+        s.repo
+            .save_metadata_value(&protected, MetadataWriteMode::User)
+            .await
+            .unwrap();
+        let original = std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap();
+        let service = s.service.clone().with_access(access);
+        let outcome = service
+            .enrich_automatic(s.media.id, &context)
+            .await
+            .unwrap();
+        assert_eq!(outcome.state, "matched");
+        let values = s.repo.list_metadata_values(s.media.id).await.unwrap();
+        assert_eq!(
+            values
+                .iter()
+                .find(|v| v.field_key == "title" && v.is_user_modified)
+                .unwrap()
+                .value,
+            serde_json::json!("Protected local title")
+        );
+        assert!(service.media_detail(s.media.id).await.unwrap().is_some());
+        assert_eq!(
+            std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap(),
+            original
+        );
+        assert!(!s._dir.path().join("SYN-001-CD1.nfo").exists());
+        let ordinary_sources: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM video_metadata_sources")
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(ordinary_sources, 0);
+        let ordinary = s.providers.snapshot().await.unwrap();
+        assert!(ordinary
+            .tasks
+            .iter()
+            .all(|task| Some(task.id) != outcome.run_id));
+        server.abort();
+    }
+    #[tokio::test]
+    async fn automatic_adult_cancel_or_revocation_during_detail_prevents_publication() {
+        for revoke in [false, true] {
+            let mut s = setup().await;
+            let (server, started) = automatic_mock(&mut s, true).await;
+            let access = crate::media_output::AdultOutputAccess::new();
+            let context = automatic_context(&s, access.clone()).await;
+            let cancel = context.cancel.clone();
+            let service = s.service.clone().with_access(access.clone());
+            let id = s.media.id;
+            let operation =
+                tokio::spawn(async move { service.enrich_automatic(id, &context).await });
+            tokio::time::timeout(std::time::Duration::from_secs(3), async {
+                while !started.load(std::sync::atomic::Ordering::Acquire) {
+                    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                }
+            })
+            .await
+            .unwrap();
+            if revoke {
+                access.revoke();
+            } else {
+                cancel.cancel();
+            }
+            assert!(operation.await.unwrap().is_err());
+            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM adult_metadata_sources")
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+            assert_eq!(count, 0);
+            assert_eq!(
+                s.repo.get_media(id).await.unwrap().unwrap().title,
+                s.media.title
+            );
+            server.abort();
+        }
+    }
+    async fn settle_adult_scan(
+        scans: &crate::scan_service::ScanService,
+        id: Uuid,
+    ) -> mediaatlas_application::library::ScanTaskView {
+        tokio::time::timeout(std::time::Duration::from_secs(8), async {
+            loop {
+                let task = scans
+                    .list_tasks(true)
+                    .await
+                    .unwrap()
+                    .into_iter()
+                    .find(|t| t.id == id)
+                    .unwrap();
+                if !matches!(task.state, TaskState::Queued | TaskState::Running) {
+                    return task;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap()
+    }
+    #[tokio::test]
+    async fn adult_directory_refresh_indexes_and_identifies_without_manual_import() {
+        let mut s = setup().await;
+        let (server, _) = automatic_mock(&mut s, false).await;
+        let access = crate::media_output::AdultOutputAccess::new();
+        let scans = crate::scan_service::ScanService::new(s.repo.clone());
+        let original = std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap();
+        let task = scans
+            .start_automatic_adult(s.root.id, s.service.clone(), access.clone())
+            .await
+            .unwrap();
+        let finished = settle_adult_scan(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::Succeeded);
+        assert_eq!(finished.imported_count, 1);
+        assert_eq!(finished.matched_count, 1);
+        assert!(scans.list_tasks(false).await.unwrap().is_empty());
+        let ordinary = crate::browse::BrowseService::new(
+            s.repo.clone(),
+            s._dir.path().join("ordinary-thumbs"),
+        );
+        assert!(ordinary
+            .list_media(&Default::default())
+            .await
+            .unwrap()
+            .items
+            .is_empty());
+        let adult =
+            crate::browse::BrowseService::new(s.repo.clone(), s._dir.path().join("adult-thumbs"))
+                .with_adult_access(access, false);
+        assert_eq!(
+            adult
+                .list_media(&mediaatlas_application::library::BrowseQuery {
+                    include_adult: true,
+                    kind: Some(MediaKind::AdultVideo),
+                    ..Default::default()
+                })
+                .await
+                .unwrap()
+                .items
+                .len(),
+            1
+        );
+        assert_eq!(
+            std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap(),
+            original
+        );
+        assert!(!s._dir.path().join("SYN-001-CD1.nfo").exists());
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM video_metadata_sources")
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap(),
+            0
+        );
+        server.abort();
+    }
+    #[tokio::test]
+    async fn adult_directory_refresh_without_credentials_keeps_local_media_private_and_visible() {
+        let s = setup().await;
+        for descriptor in AdultProviderHub::descriptors() {
+            s.providers
+                .register_adult_descriptor(descriptor)
+                .await
+                .unwrap();
+        }
+        s.providers.set_enabled("dmm", true).await.unwrap();
+        let access = crate::media_output::AdultOutputAccess::new();
+        let scans = crate::scan_service::ScanService::new(s.repo.clone());
+        let task = scans
+            .start_automatic_adult(s.root.id, s.service.clone(), access.clone())
+            .await
+            .unwrap();
+        let finished = settle_adult_scan(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::WaitingForUser);
+        assert_eq!(finished.review_count, 1);
+        assert_eq!(finished.imported_count, 1);
+        let ordinary = crate::browse::BrowseService::new(
+            s.repo.clone(),
+            s._dir.path().join("ordinary-thumbs"),
+        );
+        assert!(ordinary
+            .list_media(&Default::default())
+            .await
+            .unwrap()
+            .items
+            .is_empty());
+        let adult =
+            crate::browse::BrowseService::new(s.repo.clone(), s._dir.path().join("adult-thumbs"))
+                .with_adult_access(access.clone(), false);
+        let page = adult
+            .list_media(&mediaatlas_application::library::BrowseQuery {
+                include_adult: true,
+                kind: Some(MediaKind::AdultVideo),
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(page.items.len(), 1);
+        assert!(page.items[0]
+            .health
+            .contains(&"metadata_unconfigured".into()));
+        access.revoke();
+        assert!(scans
+            .start_automatic_adult(s.root.id, s.service.clone(), access)
+            .await
+            .is_err());
+    }
+    #[tokio::test]
+    async fn locking_adult_directory_refresh_cancels_late_network_work() {
+        let mut s = setup().await;
+        let (server, started) = automatic_mock(&mut s, true).await;
+        let access = crate::media_output::AdultOutputAccess::new();
+        let scans = crate::scan_service::ScanService::new(s.repo.clone());
+        let task = scans
+            .start_automatic_adult(s.root.id, s.service.clone(), access.clone())
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            while !started.load(std::sync::atomic::Ordering::Acquire) {
+                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        access.revoke();
+        let finished = settle_adult_scan(&scans, task.id).await;
+        assert_eq!(finished.state, TaskState::Cancelled);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT count(*) FROM adult_metadata_sources")
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap(),
+            0
+        );
+        assert!(scans.list_tasks(false).await.unwrap().is_empty());
+        server.abort();
     }
     fn selection(s: &Setup) -> AdultMergeRequest {
         AdultMergeRequest {

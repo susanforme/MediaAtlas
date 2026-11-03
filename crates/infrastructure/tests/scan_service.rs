@@ -88,6 +88,148 @@ async fn preview(
 }
 
 #[tokio::test]
+async fn automatic_refresh_indexes_local_files_without_manual_import_or_provider_credentials() {
+    let (_dir, repo, service, root) = setup(Some(MediaKind::Movie)).await;
+    write(&root, "Unmatched.2020.mkv", b"source remains read-only");
+    let task = service.start_automatic(root.id).await.unwrap();
+    assert_eq!(settled(&service, task.id).await, TaskState::WaitingForUser);
+    let tasks = service.list_tasks(false).await.unwrap();
+    let task = tasks.iter().find(|t| t.id == task.id).unwrap();
+    assert_eq!(task.mode, "automatic");
+    assert_eq!(task.phase, "complete");
+    assert_eq!(task.imported_count, 1);
+    assert_eq!(task.review_count, 1);
+    let page = BrowseService::new(repo.clone(), Path::new(&root.path).join("cache"))
+        .list_media(&Default::default())
+        .await
+        .unwrap();
+    assert_eq!(
+        page.items.len(),
+        1,
+        "unmatched local files must already be in the library"
+    );
+    assert!(page.items[0]
+        .health
+        .contains(&"metadata_unconfigured".to_owned()));
+    let candidates = preview(&service, task.id).await;
+    assert_eq!(candidates[0].status, "imported");
+    assert!(matches!(
+        service
+            .confirm(&ConfirmInput {
+                task_id: task.id,
+                candidate_ids: vec![candidates[0].id]
+            })
+            .await,
+        Err(RepositoryError::Conflict)
+    ));
+    let next = service.start_automatic(root.id).await.unwrap();
+    settled(&service, next.id).await;
+    assert_eq!(
+        repo.list_media(&ListMediaQuery::default())
+            .await
+            .unwrap()
+            .items
+            .len(),
+        1
+    );
+    assert_eq!(
+        std::fs::read(Path::new(&root.path).join("Unmatched.2020.mkv")).unwrap(),
+        b"source remains read-only"
+    );
+    assert!(!Path::new(&root.path).join("Unmatched.2020.nfo").exists());
+    repo.pool().close().await;
+}
+
+#[tokio::test]
+async fn automatic_refresh_supersedes_legacy_waiting_scan_and_keeps_adult_manual() {
+    let (_dir, repo, service, root) = setup(Some(MediaKind::Movie)).await;
+    write(&root, "Example.2020.mkv", b"video");
+    let legacy = service.start(root.id).await.unwrap();
+    assert_eq!(
+        settled(&service, legacy.id).await,
+        TaskState::WaitingForUser
+    );
+    let next = service.start_automatic(root.id).await.unwrap();
+    settled(&service, next.id).await;
+    assert_eq!(
+        service
+            .list_tasks(false)
+            .await
+            .unwrap()
+            .iter()
+            .find(|t| t.id == legacy.id)
+            .unwrap()
+            .state,
+        TaskState::Cancelled
+    );
+    assert_eq!(
+        repo.list_media(&ListMediaQuery::default())
+            .await
+            .unwrap()
+            .items
+            .len(),
+        1
+    );
+    repo.pool().close().await;
+    let (_dir, repo, service, root) = setup(Some(MediaKind::AdultVideo)).await;
+    write(&root, "ABC-123.mkv", b"isolated");
+    assert!(matches!(
+        service.start_automatic(root.id).await,
+        Err(RepositoryError::InvalidInput)
+    ));
+    assert!(service.list_tasks(true).await.unwrap().is_empty());
+    assert!(repo
+        .list_media(&ListMediaQuery::default())
+        .await
+        .unwrap()
+        .items
+        .is_empty());
+    repo.pool().close().await;
+}
+
+#[tokio::test]
+async fn automatic_refresh_recovery_marks_pending_metadata_interrupted_without_replaying() {
+    let (_dir, repo, service, root) = setup(Some(MediaKind::Movie)).await;
+    write(&root, "Example.2020.mkv", b"unchanged source");
+    let task = service.start_automatic(root.id).await.unwrap();
+    settled(&service, task.id).await;
+    sqlx::query("UPDATE scrape_tasks SET state='running' WHERE id=?")
+        .bind(task.id.to_string())
+        .execute(repo.pool())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE library_refresh_items SET state='pending',reason=NULL WHERE task_id=?")
+        .bind(task.id.to_string())
+        .execute(repo.pool())
+        .await
+        .unwrap();
+    service.recover_interrupted().await.unwrap();
+    let recovered = service.list_tasks(false).await.unwrap().remove(0);
+    assert_eq!(recovered.state, TaskState::Interrupted);
+    assert_eq!(recovered.review_count, 1);
+    let reason: String =
+        sqlx::query_scalar("SELECT reason FROM library_refresh_items WHERE task_id=?")
+            .bind(task.id.to_string())
+            .fetch_one(repo.pool())
+            .await
+            .unwrap();
+    assert_eq!(reason, "interrupted");
+    assert_eq!(
+        repo.list_media(&ListMediaQuery::default())
+            .await
+            .unwrap()
+            .items
+            .len(),
+        1
+    );
+    assert_eq!(
+        std::fs::read(Path::new(&root.path).join("Example.2020.mkv")).unwrap(),
+        b"unchanged source"
+    );
+    repo.pool().close().await;
+}
+
+#[tokio::test]
 async fn scanning_stages_paginated_candidates_before_explicit_partial_confirmation() {
     let (_dir, repo, service, root) = setup(Some(MediaKind::Movie)).await;
     for name in ["One.2020.mkv", "Two.2021.mkv", "Three.2022.mkv"] {

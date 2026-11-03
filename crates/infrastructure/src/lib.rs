@@ -66,6 +66,27 @@ pub fn log_app_ready() {
     tracing::info!(event = "app_ready", "Desktop application initialized");
 }
 
+/// Fixed startup stages and timing only; never accepts user paths or errors.
+pub enum StartupStage {
+    Services,
+    LegacyMetadata,
+    Watchers,
+}
+pub fn log_startup_stage(stage: StartupStage, elapsed: std::time::Duration, succeeded: bool) {
+    let stage = match stage {
+        StartupStage::Services => "services",
+        StartupStage::LegacyMetadata => "legacy_metadata",
+        StartupStage::Watchers => "watchers",
+    };
+    tracing::info!(
+        event = "startup_stage",
+        stage,
+        elapsed_ms = elapsed.as_millis() as u64,
+        succeeded,
+        "Startup stage finished"
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
