@@ -36,6 +36,7 @@ export const resources = {
           ]),
       ),
       language: "语言",
+      shellSearchPlaceholder: "搜索媒体库…",
 
       title: "MediaAtlas 工作区",
 
@@ -240,6 +241,7 @@ export const resources = {
           ]),
       ),
       language: "Language",
+      shellSearchPlaceholder: "Search your library…",
 
       title: "MediaAtlas workspace",
 
