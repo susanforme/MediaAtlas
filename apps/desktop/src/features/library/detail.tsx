@@ -41,7 +41,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   return (
     <>
       <Button asChild variant="ghost">
-        <Link to="/library" className="mb-5 inline-block text-sm text-primary">
+        <Link to="/library" className="mb-5 inline-block text-sm text-ring">
           ← {t("backToLibrary")}
         </Link>
       </Button>
@@ -173,7 +173,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
                       <Link
                         to="/media/$mediaId"
                         params={{ mediaId: relation.id }}
-                        className="text-primary"
+                        className="text-ring"
                       >
                         {relation.title}
                       </Link>

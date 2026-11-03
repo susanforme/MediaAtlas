@@ -421,7 +421,7 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
                 )}
               <Button asChild variant="outline">
                 <Link
-                  className="text-primary"
+                  className="text-ring"
                   to="/adult/media/$mediaId"
                   params={{ mediaId: item.id }}
                 >
@@ -1034,7 +1034,7 @@ function AdultRecent() {
                 <Link
                   to="/adult/media/$mediaId"
                   params={{ mediaId: visit.media_id }}
-                  className="text-primary"
+                  className="text-ring"
                 >
                   {visit.title}
                 </Link>

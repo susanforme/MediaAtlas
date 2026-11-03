@@ -291,7 +291,7 @@ export function LibraryPage({
                       <Link
                         to="/media/$mediaId"
                         params={{ mediaId: card.media.id }}
-                        className="font-medium text-primary"
+                        className="font-medium text-ring"
                       >
                         {t("detailsAction")}
                       </Link>
