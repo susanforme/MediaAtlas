@@ -104,6 +104,7 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 - [数据库 Schema](docs/database-schema.md)
 - [Phase 1 验收记录](docs/acceptance/phase-1.md)
 - [扫描工作流](docs/library-workflow.md)
+- [社区刮削实践与后续优化](docs/community-scraper-best-practices.md)
 - [界面规范](docs/ui-spec.md)
 - [Phase 2 验收记录](docs/acceptance/phase-2.md)
 

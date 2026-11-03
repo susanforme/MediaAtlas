@@ -1,5 +1,7 @@
 # Phase 2 本地媒体库工作流
 
+社区实践、当前实现对照和后续优化优先级见 [社区刮削工具实践与 MediaAtlas 后续优化](community-scraper-best-practices.md)。
+
 状态：Phase 2 实施设计。基线见 [原始计划](UNIVERSAL_MEDIA_SCRAPER_AGENT_PLAN.md)，共享边界见 [phase-2-contract.md](phase-2-contract.md)，界面见 [ui-spec.md](ui-spec.md)。用户已明确授权启动 P2；保留 P0 平台启动和 P1 远端 CI 尚未确认的记录，不将其改写为通过。
 
 ## 范围与边界
