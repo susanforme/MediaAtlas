@@ -9,6 +9,7 @@ import {
 } from "../../api/music";
 import { Anchor, Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
+import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
@@ -317,14 +318,14 @@ function ReleaseContents({ graph }: { graph: MusicReleaseGraph }) {
             </div>
           </section>
         ))}
-      <details>
-        <summary>{t("musicIdentifiers")}</summary>
+      <Details>
+        <DetailsSummary>{t("musicIdentifiers")}</DetailsSummary>
         {graph.identifiers.map((id) => (
           <p key={`${id.media_item_id}-${id.kind}-${id.namespace}-${id.value}`}>
             {id.namespace} / {id.kind}: {id.value}
           </p>
         ))}
-      </details>
+      </Details>
     </div>
   );
 }

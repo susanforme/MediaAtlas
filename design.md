@@ -21,178 +21,70 @@
 - 必须重新运行适当检查；检查 1648 × 928 与窄屏、键盘、减少动态效果、加载、空、错误、图片缺失。真实运行截图保存在根 `screenshots/`，注明运行方式与数据限制；测试 fixture 不作为产品真实内容。
 - 在 main 分阶段提交，作者/提交者均为 Codex <codex@openai.com>。共享框架与 shadcn、首页与媒体浏览、工具与设置并行协作；共享文件指定唯一负责人。本轮不等待桌面打包，不移动既有 tag。
 
-## 原始视觉参考（仅风格资料）
+## 视觉参数
 
-以下保留用户提供的近似视觉参数。出现 MediaHub 品牌、示例导航、播放/收藏、继续观看、假定评分等内容时，必须按上面的 MediaAtlas 业务边界调整，不能直接实现示例功能。
+参考图中的数值为近似值，以可读性、现有数据契约和响应式布局校准。不得为接近截图伪造内容。
 
-# MediaHub UI Design Language — AI Implementation Guide
+| 用途 | 参考值 |
+| --- | --- |
+| 应用背景 | `#101016` |
+| 侧栏 | `#17171f`，轻微右侧分隔 |
+| 内容表面 / hover | `#25232d` / `#302d3a` |
+| 紫色主强调 / hover | `#7657f5` / `#896eff`；可为对比度微调 |
+| 导航选中背景 | `#393577` |
+| 主要文字 | `#f5f4fa` |
+| 次要文字 / 低强调文字 | `#a5a3b1` / `#777480`；交互和正文须保持可读对比度 |
+| 玻璃表面 / 分隔线 | 白色 8% 透明度 |
+| 圆角 | 6 / 10 / 14 / 18px |
+| 间距 | 4 / 8 / 12 / 16 / 24 / 32px |
+| 桌面侧栏 / 工具栏 | 约 228px / 68–76px |
+| 内容内边距 | 约 40px，Hero 文字约 54–68px |
+| 动画 | 150–250ms，减少动态效果时取消位移和缩放 |
 
-> Reference: user-provided MediaHub desktop screenshot (1648 × 928). This is a visual reconstruction specification, **not** an extraction from source CSS or Figma. All dimensions, colors, and typography are approximate and should be calibrated against the screenshot.
+字体优先本地可用的 `Inter, "Noto Sans SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif`。正文约 14–16px，区块标题 20–24px，Hero 标题 30–44px，避免依赖远程字体。年份直接显示年份，数量可按语言格式化。
 
-## Objective
+## 页面构图
 
-Implement a polished desktop media-center UI matching the reference image's **cinematic dark aesthetic**. Prioritize layout fidelity, content hierarchy, image treatment, and interaction consistency over decorative effects. The UI should feel like a premium native desktop application rather than a generic web dashboard.
+### 固定侧栏
 
-## Visual identity
+- MediaAtlas 图标和字标置顶，保持现有媒体库、音乐、目录、扫描、工具、任务、来源和诊断入口；按已有业务分组，设置固定在底部。
+- 行高约 44–48px，使用低强调轮廓图标；选中项为柔和紫底，hover 仅轻微提亮，无高亮描边。
+- 成人入口仅按用户配置显示，显示入口不等于解锁。
+- 窄屏收为带可访问名称的图标栏或抽屉，导航区域可独立纵向滚动；不得压缩固定宽度侧栏和七张海报硬塞入视口。
 
-- Style: **Cinematic Immersive UI / Premium Media Dashboard / Dark Minimalism**.
-- Content-first: posters, stills, and hero artwork dominate the visual hierarchy.
-- Frame: near-black chrome, subtly separated fixed sidebar, restrained translucent controls.
-- Brand accent: vivid violet, used sparingly for active navigation, primary actions, and progress indicators.
-- Media artwork provides ambient orange, blue, or pink lighting; **do not** make those colors global UI tokens.
-- Avoid bright borders, excessive glow, heavy neumorphism, and generic dashboard widgets.
+### 悬浮工具栏
 
-## Approximate design tokens
+- 在主区上方覆盖 Hero，采用克制半透明底色，避免不透明整条页头。
+- 搜索调用普通媒体库既有 URL/query 模型；媒体库内部由同一个有效筛选状态管理，不再复制搜索来源。
+- 仅呈现已接入且可操作的按钮。没有实现应用内历史管理、桌面拖拽或窗口控制时不添加相关控件。
+- 语言切换保留中文和英文，所有业务文案沿用 i18next。
 
-```css
-:root {
-  --bg-app: #101016;
-  --bg-sidebar: #17171f;
-  --bg-surface: #25232d;
-  --bg-hover: #302d3a;
-  --color-primary: #7657f5;
-  --color-primary-hover: #896eff;
-  --color-primary-muted: #393577;
-  --text-primary: #f5f4fa;
-  --text-secondary: #a5a3b1;
-  --text-muted: #777480;
-  --color-rating: #f5bb46;
-  --color-progress: #7657f5;
-  --overlay-dark: rgba(10, 9, 16, 0.72);
-  --surface-glass: rgba(255, 255, 255, 0.08);
-  --border-subtle: rgba(255, 255, 255, 0.08);
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 18px;
-  --space-1: 4px;
-  --space-2: 8px;
-  --space-3: 12px;
-  --space-4: 16px;
-  --space-6: 24px;
-  --space-8: 32px;
-  --sidebar-width: 228px;
-  --toolbar-height: 68px;
-  --content-padding: 40px;
-  --transition-fast: 150ms ease;
-  --transition-normal: 250ms ease;
-}
-```
+### 无边界 Hero
 
-Use a clean sans-serif with good Chinese support, e.g. `Inter, "Noto Sans SC", "Microsoft YaHei", sans-serif`. The screenshot does not identify the actual font. Use roughly 14–16px body text, 20–24px section headings, 30–36px hero title, with stronger weights for headings and selected navigation.
+- 画面与应用背景连续，背景主体偏右、左侧保留可读信息，底部和左侧通过多方向暗色渐变融合，不出现明显卡片矩形边界。
+- 标题、年份、类型、简介与系统 App 打开/详情动作形成清楚层级；简介约两行。没有真实评分、媒体 logo 或类型元数据时省略。
+- 优先已经授权且缓存的背景图；当前 IPC 仅提供 poster data URI 时，用右侧海报融合布局。禁止直接加载元数据任意远程 URL/本地路径，保持现有 CSP。
+- 当前无需轮播；只有真实多媒体、明确切换机制和无障碍控件都具备时才可加入，不添加装饰性圆点或自动播放。
 
-## Desktop composition
+### 媒体横卡与海报
 
-Target reference viewport: **1648 × 928**.
+- 横向行约四张卡，卡高约 130px，间隔 14–16px。已有契约只有海报时采用海报缩略图与文字组合，避免将海报拉伸成伪造宽屏剧照。
+- 横卡显示真实标题、年份、类型和可用详情入口，不显示不存在的剩余时间/进度。
+- 最近添加按真实服务端排序展示约七张海报，2:3 比例，宽约 155–182px，标题在图下；窄屏减少可见数并在行内容器滚动。
+- 图片 `object-fit` 保持比例，屏幕外懒加载；加载失败和 URI 缺失都回退到中性占位，不能遗留破图。
+- Hover 允许小幅提亮/位移，键盘必须有清楚焦点，减少动态效果时不位移/缩放。
 
-### 1. Fixed left sidebar
+### 工具、设置与状态
 
-- Width approximately **228px**, full viewport height, dark charcoal background, subtle right divider.
-- Brand/logo at upper left: violet icon + white “MediaHub” wordmark.
-- Top-level navigation: Home (selected), Media Library (expanded), Discover, Scraper, Download Tasks (count badge), Favorites, Tags; Settings pinned near bottom.
-- Expanded library subnavigation: Movies, TV Shows, Anime, Games, Music.
-- Navigation rows: around 44–48px high; subdued outline icons, white/light-gray labels.
-- Selected row: muted violet rounded rectangle with brighter violet icon; no high-contrast outline.
-- Maintain clear indentation for child items, dividers between navigation groups, and a quiet bottom settings region.
+- 工具页沿用既有业务分组，减少冗余介绍，以字段标签、对齐和间距表达层级。表格可在自身容器横滚，不能撑宽整页。
+- 设置按认证、语言、隐私分组；Token 输入为 password，保存动作明确且清空输入，不能自动启用来源或自动填充环境密钥。
+- 加载状态有语义 status，空状态给出现有可用入口，错误状态有安全文案及可用重试；不展示原始传输错误或敏感路径/Token。
+- 版本选择、删除目录和扫描确认等对话框使用共享可访问组件，维持显式确认、Tab 焦点限制、Escape 关闭与触发器焦点恢复。
 
-### 2. Top toolbar
+## 验收记录要求
 
-- Overlays the hero area rather than occupying a visually separate solid header.
-- Left: circular back and forward buttons; wide rounded translucent search field with search icon and Chinese placeholder.
-- Right: gamepad, notification bell with small unread dot, circular avatar, window controls (minimize, maximize, close).
-- Approximate toolbar height **68px**. Controls use translucent dark fills and restrained borders.
-- For actual desktop shell integrations, use platform-safe draggable and non-draggable regions.
-
-### 3. Cinematic hero
-
-- Full-width hero artwork behind the content, beginning at the top of the main panel.
-- Image subject weighted toward the right; leave readable negative space on the left for text.
-- Strong multi-directional overlays: darken left for legibility, fade bottom into app background, and softly blend the top edge.
-- Hero information aligned left, starting roughly 68px from the main panel's left edge and around 115px from the top.
-- Content: stylized movie logo (if available), Chinese title, star rating, year, type, genres, two-line synopsis, primary/secondary action buttons.
-- Primary button: violet “播放” with play icon. Secondary actions: “详情”, “已收藏”, more menu; use translucent gray fills.
-- Hero carousel indicators at lower right, with active indicator wider and brighter.
-- The image should blend seamlessly into the rest of the page; **no obvious rectangular hero-card boundary**.
-
-### 4. Continue Watching
-
-- Section title “继续观看” with chevron, overlaid close to the hero's lower fade region.
-- Horizontal row of approximately four wide landscape cards, with ~14–16px gaps.
-- At reference size each card is about **326 × 130px**.
-- Cards use `object-fit: cover` artwork, bottom dark gradient, title and remaining-time/subtitle near lower left.
-- Thin progress track at bottom, violet completed portion, muted gray remainder.
-- Rounded corners about 10px. Avoid excessive shadow or thick border.
-
-### 5. Recently Added
-
-- Section title “最近添加” with chevron, separated vertically from the previous row by about 30px.
-- Horizontal row of poster cards; about seven visible at the reference width.
-- Approximate poster width **182px** with 14–16px gaps; artwork should preserve its intended poster ratio (typically ~2:3), continuing below the screenshot fold as needed.
-- Titles sit below the poster image, not over its center.
-- Use diverse cinematic cover art. Do not stretch, blur, or duplicate a single poster across the row.
-
-## Component behavior
-
-- **Navigation:** hover uses subtle lightening; selected state uses muted violet background. Expanded child navigation remains visually subordinate.
-- **Buttons:** 150–250ms transitions; slight brightness shift on hover; clear keyboard focus ring; disabled state visibly subdued.
-- **Cards:** slight lift or image scale on hover (e.g. 1.02), subtle overlay and optional contextual play control; avoid large motion.
-- **Progress:** render actual fractional progress; never use arbitrary equal-length bars.
-- **Carousel:** accessible previous/next controls, indicators, and stable text alignment while artwork changes.
-- **Search:** usable input with keyboard focus and empty/query states.
-- **Responsive:** preserve desktop layout first; at narrower widths, reduce content padding and visible card count; collapse sidebar into a compact icon rail or drawer when necessary. Do not squeeze the 228px sidebar and seven posters into a narrow viewport.
-- Respect `prefers-reduced-motion: reduce`.
-
-## Imagery and assets
-
-- Use high-quality, correctly cropped film/game artwork supplied by the project or legally accessible metadata/image providers.
-- Preserve each title's identity and use accurate media labels where possible.
-- The hero's warm orange light is artwork-specific; the application chrome remains neutral dark.
-- Prefer real logo assets for featured media; if unavailable, use tasteful text rather than attempting an inaccurate logo recreation.
-- Lazy-load offscreen posters and provide fallbacks for missing images.
-
-## Suggested component structure
-
-```text
-MediaHubApp
-├── Sidebar
-│   ├── Brand
-│   ├── NavigationGroup
-│   ├── ExpandableLibraryNav
-│   ├── DownloadBadge
-│   └── SettingsEntry
-└── MainContent
-    ├── TopToolbar
-    │   ├── HistoryControls
-    │   ├── SearchInput
-    │   ├── UtilityActions
-    │   └── WindowControls
-    ├── FeaturedHeroCarousel
-    │   ├── HeroArtwork
-    │   ├── HeroMetadata
-    │   ├── HeroActions
-    │   └── CarouselIndicators
-    ├── ContinueWatchingSection
-    │   └── ContinueWatchingCard[]
-    └── RecentlyAddedSection
-        └── PosterCard[]
-```
-
-Build components with reusable props and real data models, not hard-coded absolute coordinates. Use CSS Grid/Flexbox for rows, a fixed or sticky sidebar, and layered positioned backgrounds only where needed for the hero. The hero content and media rows must remain independently maintainable.
-
-## Quality acceptance checklist
-
-- [ ] Overall silhouette closely matches reference at 1648 × 928.
-- [ ] Sidebar width, indentation, active state, and pinned settings match.
-- [ ] Toolbar visually floats above hero without an opaque horizontal bar.
-- [ ] Hero artwork is right-weighted and blends smoothly into dark app background.
-- [ ] Hero title, metadata, synopsis, and buttons have correct hierarchy and spacing.
-- [ ] Continue Watching shows four landscape cards with progress and gradient overlays.
-- [ ] Recently Added displays a dense horizontal poster gallery.
-- [ ] Violet is reserved for meaningful interactive accents.
-- [ ] Chinese typography is legible and aligned consistently.
-- [ ] Hover, focus, loading, empty, and missing-image states are implemented.
-- [ ] No stretched artwork, clipping, horizontal page overflow, or excessive glow.
-
-## Instructions to the coding agent
-
-**Implement the supplied screenshot as a working, reusable UI**, using the existing project framework and conventions. Treat this document as the visual specification and the screenshot as the final visual source of truth. Begin with layout and visual hierarchy, then style components, wire interactions, and perform screenshot-based visual QA at the reference viewport. Do not invent unrelated dashboard panels, charts, gradients, or additional navigation. If exact assets or measurements are unavailable, make conservative approximations and clearly isolate them for later replacement.
+1. 根目录运行 `pnpm check`，记录本轮 lint、typecheck、测试、前端 build 结果；相关边界测试不得跳过或弱化断言。
+2. 在 1648×928 和窄屏实际渲染后截图，检查页面无横向溢出、海报比例、工具栏、侧栏、Hero 混合和文字可读性。
+3. 验证键盘搜索与对话框、减少动态效果、加载/空/错误/缺图、成人隔离和手动保存认证。
+4. 区分本轮截图与历史文件。浏览器未连接 Tauri 时如实截图“需要桌面应用”；使用测试 IPC 验证状态时，文件名和记录必须明确标记 fixture，不能当作真实库或系统打开验证。
+5. 本轮无需等待桌面打包；Rust/Tauri 宿主不可用时明确记录平台验证限制。任何历史打包/测试成绩不能代替本轮结果。
