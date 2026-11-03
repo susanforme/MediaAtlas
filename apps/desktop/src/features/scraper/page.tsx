@@ -110,6 +110,7 @@ function ScraperWorkspace({
     providerState,
     selectedProviders,
     searchValid,
+    applyFieldPreset,
     selectCandidate,
     clearDetail,
   } = useScraper(mediaId);
@@ -122,6 +123,11 @@ function ScraperWorkspace({
             mediaId={mediaId}
             queue={queue}
             busy={busy}
+            confirmed={
+              confirm.isSuccess ||
+              write.isSuccess ||
+              Boolean(preview?.confirmed)
+            }
             onNavigate={onQueueNavigate}
           />
         )}
@@ -447,6 +453,19 @@ function ScraperWorkspace({
           <VideoSourceDetails metadata={metadata} />
           <fieldset className="mt-6">
             <legend className="font-medium">{t("scraperFields")}</legend>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(["all", "none", "missing"] as const).map((preset) => (
+                <Button
+                  key={preset}
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || (preset === "missing" && !validTarget)}
+                  onClick={() => applyFieldPreset(preset)}
+                >
+                  {t(`scraperFields_${preset}`)}
+                </Button>
+              ))}
+            </div>
             {metadata.data.fields.map((field, index) => (
               <Label className="scraper-field-choice" key={index}>
                 <Checkbox

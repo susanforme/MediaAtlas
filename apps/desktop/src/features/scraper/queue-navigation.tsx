@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
 
@@ -5,11 +6,13 @@ export function ScraperQueueNavigation({
   mediaId,
   queue,
   busy,
+  confirmed,
   onNavigate,
 }: {
   mediaId: string;
   queue: string[];
   busy: boolean;
+  confirmed: boolean;
   onNavigate?: (mediaId: string) => void;
 }) {
   const { t } = useTranslation();
@@ -40,16 +43,18 @@ export function ScraperQueueNavigation({
           disabled={busy || !next || !onNavigate}
           onClick={() => navigate(next)}
         >
-          {t("scraperQueueNext")}
+          {t(confirmed ? "scraperQueueNext" : "scraperQueueSkip")}
         </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={busy || !next || !onNavigate}
-          onClick={() => navigate(next)}
-        >
-          {t("scraperQueueSkip")}
-        </Button>
+        {!next &&
+          (busy ? (
+            <Button variant="outline" size="sm" disabled>
+              {t("scraperQueueReturn")}
+            </Button>
+          ) : (
+            <Button asChild size="sm">
+              <Link to="/tools">{t("scraperQueueReturn")}</Link>
+            </Button>
+          ))}
       </div>
     </div>
   );

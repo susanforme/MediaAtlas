@@ -760,10 +760,15 @@ it("navigates the real queue boundaries without searching, choosing or writing a
   fireEvent.click(screen.getByRole("button", { name: "Skip current item" }));
   await screen.findByText("Review queue · Item 2 of 2");
   expect(navigate).toHaveBeenCalledWith("media-2");
-  expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "Next item" }),
+  ).not.toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Skip current item" }),
   ).toBeDisabled();
+  expect(
+    screen.getByRole("link", { name: "Return to media list" }),
+  ).toHaveAttribute("href", "/tools");
   fireEvent.click(screen.getByRole("button", { name: "Previous item" }));
   await screen.findByText("Review queue · Item 1 of 2");
   expect(scraperApi.search).not.toHaveBeenCalled();
@@ -787,15 +792,19 @@ it("disables queue navigation during a mutation and ignores the cancelled item's
     ).toBeEnabled(),
   );
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
-  expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled();
+  expect(
+    screen.queryByRole("button", { name: "Next item" }),
+  ).not.toBeInTheDocument();
   expect(
     screen.getByRole("button", { name: "Skip current item" }),
   ).toBeDisabled();
-  fireEvent.click(screen.getByRole("button", { name: "Next item" }));
+  fireEvent.click(screen.getByRole("button", { name: "Skip current item" }));
   expect(navigate).not.toHaveBeenCalled();
   await waitFor(() => expect(scraperApi.search).toHaveBeenCalled());
   fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
-  expect(screen.getByRole("button", { name: "Next item" })).toBeEnabled();
+  expect(
+    screen.getByRole("button", { name: "Skip current item" }),
+  ).toBeEnabled();
   await act(async () => {
     finish(syntheticSearch);
   });
@@ -816,7 +825,10 @@ it("releases an unexecuted sidecar preview before leaving a queue item", async (
     }),
   );
   await screen.findByText("/synthetic/library/film.nfo");
-  fireEvent.click(screen.getByRole("button", { name: "Skip current item" }));
+  expect(
+    screen.queryByRole("button", { name: "Skip current item" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Next item" }));
   await screen.findByText("Review queue · Item 2 of 2");
   await waitFor(() =>
     expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
@@ -880,4 +892,91 @@ it("preserves the whole review queue in both manual provider setup links", async
       "media-2",
     ]);
   }
+});
+
+it("applies real field presets, invalidates old previews and preserves protected fields", async () => {
+  await searchAndChoose();
+  fireEvent.click(screen.getByRole("button", { name: "Deselect all fields" }));
+  expect(screen.getByRole("button", { name: "Preview merge" })).toBeDisabled();
+  expect(scraperApi.preview).not.toHaveBeenCalled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Select all unprotected fields" }),
+  );
+  expect(screen.getByRole("button", { name: "Preview merge" })).toBeEnabled();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Fill missing fields only" }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  await waitFor(() =>
+    expect(scraperApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selected_fields: ["overview"] }),
+    ),
+  );
+  await screen.findByRole("button", { name: "Confirm selected metadata" });
+  fireEvent.click(
+    screen.getByRole("button", { name: "Select all unprotected fields" }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Confirm selected metadata" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  await waitFor(() => expect(scraperApi.preview).toHaveBeenCalledTimes(2));
+  expect(scraperApi.preview).toHaveBeenLastCalledWith(
+    expect.objectContaining({ selected_fields: ["overview"] }),
+  );
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+});
+it("keeps the last-item return action disabled while a mutation is executing", async () => {
+  let finish!: (value: typeof syntheticSearch) => void;
+  vi.mocked(scraperApi.search).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  show("media-2", ["media-1", "media-2"], vi.fn());
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Search providers" }),
+    ).toBeEnabled(),
+  );
+  expect(
+    screen.getByRole("link", { name: "Return to media list" }),
+  ).toHaveAttribute("href", "/tools");
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  await waitFor(() => expect(scraperApi.search).toHaveBeenCalled());
+  expect(
+    screen.queryByRole("link", { name: "Return to media list" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Return to media list" }),
+  ).toBeDisabled();
+  await act(async () => {
+    finish(syntheticSearch);
+  });
+  await screen.findByRole("link", { name: "Return to media list" });
+});
+it("ignores a search result even when cancellation happens before the mutation function starts", async () => {
+  let finish!: (value: typeof syntheticSearch) => void;
+  vi.mocked(scraperApi.search).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  show("media-1");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Search providers" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  await waitFor(() => expect(scraperApi.search).toHaveBeenCalled());
+  await act(async () => {
+    finish(syntheticSearch);
+  });
+  expect(
+    screen.queryByRole("button", { name: "Choose this candidate" }),
+  ).not.toBeInTheDocument();
 });

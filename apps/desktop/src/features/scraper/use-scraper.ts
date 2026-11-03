@@ -18,6 +18,7 @@ import {
   type VideoKind,
   type VideoMetadata,
 } from "../../api/scraper";
+import { type FieldPreset, selectScraperFields } from "./field-selection";
 import { scrapeKind } from "./scraper-model";
 
 export function useScraper(mediaId?: string) {
@@ -350,6 +351,24 @@ export function useScraper(mediaId?: string) {
       selectedProviders.length > 0 &&
       (!target || validTarget),
   );
+  function applyFieldPreset(preset: FieldPreset) {
+    if (!metadata || busy || (preset === "missing" && !validTarget)) return;
+    const fields = selectScraperFields(
+      preset,
+      metadata.data.fields,
+      validTarget ? targetDetail.data : undefined,
+      preview,
+    );
+    generation.current += 1;
+    setSelectedFields(fields);
+    setPreview(undefined);
+    setOutput(undefined);
+    merge.reset();
+    outputPlan.reset();
+    discard.reset();
+    confirm.reset();
+    write.reset();
+  }
   const selectCandidate = (index: number) => {
     if (!search) return;
     clearDetail();
@@ -422,6 +441,7 @@ export function useScraper(mediaId?: string) {
     providerState,
     selectedProviders,
     searchValid,
+    applyFieldPreset,
     selectCandidate,
     clearDetail,
   };
