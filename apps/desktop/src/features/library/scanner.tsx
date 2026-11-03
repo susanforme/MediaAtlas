@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { libraryApi, type ScanTask } from "../../api/library";
+import { libraryApi } from "../../api/library";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import {
@@ -15,6 +15,8 @@ import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { ProviderTasks } from "../providers/pages";
 import type { ScannerSearch } from "./scanner-navigation";
+import "./translations";
+import { isActiveScanTask } from "./library-model";
 import { useScannerPreview } from "./use-scanner-preview";
 
 export {
@@ -31,9 +33,6 @@ import {
   useFormat,
 } from "./shared";
 
-function active(task: ScanTask) {
-  return ["queued", "running", "waiting_for_user"].includes(task.state);
-}
 export function TasksPage() {
   const { t } = useTranslation();
   const { number, date } = useFormat();
@@ -42,6 +41,10 @@ export function TasksPage() {
     queryKey: ["tasks", false],
     queryFn: () => libraryApi.tasks(false),
     refetchInterval: 2000,
+  });
+  const roots = useQuery({
+    queryKey: ["roots", false],
+    queryFn: () => libraryApi.roots(false),
   });
   const cancel = useMutation({
     mutationFn: (id: string) => libraryApi.cancel(id),
@@ -68,7 +71,8 @@ export function TasksPage() {
                 <div>
                   <p className="badge">{t(`state_${task.state}`)}</p>
                   <p className="mt-2 break-all text-xs text-muted-foreground">
-                    {t("taskId")}: {task.id}
+                    {roots.data?.find((root) => root.id === task.root_id)
+                      ?.name ?? t("root")}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
                     {date(task.updated_at)}
@@ -78,13 +82,13 @@ export function TasksPage() {
                   <Button asChild variant="ghost">
                     <Link
                       to="/scanner"
-                      search={{ task: task.id }}
+                      search={{ root: task.root_id, task: task.id }}
                       className="action-link"
                     >
                       {t("preview")}
                     </Link>
                   </Button>
-                  {active(task) && (
+                  {isActiveScanTask(task) && (
                     <Button
                       variant="outline"
                       disabled={cancel.isPending}
@@ -128,14 +132,19 @@ export function ScannerPage({
   search,
   onSearch,
   adult = false,
+  onAddRoot,
+  onBrowse,
 }: {
   adult?: boolean;
+  onAddRoot?: () => void;
+  onBrowse?: () => void;
   search: ScannerSearch;
   onSearch: (value: ScannerSearch) => void;
 }) {
   const { t } = useTranslation();
-  const { number } = useFormat();
+  const { number, date } = useFormat();
   const confirmTrigger = useRef<HTMLButtonElement>(null);
+  const completedActions = useRef<HTMLDivElement>(null);
   const {
     roots,
     tasks,
@@ -154,7 +163,51 @@ export function ScannerPage({
     setPage,
     setCursors,
     selectTask,
+    selectRoot,
+    rootId,
+    selectedRoot,
+    availableRoots,
+    matchingTasks,
+    canStart,
   } = useScannerPreview(search, onSearch, adult);
+  if (roots.isSuccess && availableRoots.length === 0 && !search.task)
+    return (
+      <>
+        <PageHeading title={t("scanner")} />
+        <Empty
+          title={t(roots.data.length ? "scanNoEnabledRoots" : "noRoots")}
+        />
+        <div className="mt-5">
+          {adult ? (
+            onAddRoot && (
+              <Button onClick={onAddRoot}>{t("scanAddDirectory")}</Button>
+            )
+          ) : (
+            <Button asChild>
+              <Link to="/roots">{t("scanAddDirectory")}</Link>
+            </Button>
+          )}
+        </div>
+      </>
+    );
+  const browseActions = adult ? (
+    onBrowse && (
+      <Button variant="outline" onClick={onBrowse}>
+        {t("scanBrowseImported")}
+      </Button>
+    )
+  ) : (
+    <>
+      <Button asChild variant="outline">
+        <Link to="/library" search={{ root: task?.root_id ?? rootId }}>
+          {t("scanBrowseImported")}
+        </Link>
+      </Button>
+      <Button asChild variant="outline">
+        <Link to="/tools">{t("scanOpenMediaTools")}</Link>
+      </Button>
+    </>
+  );
   return (
     <>
       <PageHeading title={t("scanner")} />
@@ -163,48 +216,73 @@ export function ScannerPage({
           <Label className="filter-field min-w-64 flex-1">
             <span>{t("chooseRoot")}</span>
             <Select
-              value={search.root ?? ""}
-              onChange={(event) =>
-                onSearch({ root: event.target.value || undefined })
-              }
+              value={rootId ?? ""}
+              disabled={start.isPending || confirm.isPending}
+              onChange={(event) => selectRoot(event.target.value)}
             >
               <option value="">{t("chooseRoot")}</option>
-              {roots.data
-                ?.filter((root) => root.enabled)
-                .map((root) => (
-                  <option key={root.id} value={root.id}>
-                    {root.name}
-                  </option>
-                ))}
+              {availableRoots.map((root) => (
+                <option key={root.id} value={root.id}>
+                  {root.name}
+                </option>
+              ))}
             </Select>
           </Label>
           <Button
-            disabled={!search.root || start.isPending}
-            onClick={() => search.root && start.mutate(search.root)}
+            disabled={!canStart || start.isPending || confirm.isPending}
+            onClick={() => rootId && start.mutate(rootId)}
           >
-            {t("startScan")}
+            {t(
+              start.isPending
+                ? "rootScanning"
+                : task &&
+                    ["failed", "cancelled", "interrupted"].includes(task.state)
+                  ? "scanRetry"
+                  : "startScan",
+            )}
           </Button>
         </div>
-        {roots.isError && <ErrorNotice error={roots.error} />}
+        {roots.isError && (
+          <ErrorNotice error={roots.error} retry={() => void roots.refetch()} />
+        )}
+        {rootId && roots.isSuccess && !selectedRoot && (
+          <p className="mt-3 text-sm" role="status">
+            {t("scanRootUnavailable")}
+          </p>
+        )}
         {start.isError && <ErrorNotice error={start.error} />}
       </div>
       <Label className="filter-field mb-6">
-        <span>{t("chooseTask")}</span>
+        <span>{t("scanChooseRecent")}</span>
         <Select
-          value={search.task ?? ""}
+          value={task?.id ?? search.task ?? ""}
+          disabled={
+            confirm.isPending || cancel.isPending || matchingTasks.length === 0
+          }
           onChange={(event) => selectTask(event.target.value)}
         >
-          <option value="">{t("chooseTask")}</option>
-          {tasks.data?.map((entry) => (
+          {matchingTasks.length === 0 && (
+            <option value="">{t("noTasks")}</option>
+          )}
+          {search.task && !task && (
+            <option value={search.task}>{t("taskNotAvailable")}</option>
+          )}
+          {matchingTasks.map((entry) => (
             <option key={entry.id} value={entry.id}>
-              {t(`state_${entry.state}`)} · {entry.id}
+              {roots.data?.find((root) => root.id === entry.root_id)?.name ??
+                t("root")}{" "}
+              · {t(`state_${entry.state}`)} · {date(entry.created_at)}
             </option>
           ))}
         </Select>
       </Label>
       {tasks.isError && <ErrorNotice error={tasks.error} />}
-      {!search.task ? (
-        <Empty title={t("chooseTask")} />
+      {!task && !search.task ? (
+        tasks.isPending || roots.isPending ? (
+          <Loading />
+        ) : (
+          <Empty title={t("scanReady")} />
+        )
       ) : tasks.isPending ? (
         <Loading />
       ) : !task ? (
@@ -221,10 +299,10 @@ export function ScannerPage({
                   {t("warnings")}: {number(task.warnings)}
                 </p>
               </div>
-              {active(task) && (
+              {isActiveScanTask(task) && (
                 <Button
                   variant="outline"
-                  disabled={cancel.isPending}
+                  disabled={cancel.isPending || confirm.isPending}
                   onClick={() => cancel.mutate(task.id)}
                 >
                   {t("cancelTask")}
@@ -238,14 +316,23 @@ export function ScannerPage({
             )}
           </div>
           {cancel.isError && <ErrorNotice error={cancel.error} />}
-          {confirm.isError && <ErrorNotice error={confirm.error} />}
-          {confirm.isSuccess && (
-            <p role="status" className="notice mb-4">
-              {t("importResult", {
-                imported: confirm.data.imported,
-                unchanged: confirm.data.unchanged,
-              })}
-            </p>
+          {confirm.isError && !confirmOpen && (
+            <ErrorNotice error={confirm.error} />
+          )}
+          {(confirm.isSuccess || task.state === "succeeded") && (
+            <div className="notice mb-4 space-y-4">
+              {confirm.isSuccess && (
+                <p role="status">
+                  {t("importResult", {
+                    imported: confirm.data?.imported ?? 0,
+                    unchanged: confirm.data?.unchanged ?? 0,
+                  })}
+                </p>
+              )}
+              <div ref={completedActions} className="flex flex-wrap gap-3">
+                {browseActions}
+              </div>
+            </div>
           )}
           {preview.isPending ? (
             <Loading />
@@ -255,7 +342,13 @@ export function ScannerPage({
               retry={() => void preview.refetch()}
             />
           ) : !preview.data.items.length ? (
-            <Empty title={t("noCandidates")} />
+            ["running", "queued"].includes(task.state) ? (
+              <p role="status" className="notice">
+                {t("scanInProgress")}
+              </p>
+            ) : (
+              <Empty title={t("scanNothingToReview")} />
+            )
           ) : (
             <>
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -373,7 +466,15 @@ export function ScannerPage({
               <DialogContent
                 onCloseAutoFocus={(event) => {
                   event.preventDefault();
-                  confirmTrigger.current?.focus();
+                  if (
+                    confirmTrigger.current &&
+                    !confirmTrigger.current.disabled
+                  )
+                    confirmTrigger.current.focus();
+                  else
+                    completedActions.current
+                      ?.querySelector<HTMLElement>("a,button")
+                      ?.focus();
                 }}
               >
                 <DialogTitle className="section-title">
@@ -382,7 +483,8 @@ export function ScannerPage({
                 <DialogDescription className="mb-4">
                   {t("confirmExplanation", { count: selected.length })}
                 </DialogDescription>
-                <div className="flex flex-wrap gap-3">
+                {confirm.isError && <ErrorNotice error={confirm.error} />}
+                <div className="mt-4 flex flex-wrap gap-3">
                   <Button
                     disabled={confirm.isPending || !canImport}
                     onClick={() => confirm.mutate()}
@@ -391,6 +493,7 @@ export function ScannerPage({
                   </Button>
                   <Button
                     variant="outline"
+                    disabled={confirm.isPending}
                     onClick={() => setConfirmOpen(false)}
                   >
                     {t("cancel")}
