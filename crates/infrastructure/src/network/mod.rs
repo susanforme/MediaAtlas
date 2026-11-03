@@ -1,4 +1,5 @@
 //! Bounded HTTP engines. Never serializes credentials, request bodies or raw errors.
+mod music;
 mod parsers;
 mod policy;
 mod transport;

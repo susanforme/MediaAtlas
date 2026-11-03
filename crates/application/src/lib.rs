@@ -1,6 +1,7 @@
 //! Application use cases are independent of the desktop framework and storage.
 
 pub mod library;
+pub mod music;
 
 use mediaatlas_domain::AppError;
 

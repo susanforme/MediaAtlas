@@ -12,6 +12,7 @@ mediaatlas-domain.workspace = true
 mediaatlas-application.workspace = true
 mediaatlas-media-scanner.workspace = true
 globset.workspace = true
+lofty = "0.22"
 image.workspace = true
 base64.workspace = true
 sqlx.workspace = true
@@ -29,6 +30,13 @@ roxmltree = "0.20"
 cap-std = "3"
 cap-fs-ext = "3"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
+open = "5.4.5"
+
+[target.'cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))'.dependencies]
+rustix = { version = "1", features = ["fs"] }
+
+[target.'cfg(windows)'.dependencies]
+atomicwrites = "0.4.4"
 
 [dev-dependencies]
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }

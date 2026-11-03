@@ -2,7 +2,7 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
 
-当前实现 **Phase 5 独立 AdultVideo 工作台与视频 MVP 候选**：保留 Movie/TV/基础 Anime 和本地扫描闭环，新增独立番号/发行商匹配、FANZA 官方 DMM API 与 Wikidata 公共目录补充适配、成人库/任务/缩略图隔离、字段合并以及有界批量 NFO/图片输出。所有输出先 Preview 再显式确认，默认 Preserve，原视频不移动/改写/删除。Provider 默认禁用，实时站点/账号授权和 Windows 原生启动仍 pending；Mock 不代表 live 可用，当前不是已通过平台验收的可发布 MVP。
+当前实现 **Phase 6 独立 Music 工作流**：Artist / ReleaseGroup / Release / Medium / Track / Recording 独立存储，MusicBrainz 与 Cover Art Archive 真实请求适配，明确区分发行版本、地区、重制/豪华版、多碟及日期精度。Music Library 只读展示刮削成果，点击本地音频可请求系统默认应用打开；独立 Music 工具区承载搜索、版本导入、文件关联及标签 Diff / 明确确认 / 原字节备份 / 写入 / 恢复。保留 P4 Movie/TV/基础 Anime 与 P5 成人隔离工作流。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
 
 在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；成人区解锁后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
 
@@ -41,7 +41,7 @@ pnpm build:desktop   # 本平台桌面可执行文件，不生成安装包、不
 
 桌面启动后在 Root 页面输入本地目录、名称和媒体类型，再进入扫描页。扫描完成先显示候选，只有勾选并再次确认的条目才进入媒体库。诊断页保留本地核心连接检查和真实版本；网页模式无法调用后端，不伪造媒体记录。
 
-默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读，输出阶段仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。海报使用本地缓存缩略图，远程图片仅由受控后端按所选候选获取。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
+默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读；视频输出仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。P6 音频标签修改和恢复各自要求 Preview 与明确确认，备份原字节保留，外部改动或来源关联变化时拒绝旧计划。海报使用本地缓存缩略图，远程图片仅由受控后端按所选候选获取。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
 
 ## 检查
 
@@ -76,7 +76,7 @@ cargo run -p mediaatlas-infrastructure --example library_roundtrip --locked
 
 该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。P2 桌面启动会打开应用自身的 SQLite，但不会自动扫描用户媒体目录。
 
-Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体在线业务按阶段追加。P2 支持目录扫描任务的后台执行、取消和遗留任务标记 Interrupted；等待确认的候选保留，运行中任务不会自动重放。P4 已提供普通视频在线适配与本地 Mock 全闭环；文件移动、音乐标签写入与 Watcher 留待后续阶段。Windows 输出使用限时源文件/目录句柄，重启或预览过期后需要重新生成预览，实际 Windows 运行仍待验收。
+Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体在线业务按阶段追加。P2 支持目录扫描任务的后台执行、取消和遗留任务标记 Interrupted；等待确认的候选保留，运行中任务不会自动重放。P4 已提供普通视频在线适配与本地 Mock 全闭环；P6 已提供独立音乐图谱与可恢复音频标签修改；文件移动与 Watcher 留待后续阶段。Windows 输出使用限时源文件/目录句柄，重启或预览过期后需要重新生成预览，实际 Windows 运行仍待验收。
 
 ## 目录与契约
 
@@ -116,3 +116,5 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 P4 契约与边界：[phase-4-contract](docs/phase-4-contract.md)、[Provider 访问条件](docs/provider-access.md)、[安全输出](docs/media-output.md)、[阶段验收](docs/acceptance/phase-4.md)。系统密钥服务真实读写、实时授权及原生/跨平台 GUI 验收不由 Mock 测试替代。
 
 P5 契约与边界：[phase-5-contract](docs/phase-5-contract.md)、[P5/视频 MVP 验收](docs/acceptance/phase-5.md)。成人通道的 Preview/Confirm/批量取消不放宽普通输出隔离，测试只操作临时合成媒体。
+
+P6 契约与验证：[Music 契约](docs/phase-6-contract.md)、[P6 验收](docs/acceptance/phase-6.md)。音乐 Library 仅供浏览与系统应用打开；刮削、标签编辑和恢复在独立工具区。旧影视/成人详情工作流的同类 UI 分离列入后续计划，不因 P6 视作已完成。

@@ -1,5 +1,7 @@
 mod adult;
+mod music;
 pub use adult::*;
+pub use music::*;
 
 use crate::state::DesktopState;
 use mediaatlas_application::library::*;

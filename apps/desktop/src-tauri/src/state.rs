@@ -1,6 +1,11 @@
 use mediaatlas_infrastructure::{browse::BrowseService, scan_service::ScanService};
 
 pub struct DesktopState {
+    pub music_artwork: mediaatlas_infrastructure::music_artwork::MusicArtworkService,
+    pub music_open: mediaatlas_infrastructure::music_open::MusicOpenService,
+    pub music: mediaatlas_infrastructure::music_library::MusicLibraryService,
+    pub music_providers: mediaatlas_infrastructure::music_providers::MusicProviderHub,
+    pub music_tags: mediaatlas_infrastructure::music_tags::MusicTagService,
     pub repository: mediaatlas_infrastructure::library::LibraryRepository,
     pub adult_cache: std::path::PathBuf,
     pub adult_privacy: mediaatlas_infrastructure::adult_privacy::AdultPrivacyService,

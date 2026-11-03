@@ -1328,6 +1328,45 @@ async fn decode_thumbnail(
     tokio::select! {biased;_=cancel.cancelled()=>Err(ProviderFailure::Cancelled),result=task=>result.map_err(|_|ProviderFailure::ParseError)?}
 }
 impl MediaOutputService {
+    /// Validate a persisted selection without performing a Provider request.
+    pub(crate) fn validated_cached_thumbnail(
+        &self,
+        cached: &CachedArtwork,
+    ) -> Result<Vec<u8>, RepositoryError> {
+        self.ensure_access()?;
+        if cached.content_hash.len() != 64
+            || !cached
+                .content_hash
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let path = Path::new(&cached.cache_path);
+        if path.parent() != Some(self.base_cache.as_path()) {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let expected_extension = match cached.mime.as_str() {
+            "image/png" => "png",
+            "image/jpeg" => "jpg",
+            "image/webp" => "webp",
+            _ => return Err(RepositoryError::InvalidInput),
+        };
+        let name = format!("{}.{}", cached.content_hash, expected_extension);
+        if path.file_name().and_then(|v| v.to_str()) != Some(name.as_str()) {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let cache = open_absolute_dir(&self.base_cache, false).map_err(io_error)?;
+        let bytes = read_optional(&cache, &name, MAX_IMAGE)?.ok_or(RepositoryError::NotFound)?;
+        if hash(&bytes) != cached.content_hash {
+            return Err(RepositoryError::Conflict);
+        }
+        let format = image::guess_format(&bytes).map_err(|_| RepositoryError::InvalidInput)?;
+        if mime(format) != Some(cached.mime.as_str()) {
+            return Err(RepositoryError::InvalidInput);
+        }
+        self.thumbnail_bytes(cached)
+    }
     pub fn thumbnail_bytes(&self, cached: &CachedArtwork) -> Result<Vec<u8>, RepositoryError> {
         self.ensure_access()?;
         let path = Path::new(&cached.thumbnail_path);

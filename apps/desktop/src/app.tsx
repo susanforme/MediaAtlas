@@ -26,6 +26,7 @@ import {
   ProvidersPage,
 } from "./features/providers/pages";
 import "./features/scraper/navigation";
+import "./features/music/translations";
 import { HomePage } from "./routes/home";
 
 const DashboardPage = lazyRouteComponent(
@@ -102,7 +103,7 @@ function Layout() {
           </span>
           <span className="font-semibold tracking-tight">MediaAtlas</span>
           <span className="hidden text-xs text-muted-foreground md:block">
-            {t("localOnly")}
+            {t("musicLocalOnly")}
           </span>
         </div>
         <select
@@ -123,6 +124,8 @@ function Layout() {
               ["/roots", "roots"],
               ["/scanner", "scanner"],
               ["/scraper", "scraper"],
+              ["/music", "music"],
+              ["/music/tools", "musicTools"],
               ["/tasks", "tasks"],
               ["/providers", "providers"],
               ["/network", "networkInspector"],
@@ -237,6 +240,46 @@ const scraperRoute = createRoute({
     "ScraperPage",
   ),
 });
+const MusicAlbumRoute = lazyRouteComponent(
+  () => import("./features/music/page"),
+  "MusicAlbumPage",
+);
+const MusicArtistRoute = lazyRouteComponent(
+  () => import("./features/music/page"),
+  "MusicArtistPage",
+);
+const musicRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music",
+  component: lazyRouteComponent(
+    () => import("./features/music/page"),
+    "MusicPage",
+  ),
+});
+const musicToolsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music/tools",
+  component: lazyRouteComponent(
+    () => import("./features/music/page"),
+    "MusicToolsPage",
+  ),
+});
+const musicAlbumRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music/album/$releaseId",
+  component: () => {
+    const { releaseId } = musicAlbumRoute.useParams();
+    return <MusicAlbumRoute key={releaseId} releaseId={releaseId} />;
+  },
+});
+const musicArtistRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/music/artist/$artistId",
+  component: () => {
+    const { artistId } = musicArtistRoute.useParams();
+    return <MusicArtistRoute key={artistId} artistId={artistId} />;
+  },
+});
 const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks",
@@ -273,6 +316,10 @@ const router = createRouter({
     scannerRoute,
     tasksRoute,
     scraperRoute,
+    musicRoute,
+    musicToolsRoute,
+    musicAlbumRoute,
+    musicArtistRoute,
     providersRoute,
     networkRoute,
     settingsRoute,

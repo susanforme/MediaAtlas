@@ -5,7 +5,7 @@
 
 ## 当前状态与执行规则
 
-- 当前阶段：Phase 5 独立成人工作流与视频 MVP 候选实现见 [acceptance/phase-5.md](acceptance/phase-5.md)，实时多站与 Windows 平台门槛明确 pending；P4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
+- 当前阶段：Phase 6 独立 Music 图谱、真实音乐 Provider、只读音乐库/系统默认应用打开与独立标签工具已实现，本地 4 项检查通过，见 [acceptance/phase-6.md](acceptance/phase-6.md)；live 与原生跨平台仍 pending。Phase 5 独立成人工作流与视频 MVP 候选实现见 [acceptance/phase-5.md](acceptance/phase-5.md)，实时多站与 Windows 平台门槛明确 pending；P4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
 - 执行顺序：P0 → P1 → P2 → P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8。
 - 每个 Phase 为独立 PR/提交单元；下表的任务 ID 用于跟踪，不要求每个 ID 单独创建 PR。
 - 本次会话用户明确授权连续执行 P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8：每阶段验收后立即使用 Codex 身份提交并推送，报告测试结果，再由 subagent 开始下一阶段；用户未要求中止时继续。不得自动创建 tag 或实际发布。
@@ -177,6 +177,8 @@ Phase 2 国际化补充（用户指定）：
 | P6-06 | 可恢复标签写入 | Preview→确认→备份→写入→记录；失败恢复；复用文件输出保护 |
 
 测试与门槛：同专辑不同 Release 不误合并，多碟 Tracklist 正确；在明确支持的格式上验证读写、备份、失败恢复；用户可预览并还原标签修改。
+
+P6 实际结果：独立实体/Release 版本、MB/CAA Mock HTTP、六格式合成音频真实读写与备份恢复、系统打开 stub、只读 Library 与独立 `/music/tools`、来源/字段保护/成人隔离均有自动化证据。最终 `pnpm check` 132 tests，完整 Rust 206 tests、fmt/clippy 通过；独立 FFmpeg PCM 六格式样本一致。平台/实时门槛保留 pending，不因授权继续回填成功。
 
 ## P7 — 文件整理与高级媒体库
 

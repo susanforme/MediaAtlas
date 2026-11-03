@@ -91,6 +91,34 @@ pub fn run() {
                 )
                 .with_auth_service(auth.clone());
                 scraper.initialize().await?;
+                let music = mediaatlas_infrastructure::music_library::MusicLibraryService::new(
+                    repository.clone(),
+                );
+                for descriptor in
+                    mediaatlas_infrastructure::music_providers::MusicProviderHub::descriptors()
+                {
+                    providers
+                        .register_adapter(std::sync::Arc::new(
+                            mediaatlas_infrastructure::providers::TypedVideoRegistration(
+                                descriptor,
+                            ),
+                        ))
+                        .await?;
+                }
+                let music_providers =
+                    mediaatlas_infrastructure::music_providers::MusicProviderHub::new(
+                        engine.clone(),
+                    )
+                    .with_provider_service(providers.clone());
+                let music_tags =
+                    mediaatlas_infrastructure::music_tags::MusicTagService::new(repository.clone());
+                music_tags.recover_interrupted().await?;
+                let music_artwork =
+                    mediaatlas_infrastructure::music_artwork::MusicArtworkService::new(
+                        repository.clone(),
+                        music_providers.clone(),
+                        output.clone(),
+                    );
                 let adult_cache = data_dir.join("artwork-cache").join("adult");
                 for descriptor in
                     mediaatlas_infrastructure::adult_providers::AdultProviderHub::descriptors()
@@ -122,6 +150,13 @@ pub fn run() {
                 scans.recover_interrupted().await?;
                 Ok::<_, mediaatlas_infrastructure::library::RepositoryError>(state::DesktopState {
                     repository: repository.clone(),
+                    music,
+                    music_artwork,
+                    music_open: mediaatlas_infrastructure::music_open::MusicOpenService::new(
+                        repository.clone(),
+                    ),
+                    music_providers,
+                    music_tags,
                     adult_cache: adult_cache.clone(),
                     adult_browse: BrowseService::new(
                         repository.clone(),
@@ -191,6 +226,26 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
+            commands::music_open_file,
+            commands::music_library,
+            commands::music_album,
+            commands::music_artist,
+            commands::music_local_files,
+            commands::music_search,
+            commands::music_release,
+            commands::music_import,
+            commands::music_cover,
+            commands::music_cover_preview,
+            commands::music_cached_cover,
+            commands::music_link_track,
+            commands::music_match,
+            commands::music_tag_read,
+            commands::music_tag_history,
+            commands::music_tag_preview,
+            commands::music_tag_execute,
+            commands::music_restore_preview,
+            commands::music_restore_execute,
+            commands::music_tag_discard,
             commands::adult_settings,
             commands::adult_save_settings,
             commands::adult_unlock,

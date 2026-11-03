@@ -199,7 +199,14 @@ impl ProviderService {
             || !descriptor.media_kinds.iter().any(|kind| {
                 matches!(
                     kind,
-                    MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime
+                    MediaKind::Movie
+                        | MediaKind::TvSeries
+                        | MediaKind::Anime
+                        | MediaKind::MusicArtist
+                        | MediaKind::MusicReleaseGroup
+                        | MediaKind::MusicRelease
+                        | MediaKind::MusicTrack
+                        | MediaKind::MusicRecording
                 )
             })
         {
@@ -443,6 +450,18 @@ impl ProviderService {
         {
             return Err(RepositoryError::InvalidInput);
         }
+        if adapter.descriptor().media_kinds.iter().any(|kind| {
+            matches!(
+                kind,
+                MediaKind::MusicArtist
+                    | MediaKind::MusicReleaseGroup
+                    | MediaKind::MusicRelease
+                    | MediaKind::MusicTrack
+                    | MediaKind::MusicRecording
+            )
+        }) {
+            return Err(RepositoryError::InvalidInput);
+        }
         validate_query(query)?;
         let config = self.config(provider_id).await?;
         if !config.enabled {
@@ -496,6 +515,61 @@ impl ProviderService {
             service.cancellations.lock().await.remove(&id);
         });
         Ok(id)
+    }
+
+    /// Typed public Music operations retain immutable settings and bounded diagnostics.
+    pub(crate) async fn begin_music_job(
+        &self,
+        job: &ProviderJob,
+        cancel: CancellationToken,
+    ) -> Result<CancellationToken, RepositoryError> {
+        if !matches!(job.provider_id.as_str(), "musicbrainz" | "coverartarchive")
+            || job.media_kind != Some(MediaKind::MusicRelease)
+            || job.media_item_id.is_some()
+            || !self.adapters.read().await.contains_key(&job.provider_id)
+        {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let now = Utc::now().timestamp_millis();
+        let mut tx = self.repo.pool().begin().await?;
+        let active:i64=sqlx::query_scalar("SELECT count(*) FROM provider_sessions p JOIN scrape_tasks t ON t.id=p.task_id WHERE t.state IN ('queued','running')").fetch_one(&mut *tx).await?;
+        if active >= 100 {
+            return Err(RepositoryError::Conflict);
+        }
+        sqlx::query("INSERT INTO scrape_tasks(id,kind,state,input_snapshot,created_at,updated_at) VALUES (?,'search_providers','running',?,?,?)")
+            .bind(job.id.to_string()).bind(encode(job)?).bind(now).bind(now).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO scrape_runs(id,task_id,provider_id,config_snapshot,state,started_at) VALUES (?,?,?,?,'running',?)")
+            .bind(job.id.to_string()).bind(job.id.to_string()).bind(&job.provider_id).bind(encode(&job.config)?).bind(now).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO provider_sessions(task_id,provider_id,job_json) VALUES (?,?,?)")
+            .bind(job.id.to_string())
+            .bind(&job.provider_id)
+            .bind(encode(job)?)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(self.attach_cancellation(job.id, cancel).await)
+    }
+    pub(crate) async fn finish_music_job(
+        &self,
+        job: &ProviderJob,
+        failure: Option<ProviderFailure>,
+    ) -> Result<(), RepositoryError> {
+        let mut records = self.engine.take_records(job.id).await;
+        if let Some(failure @ (ProviderFailure::ParseError | ProviderFailure::IdentityMismatch)) =
+            failure
+        {
+            if let Some(record) = records.last_mut() {
+                record.failure = Some(failure);
+                record.summary = Some("provider_validation_failed".into());
+            }
+        }
+        self.detach_cancellation(job.id).await;
+        self.finish(
+            job,
+            failure.map_or_else(|| Ok(vec!["music_response".into()]), Err),
+            &records,
+        )
+        .await
     }
 
     pub fn engine(&self) -> Arc<NetworkEngine> {

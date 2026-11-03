@@ -366,6 +366,19 @@ impl NetworkEngine {
             }
             records.entry(job.id).or_default();
         }
+        // MusicBrainz policy is a site minimum, independent of saved UI limits.
+        let mut bounded_job = job.clone();
+        if job.provider_id == "musicbrainz"
+            || Url::parse(&spec.url)
+                .ok()
+                .and_then(|u| u.host_str().map(str::to_owned))
+                .as_deref()
+                == Some("musicbrainz.org")
+        {
+            bounded_job.config.interval_ms = bounded_job.config.interval_ms.max(1000);
+            bounded_job.config.concurrency = 1;
+        }
+        let job = &bounded_job;
         let start = Instant::now();
         let result = tokio::select! {
             biased;
@@ -423,7 +436,13 @@ impl NetworkEngine {
         self.policy.validate_url(&url)?;
         let site = {
             let mut sites = self.sites.lock().await;
-            sites.entry(job.provider_id.clone()).or_default().clone()
+            let key =
+                if job.provider_id == "musicbrainz" || url.host_str() == Some("musicbrainz.org") {
+                    "musicbrainz.org".to_owned()
+                } else {
+                    job.provider_id.clone()
+                };
+            sites.entry(key).or_default().clone()
         };
         let image = spec.engine == EngineKind::Image;
         let attempts = if spec.method == RequestMethod::Get {
@@ -636,6 +655,7 @@ impl NetworkEngine {
         let mut url = original.clone();
         for hop in 0..=5 {
             self.policy.validate_url(&url)?;
+            super::music::validate_music_destination(&job.provider_id, &original, &url)?;
             if self.trusted_proxy {
                 self.policy
                     .resolve(
@@ -654,10 +674,20 @@ impl NetworkEngine {
                 .timeout(Duration::from_millis(job.config.timeout_ms));
             // Never forward authorization/cookies across origins, even on a safe redirect.
             if url.origin() == original.origin() {
-                request = request.headers(secret_headers(spec)?);
+                let mut headers = secret_headers(spec)?;
+                if matches!(job.provider_id.as_str(), "musicbrainz" | "coverartarchive") {
+                    headers.remove("User-Agent");
+                }
+                request = request.headers(headers);
                 for (name, secret) in spec.secret_query.iter().chain(spec.secret_queries.iter()) {
                     request = request.query(&[(name.as_str(), secret.expose())]);
                 }
+            }
+            if matches!(job.provider_id.as_str(), "musicbrainz" | "coverartarchive") {
+                request = request.header(
+                    "User-Agent",
+                    "MediaAtlas/0.1.0 (https://github.com/susanforme/MediaAtlas)",
+                );
             }
             if let Some(body) = &spec.json_body {
                 request = request.json(body);
@@ -665,7 +695,10 @@ impl NetworkEngine {
             let mut response = tokio::select! {_=cancel.cancelled()=>return Err(ProviderFailure::Cancelled.into()),r=request.send()=>r.map_err(|e|classify_transport(&e))?};
             let status = response.status().as_u16();
             if response.status().is_redirection() {
-                if hop == 5 || spec.method != RequestMethod::Get {
+                // MB endpoints are canonical. Refuse redirects so a redirect cannot
+                // cause an extra request inside its mandatory one-second site slot.
+                if hop == 5 || spec.method != RequestMethod::Get || job.provider_id == "musicbrainz"
+                {
                     return Err(http_failure(ProviderFailure::UnsafeTarget, status));
                 }
                 let next = response

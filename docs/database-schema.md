@@ -66,3 +66,10 @@ P1 不实现所有 Person/Organization/Credit 的业务 Repository，也不预�
 ## P4 appended storage
 
 Migrations `0006_media_output.sql`, `0007_scraper_workflow.sql`, `0008_provider_auth.sql` append output plan snapshots; immutable typed search/job/detail/merge snapshots and confirmed Movie/TV/Anime source structures; authentication method/storage/opaque revision references and pending retirement references. No credential value is stored in SQLite. Output operations reuse `file_operations`; scraping reuses `scrape_tasks`, `scrape_runs`, and redacted request history without altering scan sessions. Provider confirmation checks the current canonical values, locale-specific metadata before-images, user/locked flags, type and adult isolation in one transaction. Source output checks current Root/file association and filesystem identity separately before creating sidecars.
+
+
+## P6 music persistence
+
+Append-only migrations `0013_music.sql` and `0014_music_tags.sql` add real independent Music entities, Medium/Track/Recording relationships, ordered credits/aliases, typed identifiers and one-active-Track-per-local-file links. Releases retain source, locale, partial date text and disambiguation. `metadata_values` records per-entity field provenance and protection. Import acquires a writer reservation and remains atomic; concrete Release MBID uniqueness prevents accidental cross-edition ownership.
+
+`music_tag_operations` stores immutable plan JSON, original bytes, intended tagged bytes, operation kind/original restoration relation and persistent result state. A trigger prevents changing the snapshot/payload. Ordinary authority is rechecked inside the mutation transaction; success updates the scanned size/mtime so subsequent native Open consumes the new confirmed audio. Recovery records interruption only and requires an explicit new Preview. Full byte snapshots intentionally impose a 256 MiB single-source limit; no automatic backup deletion or destructive replay occurs. See [P6 acceptance](acceptance/phase-6.md).

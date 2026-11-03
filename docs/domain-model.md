@@ -124,3 +124,8 @@ TaskRepository 递归拒绝常见凭据键，且要求快照为 JSON 对象；�
 ## Phase 5 adult workflow
 
 `adult_scraper.rs` contains independent AdultQuery/Candidate/Detail/Person/Search/Merge contracts. CatalogNumber normalization preserves namespace, raw spelling, aliases, primary designation, zero padding and optional CD/Part. Candidate conflicts require review; independent catalog/issuer rules never reuse Movie matching scores. DMM maker IDs and Wikidata publisher/catalog entity IDs remain part of issuer identity. People retain provider-scoped stable IDs and explicit aliases; display-name equality never merges people. Confirmed adult metadata uses its own source table and adult-only root association, with current isolation/field/source snapshots rechecked transactionally. See [P5 contract](phase-5-contract.md).
+
+
+### P6 operational music graph
+
+`MusicReleaseGraph` composes the independent P1 entities with provenance/locale, actual per-field `MetadataValue` sources/protection, concrete track→local-file links and preserved raw MusicBrainz partial dates (`YYYY`, `YYYY-MM`, `YYYY-MM-DD`). Release disambiguation remains separate from title. Ordered Artist credits and aliases persist; a Recording can appear on multiple concrete Tracks, but the Track position/medium/release remains distinct. One file has at most one active linked Track, while a Track may have multiple encoded files. Explicit edition import is by backend-fetched Release MBID; neither group/title equality nor match score authorizes merging editions or writing tags. Operational contract: [P6](phase-6-contract.md).

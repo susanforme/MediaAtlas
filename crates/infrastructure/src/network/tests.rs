@@ -1113,3 +1113,39 @@ async fn multiple_query_secret_slots_validate_deduplicate_and_reject_reflected_r
     assert!(!records.contains("synthetic-api-secret"));
     assert!(!records.contains("synthetic-affiliate-secret"));
 }
+
+#[tokio::test]
+async fn musicbrainz_site_minimum_and_project_user_agent_override_raw_generic_limits() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let captured = observed.clone();
+    let fixture = server(move |request| {
+        captured.lock().unwrap().push((Instant::now(), request));
+        async { response(200, "application/json", "{}", "") }
+    })
+    .await;
+    let engine = NetworkEngine::for_loopback(4);
+    let first = job("musicbrainz");
+    let second = job("musicbrainz");
+    assert_eq!(first.config.interval_ms, 0);
+    let mut request = spec(&format!("{}/ws/2/release", fixture.url));
+    request.user_agent = Some("unacceptable-generic-agent".into());
+    let cancel = CancellationToken::new();
+    let (a, b) = tokio::join!(
+        engine.execute(&first, request.clone(), &cancel),
+        engine.execute(&second, request, &cancel)
+    );
+    assert!(a.is_ok());
+    assert!(b.is_ok());
+    let observed = observed.lock().unwrap();
+    assert_eq!(observed.len(), 2);
+    assert!(observed[1].0.duration_since(observed[0].0) >= Duration::from_millis(950));
+    for (_, request) in observed.iter() {
+        let agents = request
+            .lines()
+            .filter(|line| line.to_ascii_lowercase().starts_with("user-agent:"))
+            .collect::<Vec<_>>();
+        assert_eq!(agents.len(), 1);
+        assert!(agents[0].contains("https://github.com/susanforme/MediaAtlas"));
+        assert!(!agents[0].contains("unacceptable-generic-agent"));
+    }
+}
