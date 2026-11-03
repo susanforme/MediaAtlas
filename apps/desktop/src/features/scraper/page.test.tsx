@@ -161,14 +161,11 @@ async function searchAndChoose() {
     target: { value: "media-1" },
   });
   await waitFor(() =>
-    expect(
-      screen.getByLabelText("Title or exact Wikipedia article title"),
-    ).toHaveValue("Local film"),
+    expect(screen.getByLabelText("Title")).toHaveValue("Local film"),
   );
-  fireEvent.change(
-    screen.getByLabelText("Title or exact Wikipedia article title"),
-    { target: { value: "Synthetic film" } },
-  );
+  fireEvent.change(screen.getByLabelText("Title"), {
+    target: { value: "Synthetic film" },
+  });
   fireEvent.change(screen.getByLabelText("Release year (optional)"), {
     target: { value: "2023" },
   });
@@ -231,7 +228,7 @@ it("loads only an explicitly requested validated thumbnail without changing artw
 });
 it("does not search automatically and validates input before invoking providers", async () => {
   show();
-  await screen.findByText("tmdb");
+  await screen.findByText("TMDB");
   expect(scraperApi.search).not.toHaveBeenCalled();
   expect(
     screen.getByRole("button", { name: "Search providers" }),
@@ -242,9 +239,9 @@ it("does not search automatically and validates input before invoking providers"
 it("localizes the workflow in Chinese and snapshots the query language", async () => {
   await i18n.changeLanguage("zh-CN");
   show();
-  await screen.findByText("tmdb");
+  await screen.findByText("TMDB");
   expect(screen.getByText("刮削工作台")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("标题或准确的维基百科条目名"), {
+  fireEvent.change(screen.getByLabelText("影片名称"), {
     target: { value: "动画标题" },
   });
   fireEvent.click(screen.getByRole("button", { name: "检索来源" }));
@@ -330,14 +327,13 @@ it("renders TV seasons with their explicit aired numbering", async () => {
     },
   });
   show();
-  await screen.findByText("tmdb");
+  await screen.findByText("TMDB");
   fireEvent.change(screen.getByLabelText("Media type"), {
     target: { value: "tv" },
   });
-  fireEvent.change(
-    screen.getByLabelText("Title or exact Wikipedia article title"),
-    { target: { value: "Synthetic series" } },
-  );
+  fireEvent.change(screen.getByLabelText("Title"), {
+    target: { value: "Synthetic series" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
   await screen.findByRole("button", { name: "Choose this candidate" });
   fireEvent.click(
@@ -378,14 +374,13 @@ it("uses the independent Anime query and displays aliases", async () => {
     },
   });
   show();
-  await screen.findByText(/anilist/);
+  await screen.findByText(/AniList/);
   fireEvent.change(screen.getByLabelText("Media type"), {
     target: { value: "anime" },
   });
-  fireEvent.change(
-    screen.getByLabelText("Title or exact Wikipedia article title"),
-    { target: { value: "Synthetic anime" } },
-  );
+  fireEvent.change(screen.getByLabelText("Title"), {
+    target: { value: "Synthetic anime" },
+  });
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
   await screen.findByRole("button", { name: "Choose this candidate" });
   expect(scraperApi.search).toHaveBeenCalledWith(
@@ -452,9 +447,7 @@ it("discards an abandoned output preview on component unmount without executing 
 it("prefills and locks an explicit local target without issuing a provider search", async () => {
   show("media-1");
   await waitFor(() =>
-    expect(
-      screen.getByLabelText("Title or exact Wikipedia article title"),
-    ).toHaveValue("Local film"),
+    expect(screen.getByLabelText("Title")).toHaveValue("Local film"),
   );
   expect(screen.getByLabelText("Release year (optional)")).toHaveValue(2024);
   expect(screen.getByLabelText("Media type")).toBeDisabled();
@@ -572,7 +565,7 @@ it("requires configured credentials and offers manual setup without enabling pro
     status: "not_configured",
   });
   show("media-1");
-  await screen.findByText("tmdb (Credential required)");
+  await screen.findByText("TMDB (Credential required)");
   expect(
     screen.getByRole("button", { name: "Search providers" }),
   ).toBeDisabled();
@@ -589,9 +582,7 @@ it("rejects adult and unsupported local targets instead of defaulting to movie",
   show("media-1");
   await screen.findByRole("alert");
   expect(screen.queryByText("PRIVATE TITLE")).not.toBeInTheDocument();
-  expect(
-    screen.getByLabelText("Title or exact Wikipedia article title"),
-  ).toHaveValue("");
+  expect(screen.getByLabelText("Title")).toHaveValue("");
   expect(
     screen.getByRole("button", { name: "Search providers" }),
   ).toBeDisabled();
@@ -644,18 +635,26 @@ it("keeps disabled sources disabled and allows an explicitly selected public sou
   snapshot.providers.push(wiki);
   vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
   show();
-  await screen.findByText("tmdb (Disabled)");
+  await screen.findByText("TMDB (Disabled)");
   expect(
-    screen.getByRole("checkbox", { name: "tmdb (Disabled)" }),
+    screen.getByRole("checkbox", { name: "TMDB (Disabled)" }),
   ).toBeDisabled();
-  fireEvent.change(
-    screen.getByLabelText("Title or exact Wikipedia article title"),
-    { target: { value: "Synthetic article" } },
-  );
+  fireEvent.change(screen.getByLabelText("Title"), {
+    target: { value: "Synthetic article" },
+  });
   expect(
     screen.getByRole("button", { name: "Search providers" }),
   ).toBeDisabled();
-  fireEvent.click(screen.getByRole("checkbox", { name: "wikipedia.html" }));
+  expect(
+    screen.queryByText("Wikipedia requires the exact article title."),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("checkbox", { name: "Wikipedia" }));
+  expect(screen.getByLabelText("Title")).toHaveAccessibleDescription(
+    "Wikipedia requires the exact article title.",
+  );
+  expect(
+    screen.getByText("Wikipedia requires the exact article title."),
+  ).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
   await waitFor(() =>
     expect(scraperApi.search).toHaveBeenCalledWith(

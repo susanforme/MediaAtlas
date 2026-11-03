@@ -17,7 +17,12 @@ import {
   useFormat,
 } from "../library/shared";
 import "./translations";
-import { providerChoices, scrapeKind, value } from "./scraper-model";
+import {
+  providerChoices,
+  providerNames,
+  scrapeKind,
+  value,
+} from "./scraper-model";
 import { VideoSourceDetails } from "./source-detail";
 import { useScraper } from "./use-scraper";
 
@@ -201,6 +206,11 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
             <span>{t("scraperTitle")}</span>
             <Input
               value={title}
+              aria-describedby={
+                selectedProviders.includes("wikipedia.html")
+                  ? "scraper-wikipedia-title-hint"
+                  : undefined
+              }
               maxLength={256}
               onChange={(e) => setTitle(e.target.value)}
               disabled={busy}
@@ -218,6 +228,14 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
             />
           </Label>
         </div>
+        {selectedProviders.includes("wikipedia.html") && (
+          <p
+            id="scraper-wikipedia-title-hint"
+            className="mt-3 text-sm text-muted-foreground"
+          >
+            {t("scraperWikipediaTitleHint")}
+          </p>
+        )}
         <Details className="mt-4">
           <DetailsSummary>{t("scraperAdvanced")}</DetailsSummary>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -258,7 +276,7 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
                   }
                 />
                 <span>
-                  {id}{" "}
+                  {providerNames[id]}{" "}
                   {providerState(id) !== "ready" &&
                     `(${t(`scraperProviderState_${providerState(id)}`)})`}
                 </span>
