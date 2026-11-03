@@ -81,3 +81,21 @@ flowchart TD
 P2 明确确认扫描候选只授权建立工具索引；它不代表裸文件名推断已经完成刮削。只读 Library 使用独立可信来源规则：明确确认的类型专属在线 metadata，或已确认导入的真实本地 NFO/音频标签，并要求当前可播放本地文件关联。历史本地 NFO 按实际安全读取与合法文档回填；不能仅凭 `provider_id=local` 推断完成。远端音乐发行图与未完成条目留在工具区，不冒充本地资源。Library 卡片主操作请求系统关联应用，详情是独立入口，多版本/Part 由用户选择。编辑、搜索/导入、标签、导出、组织、恢复和维护均在独立工具区进行。
 
 Watcher 配置按 Root 显式开启，重启恢复配置后重新建立进程句柄；成熟 `notify` 事件经过有界队列、去抖、合并、溢出补扫及当前 Root 权限验证，复用 P2 同一候选预览流程。它不会自动确认候选、发起网络刮削或移动文件。锁定成人与 Mixed Root 不自动监控。应用隔离/备份目录排除不改变用户对普通隐藏文件、Git 文件或自定义排除规则的语义。
+
+## 2026-11-03 社区实践与逐项核对
+
+本轮在当前 main 增量实施，参考资料是实际开源实现与文档：
+
+| 来源 | 核对到的行为 | MediaAtlas 的采用方式 |
+| --- | --- | --- |
+| [MediaElch 电影文档](https://github.com/mediaelch/mediaelch-doc/blob/master/docs/source/movie/index.rst)及[多影片刮削实现](https://github.com/Komet/MediaElch/blob/master/src/ui/movies/MovieMultiScrapeDialog.cpp) | 多选影片、队列、取消与字段选择 | 普通工具区多选后逐项核对，最多 32 项，不自动选首候选或写盘 |
+| [tinyMediaManager README](https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/README.md)及[缺资料筛选](https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/src/main/java/org/tinymediamanager/ui/movies/filters/MovieMissingMetadataFilter.java) | 按实际媒体状态筛选，搜索和排序 | 目录、类型、健康、检索、排序进入真实后端查询；24 项分页，不能只过滤当前页 |
+| [tinyMediaManager 刮削任务](https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/src/main/java/org/tinymediamanager/core/movie/tasks/MovieScrapeTask.java) | 逐项选择器、取消和覆盖策略参数 | 上一项/跳过/下一项及“返回媒体清单”；仅补空缺、全不选、全选未保护字段，继续保护手改/锁定值 |
+
+查阅时 tinyMediaManager devel 的 HEAD 为 `e813864038d8f2bbed1428a714b81e3b317f5ac1`。只采用交互和状态管理思路，没有复制第三方实现代码、品牌或业务导航。
+
+当前实现保留跨页有序选择，单项查看不清空批选；筛选或排序变化复位失效游标与选择。队列仅接受真实普通工具媒体 ID，严格校验参数并保留配置往返的队列顺序。第 i/n 项是导航位置，不是已处理进度；下一项只在当前项有真实确认结果时显示，否则提供跳过。确认或文件执行期间禁用队列切换。
+
+所有选择和预设只是草稿；更改字段预设使未执行的合并/输出预览失效，回收输出租约。0 与 false 是已有值；锁定和手改字段即使为空也不自动选择。只有现有明确确认动作可以更新元数据或生成旁车，普通媒体库继续只读，成人业务不使用普通队列。
+
+发布方面，本轮用户明确授权对 `v0.1.0-beta.2` 进行两次移动，覆盖此前“不移动 tag”的任务约束。先移动到上一轮成果 `23f61bd`，本轮检查和证据提交后再移动到新 main。重复 tag 的 CI 重新核对引用、完整产物和哈希；已有 Release 以草稿重建完整资产集合，旧任务不能按过期 tag 发布。移动 tag 本身不代表新安装包已经构建完成。

@@ -97,8 +97,15 @@ const toolsRoute = createRoute({
   path: "/tools",
   validateSearch: validateToolsSearch,
   component: () => {
-    const { media } = toolsRoute.useSearch();
-    return <MediaToolsPage key={media ?? "local"} mediaId={media} />;
+    const search = toolsRoute.useSearch();
+    const navigate = toolsRoute.useNavigate();
+    return (
+      <MediaToolsPage
+        mediaId={search.media}
+        search={search}
+        onSearch={(value, replace) => void navigate({ search: value, replace })}
+      />
+    );
   },
 });
 const adultDetailRoute = createRoute({
@@ -158,8 +165,18 @@ const scraperRoute = createRoute({
   path: "/scraper",
   validateSearch: validateScraperSearch,
   component: () => {
-    const { media } = scraperRoute.useSearch();
-    return <ScraperPage key={media ?? "search"} mediaId={media} />;
+    const { media, queue } = scraperRoute.useSearch();
+    const navigate = scraperRoute.useNavigate();
+    return (
+      <ScraperPage
+        key={media ?? "search"}
+        mediaId={media}
+        queue={queue}
+        onQueueNavigate={(nextMedia) =>
+          void navigate({ search: { media: nextMedia, queue } })
+        }
+      />
+    );
   },
 });
 const MusicAlbumRoute = lazyRouteComponent(
@@ -217,6 +234,7 @@ const settingsRoute = createRoute({
       <SettingsPage
         returnToScraper={search.from === "scraper"}
         returnMediaId={search.media}
+        returnQueue={search.queue}
       />
     );
   },
@@ -239,6 +257,7 @@ const providersRoute = createRoute({
       <ProvidersPage
         returnToScraper={search.from === "scraper"}
         returnMediaId={search.media}
+        returnQueue={search.queue}
       />
     );
   },
