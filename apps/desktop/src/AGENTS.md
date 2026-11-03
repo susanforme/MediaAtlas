@@ -1,0 +1,66 @@
+# 前端开发规范
+
+适用于 `apps/desktop/src` 及其子目录，并遵循根目录 `AGENTS.md`。以下规则用于新增、修改代码；既有结构按触及范围渐进整理，不要求全量迁移。
+
+## 基本原则
+
+- Avoid unnecessary secondary labels and descriptions. Let the layout do the explaining. 具体文案取舍遵循根规则，保留必要标签、无障碍语义、状态与决策信息。
+- 按业务职责保持单一责任、清晰接口和依赖边界；消除稳定的重复逻辑（SOLID / DRY），不为统一外形制造万能组件。
+- 保持最小且完整的变更；功能修改与无关的搬文件、重命名、设计系统迁移分开。
+
+## 目录与路由
+
+- 业务页面入口放在 `features/<领域>/`，沿用 `page.tsx`、`pages.tsx` 或明确业务命名的页面文件；区分页面入口与私有子组件。
+- `app.tsx` 负责应用组合和现有 TanStack Router 路由树。路由适配只读取 params/search、调用导航、传递页面参数并渲染；业务查询、mutation 和复杂状态归 feature。
+- 若使用 `routes/` 文件承载适配，也保持薄适配。沿用代码式路由，不引入文件路由生成器；不把参考模板的 `-feature`、`-components` 当成本仓库的特殊路由约定。
+- 私有组件可与页面相邻，数量增长时放 feature 的 `components/`。只创建实际需要的文件，不预建空目录或为了目录层级增加转发文件。
+
+## 组件与状态抽象
+
+- 按可命名的业务职责、独立变化原因、状态或副作用边界拆分，例如 Provider 认证表单、媒体版本选择器、备份恢复预览。
+- 使用次数不是唯一标准：只用一次但职责完整、状态复杂或能独立验证的部分也可抽取；不按行数、纯布局名称或机械 JSX 包裹拆组件。
+- 页面负责组合业务流程。复杂的查询/mutation 协作、预览确认、轮询、取消与状态重置放 feature hook，例如 `use-tag-editor.ts`；小而独立的交互状态留在所属组件。
+- 一个状态由一个明确的所有者管理，避免页面和子组件复制有效状态或重复副作用。拆分时保留 query key、取消、隐私清理和过期响应保护。
+- 私有子组件不要成为跨 feature 的隐式公共 API；为同目录测试导出组件不等于承诺跨域复用。
+
+## 纯逻辑与共享
+
+- formatter、parser、mapper、model、sort/filter 放 feature 内有业务名称的纯逻辑文件；接收明确输入，返回结果，不依赖 React 生命周期或隐式全局状态。
+- 纯逻辑文件不直接导航、发请求、操作 DOM 或注册 i18n 资源；语言、格式参数等显式传入。
+- 只有边界稳定且适用于多个领域的能力才提升到公共层。业务规则先留 feature；通用视觉原语放 `components/ui/`，传输契约放 `api/`，不要混入页面业务。
+
+## 表格、筛选与分页
+
+- 表格、列表、媒体墙及对话框内表格的筛选统一由 feature 的筛选表单或字段声明管理；页面和 toolbar 不重复拼装另一套 Input/Select/日期/pill/按钮筛选。
+- 沿用现有 query/search 模型，如 `LibrarySearch`、`validateLibrarySearch`。筛选、重置、排序、请求参数、query key、分页及 URL 使用同一有效查询状态；允许提交前草稿，但不得出现互相矛盾的查询源。
+- 筛选或排序变化时重置失效的 cursor/page；重置按统一默认值处理并保持必要上下文。服务端分页仍在服务端筛选，不能只过滤当前页。
+- 需要集中筛选入口时先在 feature 建立，再评估稳定的跨域共享；不假设已有 ProTable 或为此引入新表格框架。
+
+## 随机 UUID
+
+- 需要客户端随机 UUID 时统一使用 `createRandomUuid`。当前没有公共入口，首次需要时先建立合适的公共函数，再让调用方复用；不要在 feature 内直接调用 `crypto.randomUUID`、`getRandomValues` 或拼装随机字节。
+- 公共实现优先原生 UUID，处理 HTTP 非 secure context 下的能力差异；必要时集中使用可靠的兼容方案或明确返回能力错误，不静默生成伪安全随机值。
+- 优先使用后端返回的实体 ID；DOM 可访问关联使用 React `useId`，不要在每次渲染时生成随机列表 key。
+
+## 页面返回
+
+- 页面返回统一使用 `useBackWithFallback(fallbackUrl)`；当前没有该公共 hook，首次需要时实现后复用，`fallbackUrl` 必须明确且为站内地址。
+- 仅在能确认存在由本应用 Router 管理的应用内历史时返回上一页，否则通过 Router push 到兜底地址。动态地址及 search 使用 Router 的 location 构建能力保留参数。
+- 不直接调用 `window.history.back`、`history.go(-1)` 或 `router.history.back`，不使用 `history.length` 猜测来源。
+- 返回与兜底导航遵守页面的未保存变更拦截；用户取消离开后不能再用兜底 push 绕过。当前没有统一 dirty 拦截入口，新增相关流程时集中实现，不假设它已存在。
+- 分页、日历翻页、回放回退、关闭对话框不是页面返回，不套用该 hook。
+
+## 基础控件、主题与样式
+
+- 按钮复用 `components/ui/button.tsx`。输入、选择、复选等沿用当前受控表单和语义 HTML；需要通用封装时先建立本仓库的基础控件，不假设已有 shadcn、SelectField 或 RHF Controller。
+- 保留 label、键盘、焦点、disabled、错误及校验语义。原生 checkbox 使用其 checked/onChange 契约；若新增自定义控件，按真实组件契约处理 onCheckedChange 等事件。
+- 确认操作复用已有的预览/确认流程；首次需要公共确认时提供可 await 的结果入口，确认成功后才执行。不要用 `window.confirm`、`alert` 或同步假确认替代应用内流程。通过系统关联应用打开媒体的既有能力照常保留。
+- 使用现有主题 token 和基础控件统一状态、颜色、间距。当前未建立完整明暗主题；新增控件须考虑明暗模式，不把仅浅色硬编码推广为新约定，不凭空引用 `design.md` 或外部 UI 包。
+- 项目已有 Tailwind 4 和全局业务 CSS。新增业务样式优先归所属 feature/组件，以局部 utility、响应式/状态变体或按需局部样式表达；不要继续堆叠全局业务 selector、页面专属 media query。
+- `styles.css` 的新增内容限主题、reset 和真正共享的基础样式。既有业务 class 随相关修改逐步局部化，不为遵守规范重写全部旧样式，也不机械禁止已有语义 HTML 控件。
+
+## 文案与验证
+
+- 界面文案使用现有 i18next 体系：公共词条在 `i18n/`，feature 词条沿用其 translations 模块，维护 `zh-CN` / `en-US`；不硬编码业务文案或把说明搬进 tooltip。
+- 功能、状态和交互变更优先调整同目录的 Vitest / Testing Library 测试，验证用户可观察的行为、错误及关键边界；纯函数直接验证输入输出，不添加镜像实现的测试。
+- 不为纯文档、无行为变化的机械拆分新增运行时测试；不得通过跳过或弱化关键断言完成重构。按影响选择现有 typecheck/test/build，前端完整检查为仓库根目录的 `pnpm check`；纯文档修改检查 diff 即可。
