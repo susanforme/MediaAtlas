@@ -1025,3 +1025,91 @@ async fn secret_query_is_sent_only_to_origin_and_cross_origin_reflection_is_reje
         .unwrap()
         .contains("synthetic-query-secret"));
 }
+
+#[tokio::test]
+async fn multiple_query_secret_slots_validate_deduplicate_and_reject_reflected_redirects() {
+    let target_calls = Arc::new(AtomicUsize::new(0));
+    let seen = target_calls.clone();
+    let target = server(move |_| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        async { response(200, "application/json", "{}", "") }
+    })
+    .await;
+    let target_url = target.url.clone();
+    let captured = Arc::new(Mutex::new(vec![]));
+    let seen = captured.clone();
+    let origin = server(move |request| {
+        seen.lock().unwrap().push(request.clone());
+        let target_url = target_url.clone();
+        async move {
+            if request.starts_with("GET /cross?") {
+                response(
+                    302,
+                    "application/json",
+                    "{}",
+                    &format!("Location: {target_url}/synthetic-affiliate-secret\r\n"),
+                )
+            } else if request.starts_with("GET /same?") {
+                response(
+                    302,
+                    "application/json",
+                    "{}",
+                    "Location: /sink?api_id=synthetic-api-secret\r\n",
+                )
+            } else {
+                response(200, "application/json", "{}", "")
+            }
+        }
+    })
+    .await;
+    let engine = NetworkEngine::for_loopback(2);
+    let job = job("multi-query-secret");
+    let slots = || {
+        vec![
+            (
+                "api_id".into(),
+                SecretString::new("synthetic-api-secret".into()),
+            ),
+            (
+                "affiliate_id".into(),
+                SecretString::new("synthetic-affiliate-secret".into()),
+            ),
+        ]
+    };
+    let mut request = spec(&format!("{}/data", origin.url));
+    request.secret_queries = slots();
+    engine
+        .execute(&job, request, &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(captured.lock().unwrap()[0].starts_with(
+        "GET /data?api_id=synthetic-api-secret&affiliate_id=synthetic-affiliate-secret "
+    ));
+    for path in ["cross", "same"] {
+        let mut request = spec(&format!("{}/{path}", origin.url));
+        request.secret_queries = slots();
+        assert_eq!(
+            failure(&engine, &job, request).await,
+            ProviderFailure::UnsafeTarget
+        );
+    }
+    assert_eq!(target_calls.load(Ordering::SeqCst), 0);
+    let before = captured.lock().unwrap().len();
+    let mut duplicate = spec(&format!("{}/data", origin.url));
+    duplicate.secret_queries = slots();
+    duplicate.secret_query = Some(("api_id".into(), SecretString::new("other-secret".into())));
+    assert_eq!(
+        failure(&engine, &job, duplicate).await,
+        ProviderFailure::InvalidConfiguration
+    );
+    let mut prefilled = spec(&format!("{}/data?affiliate_id=wrong", origin.url));
+    prefilled.secret_queries = slots();
+    assert_eq!(
+        failure(&engine, &job, prefilled).await,
+        ProviderFailure::InvalidConfiguration
+    );
+    assert_eq!(captured.lock().unwrap().len(), before);
+    let records = serde_json::to_string(&engine.records().await).unwrap();
+    assert!(!records.contains("synthetic-api-secret"));
+    assert!(!records.contains("synthetic-affiliate-secret"));
+}

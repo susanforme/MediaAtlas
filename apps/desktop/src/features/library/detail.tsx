@@ -4,7 +4,6 @@ import { ImageOff, LockKeyhole } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { libraryApi } from "../../api/library";
-import { usePrivacy } from "./context";
 import {
   Empty,
   ErrorNotice,
@@ -22,11 +21,10 @@ const LibraryVideoSourceDetail = lazy(() =>
 
 export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const { t } = useTranslation();
-  const { includeAdult } = usePrivacy();
   const { number, date } = useFormat();
   const detail = useQuery({
-    queryKey: ["detail", mediaId, includeAdult],
-    queryFn: () => libraryApi.detail(mediaId, includeAdult),
+    queryKey: ["detail", mediaId, false],
+    queryFn: () => libraryApi.detail(mediaId, false),
   });
   if (detail.isPending) return <Loading />;
   if (detail.isError)
@@ -34,14 +32,11 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
       <ErrorNotice error={detail.error} retry={() => void detail.refetch()} />
     );
   const data = detail.data;
-  if (data.media.kind === "adult_video" && !includeAdult)
+  if (data.media.kind === "adult_video")
     return <Empty title={t("privacyHidden")} />;
   return (
     <>
-      <Link
-        to={data.media.kind === "adult_video" ? "/adult" : "/library"}
-        className="mb-5 inline-block text-sm text-primary"
-      >
+      <Link to="/library" className="mb-5 inline-block text-sm text-primary">
         ← {t("backToLibrary")}
       </Link>
       <PageHeading

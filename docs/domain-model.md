@@ -119,3 +119,8 @@ P1 对这些结构做序列化往返和独立类型测试；不为未实现功�
 三个 JSON 快照创建后不可通过状态更新接口修改；只允许不含原始密钥/Cookie/Authorization 的配置或凭据引用。P1 不启动调度器，不执行任何文件计划，不在启动时自动重放移动/覆盖任务。状态和记录只构成后续 P2/P4/P7 的持久化基础。
 
 TaskRepository 递归拒绝常见凭据键，且要求快照为 JSON 对象；调用方仍须主动脱敏并使用凭据引用，不能声称该校验能识别任意文本中隐藏的秘密。P1 没有日志记录这些输入。
+
+
+## Phase 5 adult workflow
+
+`adult_scraper.rs` contains independent AdultQuery/Candidate/Detail/Person/Search/Merge contracts. CatalogNumber normalization preserves namespace, raw spelling, aliases, primary designation, zero padding and optional CD/Part. Candidate conflicts require review; independent catalog/issuer rules never reuse Movie matching scores. DMM maker IDs and Wikidata publisher/catalog entity IDs remain part of issuer identity. People retain provider-scoped stable IDs and explicit aliases; display-name equality never merges people. Confirmed adult metadata uses its own source table and adult-only root association, with current isolation/field/source snapshots rechecked transactionally. See [P5 contract](phase-5-contract.md).

@@ -13,8 +13,7 @@ export const providerTranslations = {
     providerRun: "运行离线 Fixture",
     providerOpenScraper: "在刮削工作台搜索",
     providerOpenAuthSettings: "在设置保存认证",
-    providerAuthSettingsHint:
-      "认证由设置页面管理，此处只读显示凭据引用，请勿填写密钥。",
+    providerAuthSettingsHint: "请前往设置页面管理认证，此处只编辑请求限制。",
     providerCapability_details: "详情",
     providerCapability_images: "图片",
     providerCapability_external_ids: "外部标识",
@@ -28,7 +27,7 @@ export const providerTranslations = {
     providerMaxResponse: "响应上限（字节）",
     providerRetries: "最大重试次数",
     providerImageConcurrency: "图片并发上限",
-    providerCredentialRef: "凭据引用（非密钥）",
+    providerAuthOpenSettings: "打开认证设置",
     providerSaveConfig: "保存配置",
     providerConfigSaved: "配置已保存，新任务使用新快照。",
     providerConfigInvalid:
@@ -115,7 +114,7 @@ export const providerTranslations = {
     providerOpenScraper: "Search in Scraper",
     providerOpenAuthSettings: "Save authentication in Settings",
     providerAuthSettingsHint:
-      "Manage authentication in Settings. This credential reference is read-only; do not enter a secret here.",
+      "Manage authentication in Settings. Only request limits are edited here.",
     providerCapability_details: "Details",
     providerCapability_images: "Images",
     providerCapability_external_ids: "External IDs",
@@ -129,7 +128,7 @@ export const providerTranslations = {
     providerMaxResponse: "Response limit (bytes)",
     providerRetries: "Maximum retries",
     providerImageConcurrency: "Concurrent image requests",
-    providerCredentialRef: "Credential reference (not a secret)",
+    providerAuthOpenSettings: "Open authentication settings",
     providerSaveConfig: "Save configuration",
     providerConfigSaved: "Configuration saved. New tasks use the new snapshot.",
     providerConfigInvalid:

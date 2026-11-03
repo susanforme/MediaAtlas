@@ -486,3 +486,11 @@ export const libraryApi = {
     ),
   cancel: (taskId: string) => request("scan_cancel", { task_id: taskId }, task),
 };
+
+// Reused by the separate adult IPC channel; ordinary visibility behavior is unchanged.
+export {
+  card as mediaCardGuard,
+  detail as mediaDetailGuard,
+  root as rootViewGuard,
+  task as scanTaskGuard,
+};

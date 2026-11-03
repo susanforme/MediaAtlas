@@ -17,15 +17,25 @@ impl BrowseService {
                 .bind(media.id.to_string())
                 .fetch_one(self.repo.pool())
                 .await?;
+        if !self.render_posters {
+            return Ok(None);
+        }
+        let adult = media.kind == MediaKind::AdultVideo || isolated;
+        if adult {
+            let Some(access) = &self.adult_access else {
+                return Ok(None);
+            };
+            access.ensure()?;
+        }
         let artworks = self.repo.list_artworks(media.id).await?;
         for art in artworks {
-            if media.kind != MediaKind::AdultVideo && !isolated {
+            {
                 if let (Some(cache), Some(hash), Some(path)) = (
                     &self.approved_artwork_cache,
                     &art.content_hash,
                     &art.cache_path,
                 ) {
-                    if art.kind == ArtworkKind::Poster
+                    if matches!(art.kind, ArtworkKind::Poster | ArtworkKind::Cover)
                         && hash.len() == 64
                         && hash.bytes().all(|b| b.is_ascii_hexdigit())
                         && Path::new(path).parent() == Some(cache.as_path())
@@ -41,11 +51,24 @@ impl BrowseService {
                             height: art.height.unwrap_or(0),
                             mime: String::new(),
                         };
-                        let service = crate::media_output::MediaOutputService::new(
-                            self.repo.clone(),
-                            cache.clone(),
-                        );
+                        let service = if adult {
+                            crate::media_output::MediaOutputService::new_adult(
+                                self.repo.clone(),
+                                cache.clone(),
+                                self.adult_access
+                                    .clone()
+                                    .ok_or(RepositoryError::ProtectedMetadata)?,
+                            )
+                        } else {
+                            crate::media_output::MediaOutputService::new(
+                                self.repo.clone(),
+                                cache.clone(),
+                            )
+                        };
                         if let Ok(bytes) = service.thumbnail_bytes(&cached) {
+                            if let Some(access) = &self.adult_access {
+                                access.ensure()?;
+                            }
                             return Ok(Some(format!(
                                 "data:image/png;base64,{}",
                                 STANDARD.encode(bytes)
@@ -101,6 +124,9 @@ impl BrowseService {
             })
             .await;
             if let Ok(Ok(Some(bytes))) = result {
+                if let Some(access) = &self.adult_access {
+                    access.ensure()?;
+                }
                 return Ok(Some(format!(
                     "data:image/png;base64,{}",
                     STANDARD.encode(bytes)

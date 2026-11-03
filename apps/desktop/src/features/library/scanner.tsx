@@ -2,9 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { adultApi } from "../../api/adult";
 import { libraryApi, type ScanTask } from "../../api/library";
 import { Button } from "../../components/ui/button";
 import { ProviderTasks } from "../providers/pages";
+import type { ScannerSearch } from "./scanner-navigation";
+
+export {
+  type ScannerSearch,
+  validateScannerSearch,
+} from "./scanner-navigation";
+
 import { usePrivacy } from "./context";
 import {
   Empty,
@@ -20,12 +28,11 @@ function active(task: ScanTask) {
 }
 export function TasksPage() {
   const { t } = useTranslation();
-  const { includeAdult } = usePrivacy();
   const { number, date } = useFormat();
   const client = useQueryClient();
   const tasks = useQuery({
-    queryKey: ["tasks", includeAdult],
-    queryFn: () => libraryApi.tasks(includeAdult),
+    queryKey: ["tasks", false],
+    queryFn: () => libraryApi.tasks(false),
     refetchInterval: 2000,
   });
   const cancel = useMutation({
@@ -107,45 +114,40 @@ export function TasksPage() {
   );
 }
 
-export interface ScannerSearch {
-  root?: string;
-  task?: string;
-}
-export function validateScannerSearch(
-  value: Record<string, unknown>,
-): ScannerSearch {
-  return {
-    root: typeof value.root === "string" ? value.root : undefined,
-    task: typeof value.task === "string" ? value.task : undefined,
-  };
-}
 export function ScannerPage({
   search,
   onSearch,
+  adult = false,
 }: {
+  adult?: boolean;
   search: ScannerSearch;
   onSearch: (value: ScannerSearch) => void;
 }) {
   const { t } = useTranslation();
   const { number } = useFormat();
-  const { includeAdult } = usePrivacy();
+  const { includeAdult: unlockedAdult } = usePrivacy();
+  const includeAdult = adult && unlockedAdult;
   const client = useQueryClient();
   const [selected, setSelected] = useState<string[]>([]);
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [page, setPage] = useState(0);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const roots = useQuery({
-    queryKey: ["roots", includeAdult],
-    queryFn: () => libraryApi.roots(includeAdult),
+    queryKey: adult ? ["adult", "roots"] : ["roots", false],
+    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
+    enabled: !adult || unlockedAdult,
   });
   const tasks = useQuery({
-    queryKey: ["tasks", includeAdult],
-    queryFn: () => libraryApi.tasks(includeAdult),
+    queryKey: adult ? ["adult", "scan-tasks"] : ["tasks", false],
+    queryFn: () => (adult ? adultApi.tasks() : libraryApi.tasks(false)),
+    enabled: !adult || unlockedAdult,
     refetchInterval: 2000,
   });
   const task = tasks.data?.find((entry) => entry.id === search.task);
   const preview = useQuery({
-    queryKey: ["preview", search.task, cursors[page], includeAdult],
+    queryKey: adult
+      ? ["adult", "scan-preview", search.task, cursors[page]]
+      : ["preview", search.task, cursors[page], false],
     queryFn: () =>
       libraryApi.preview(
         search.task ?? "",
@@ -167,7 +169,9 @@ export function ScannerPage({
     mutationFn: (id: string) => libraryApi.start(id),
     onSuccess: (result) => {
       selectTask(result.id);
-      void client.invalidateQueries({ queryKey: ["tasks"] });
+      void client.invalidateQueries({
+        queryKey: adult ? ["adult", "scan-tasks"] : ["tasks"],
+      });
     },
   });
   const confirm = useMutation({

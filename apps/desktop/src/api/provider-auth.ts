@@ -1,5 +1,5 @@
 import { request } from "./library";
-export type AuthMethod = "none" | "bearer" | "api_key";
+export type AuthMethod = "none" | "bearer" | "api_key" | "affiliate";
 export type AuthStorage = "system" | "session_only";
 export type AuthStatusCode =
   | "not_required"
@@ -25,7 +25,7 @@ export interface AuthSaveInput {
 function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
-const methods: AuthMethod[] = ["none", "bearer", "api_key"];
+const methods: AuthMethod[] = ["none", "bearer", "api_key", "affiliate"];
 const statuses: AuthStatusCode[] = [
   "not_required",
   "not_configured",

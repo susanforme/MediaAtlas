@@ -20,16 +20,7 @@ import { useTranslation } from "react-i18next";
 import { LibraryPage, validateLibrarySearch } from "./features/library/browse";
 import { PrivacyProvider, usePrivacy } from "./features/library/context";
 import { MediaDetailPage } from "./features/library/detail";
-import {
-  DashboardPage,
-  RootsPage,
-  SettingsPage,
-} from "./features/library/pages";
-import {
-  ScannerPage,
-  TasksPage,
-  validateScannerSearch,
-} from "./features/library/scanner";
+import { validateScannerSearch } from "./features/library/scanner-navigation";
 import {
   NetworkInspectorPage,
   ProvidersPage,
@@ -37,6 +28,26 @@ import {
 import "./features/scraper/navigation";
 import { HomePage } from "./routes/home";
 
+const DashboardPage = lazyRouteComponent(
+  () => import("./features/library/pages"),
+  "DashboardPage",
+);
+const RootsPage = lazyRouteComponent(
+  () => import("./features/library/pages"),
+  "RootsPage",
+);
+const SettingsPage = lazyRouteComponent(
+  () => import("./features/library/pages"),
+  "SettingsPage",
+);
+const ScannerPage = lazyRouteComponent(
+  () => import("./features/library/scanner"),
+  "ScannerPage",
+);
+const TasksPage = lazyRouteComponent(
+  () => import("./features/library/scanner"),
+  "TasksPage",
+);
 function useTaskEvents() {
   const client = useQueryClient();
   useEffect(() => {
@@ -77,7 +88,7 @@ function useTaskEvents() {
 }
 function Layout() {
   const { t, i18n } = useTranslation();
-  const { includeAdult } = usePrivacy();
+  const { settings } = usePrivacy();
   useTaskEvents();
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";
@@ -128,7 +139,7 @@ function Layout() {
               {t(label)}
             </Link>
           ))}
-          {includeAdult && (
+          {settings.entry_visible && (
             <Link to="/adult" activeProps={{ className: "active" }}>
               {t("adultLibrary")}
             </Link>
@@ -172,19 +183,23 @@ const libraryRoute = createRoute({
 const adultRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/adult",
-  validateSearch: validateLibrarySearch,
+  component: lazyRouteComponent(
+    () => import("./features/adult/page"),
+    "AdultPage",
+  ),
+});
+const adultDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/adult/media/$mediaId",
   component: () => {
-    const search = adultRoute.useSearch();
-    const navigate = adultRoute.useNavigate();
-    return (
-      <LibraryPage
-        adult
-        search={search}
-        onSearch={(patch, replace) => void navigate({ search: patch, replace })}
-      />
-    );
+    const { mediaId } = adultDetailRoute.useParams();
+    return <AdultDetailRoute mediaId={mediaId} />;
   },
 });
+const AdultDetailRoute = lazyRouteComponent(
+  () => import("./features/adult/page"),
+  "AdultMediaPage",
+);
 const detailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/media/$mediaId",
@@ -252,6 +267,7 @@ const router = createRouter({
     indexRoute,
     libraryRoute,
     adultRoute,
+    adultDetailRoute,
     detailRoute,
     rootsRoute,
     scannerRoute,

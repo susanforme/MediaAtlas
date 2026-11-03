@@ -75,6 +75,8 @@ pub struct RequestSpec {
     pub api_key: Option<(String, SecretString)>,
     /// Added only to the actual original-origin request; never to stored URLs.
     pub secret_query: Option<(String, SecretString)>,
+    /// Multiple inbound-only query credential slots, validated and origin-confined.
+    pub secret_queries: Vec<(String, SecretString)>,
     pub expected_identity: Option<(String, String)>,
 }
 impl RequestSpec {
@@ -90,6 +92,7 @@ impl RequestSpec {
             cookie: None,
             api_key: None,
             secret_query: None,
+            secret_queries: Vec::new(),
             expected_identity: None,
         }
     }
@@ -613,8 +616,13 @@ impl NetworkEngine {
         cancel: &CancellationToken,
     ) -> Result<(Vec<u8>, u16, Option<String>), AttemptFailure> {
         let original = Url::parse(&spec.url).map_err(|_| ProviderFailure::UnsafeTarget)?;
-        if let Some((name, secret)) = &spec.secret_query {
-            if name.is_empty()
+        if spec.secret_queries.len() + usize::from(spec.secret_query.is_some()) > 8 {
+            return Err(ProviderFailure::InvalidConfiguration.into());
+        }
+        let mut query_names = std::collections::HashSet::new();
+        for (name, secret) in spec.secret_query.iter().chain(spec.secret_queries.iter()) {
+            if !query_names.insert(name)
+                || name.is_empty()
                 || name.len() > 64
                 || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
                 || secret.expose().is_empty()
@@ -647,7 +655,7 @@ impl NetworkEngine {
             // Never forward authorization/cookies across origins, even on a safe redirect.
             if url.origin() == original.origin() {
                 request = request.headers(secret_headers(spec)?);
-                if let Some((name, secret)) = &spec.secret_query {
+                for (name, secret) in spec.secret_query.iter().chain(spec.secret_queries.iter()) {
                     request = request.query(&[(name.as_str(), secret.expose())]);
                 }
             }
@@ -674,7 +682,17 @@ impl NetworkEngine {
                 // A remote Location may reflect the secret into a different URL.
                 // Refuse crossing origins for query credentials rather than trying
                 // to scrub arbitrary path/encoded copies supplied by that server.
-                if spec.secret_query.is_some() && url.origin() != original.origin() {
+                if (spec.secret_query.is_some() || !spec.secret_queries.is_empty())
+                    && url.origin() != original.origin()
+                {
+                    return Err(http_failure(ProviderFailure::UnsafeTarget, status));
+                }
+                if spec
+                    .secret_query
+                    .iter()
+                    .chain(spec.secret_queries.iter())
+                    .any(|(name, _)| url.query_pairs().any(|(key, _)| key == name.as_str()))
+                {
                     return Err(http_failure(ProviderFailure::UnsafeTarget, status));
                 }
                 continue;

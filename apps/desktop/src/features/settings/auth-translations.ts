@@ -2,6 +2,12 @@ import i18n from "../../i18n";
 export const authTranslations = {
   "en-US": {
     providerAuthTitle: "Provider authentication",
+    providerAuthAffiliate: "DMM affiliate API",
+    providerAuthWikidata: "Wikidata (adult supplement)",
+    providerAuthAffiliateHelp:
+      "Enter the approved DMM API ID and affiliate ID. Both are stored together in the selected secure store; the backend adds them only to protected original-origin requests.",
+    providerAuthApiId: "DMM API ID",
+    providerAuthAffiliateId: "DMM affiliate ID",
     providerAuthCleanupPending:
       "Authentication saved; old credentials are awaiting secure cleanup. Refresh the status to retry.",
     providerAuthCleanupDisabled:
@@ -49,6 +55,12 @@ export const authTranslations = {
   },
   "zh-CN": {
     providerAuthTitle: "来源认证",
+    providerAuthAffiliate: "DMM 联盟 API",
+    providerAuthWikidata: "Wikidata（成人补充来源）",
+    providerAuthAffiliateHelp:
+      "请填写已批准的 DMM API ID 与联盟 ID。两字段共同保存在所选安全存储中，后端仅向受保护的原始站点请求添加。",
+    providerAuthApiId: "DMM API ID",
+    providerAuthAffiliateId: "DMM 联盟 ID",
     providerAuthCleanupPending:
       "认证已保存；旧凭据等待安全清理，可刷新状态重试。",
     providerAuthCleanupDisabled:

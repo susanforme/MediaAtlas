@@ -1,6 +1,7 @@
 //! Media identities and type-specific models, independent of storage and desktop I/O.
 
 pub mod adult;
+pub mod adult_scraper;
 pub mod library;
 pub mod metadata;
 pub mod music;
@@ -11,6 +12,7 @@ pub mod tasks;
 pub mod video;
 
 pub use adult::*;
+pub use adult_scraper::*;
 pub use library::*;
 pub use metadata::*;
 pub use music::*;

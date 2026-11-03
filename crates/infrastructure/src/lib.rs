@@ -1,5 +1,9 @@
 //! Local infrastructure adapters: structured logs and SQLite persistence.
 
+pub mod adult_output;
+pub mod adult_privacy;
+pub mod adult_providers;
+pub mod adult_scraper;
 pub mod browse;
 pub mod credentials;
 pub mod library;

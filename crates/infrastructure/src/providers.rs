@@ -195,17 +195,42 @@ impl ProviderService {
         {
             return Err(RepositoryError::InvalidInput);
         }
-        // P3 has no adult/context selector. Keep adapters on the ordinary Movie
-        // lane until the later typed provider workflow adds explicit isolation.
-        if !descriptor.media_kinds.iter().any(|kind| {
-            matches!(
-                kind,
-                MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime
-            )
-        }) || descriptor.media_kinds.contains(&MediaKind::AdultVideo)
+        if descriptor.media_kinds.contains(&MediaKind::AdultVideo)
+            || !descriptor.media_kinds.iter().any(|kind| {
+                matches!(
+                    kind,
+                    MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime
+                )
+            })
         {
             return Err(RepositoryError::InvalidInput);
         }
+        self.register_descriptor_inner(adapter, descriptor).await
+    }
+
+    /// Trusted composition for independent typed adult adapters. Legacy start and
+    /// ordinary snapshots still reject/exclude this lane.
+    pub async fn register_adult_descriptor(
+        &self,
+        descriptor: ProviderDescriptor,
+    ) -> Result<(), RepositoryError> {
+        let _gate = self.gate.lock().await;
+        if descriptor.media_kinds != vec![MediaKind::AdultVideo]
+            || !crate::adult_providers::AdultProviderHub::descriptors()
+                .iter()
+                .any(|d| d.id == descriptor.id)
+        {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let adapter = Arc::new(TypedVideoRegistration(descriptor.clone()));
+        self.register_descriptor_inner(adapter, descriptor).await
+    }
+
+    async fn register_descriptor_inner(
+        &self,
+        adapter: Arc<dyn ProviderAdapter>,
+        descriptor: ProviderDescriptor,
+    ) -> Result<(), RepositoryError> {
         let mut adapters = self.adapters.write().await;
         if adapters.contains_key(&descriptor.id) {
             return Err(RepositoryError::Conflict);
@@ -243,13 +268,27 @@ impl ProviderService {
         decode(&value)
     }
 
+    pub async fn is_adult_provider(&self, id: &str) -> bool {
+        self.adapters
+            .read()
+            .await
+            .get(id)
+            .is_some_and(|a| a.descriptor().media_kinds.contains(&MediaKind::AdultVideo))
+    }
     pub async fn snapshot(&self) -> Result<ProviderSnapshot, RepositoryError> {
+        self.snapshot_lane(false).await
+    }
+    pub async fn adult_snapshot(&self) -> Result<ProviderSnapshot, RepositoryError> {
+        self.snapshot_lane(true).await
+    }
+    async fn snapshot_lane(&self, adult: bool) -> Result<ProviderSnapshot, RepositoryError> {
         let descriptors: Vec<_> = self
             .adapters
             .read()
             .await
             .values()
             .map(|a| a.descriptor())
+            .filter(|d| d.media_kinds.contains(&MediaKind::AdultVideo) == adult)
             .collect();
         let mut providers = Vec::new();
         for descriptor in descriptors {
@@ -266,8 +305,8 @@ impl ProviderService {
             });
         }
         providers.sort_by(|a, b| a.descriptor.id.cmp(&b.descriptor.id));
-        let rows = sqlx::query("SELECT t.id,t.state,t.created_at,t.updated_at,p.provider_id,p.job_json,p.failure,p.result_summary FROM provider_sessions p JOIN scrape_tasks t ON t.id=p.task_id ORDER BY t.created_at DESC,t.id DESC LIMIT 100")
-            .fetch_all(self.repo.pool()).await?;
+        let rows = sqlx::query("SELECT t.id,t.state,t.created_at,t.updated_at,p.provider_id,p.job_json,p.failure,p.result_summary FROM provider_sessions p JOIN scrape_tasks t ON t.id=p.task_id WHERE (EXISTS(SELECT 1 FROM adult_scrape_sessions a WHERE a.task_id=t.id) OR COALESCE(json_extract(t.input_snapshot,'$.adult'),0)=1)=? ORDER BY t.created_at DESC,t.id DESC LIMIT 100")
+            .bind(adult).fetch_all(self.repo.pool()).await?;
         let mut tasks = Vec::with_capacity(rows.len());
         for row in rows {
             let job: ProviderJob = decode(&row.try_get::<String, _>("job_json")?)?;
@@ -287,8 +326,9 @@ impl ProviderService {
             });
         }
         let requests = sqlx::query_scalar::<_, String>(
-            "SELECT record_json FROM provider_requests ORDER BY id DESC LIMIT 100",
+            "SELECT record_json FROM provider_requests p JOIN scrape_tasks t ON t.id=p.task_id WHERE (EXISTS(SELECT 1 FROM adult_scrape_sessions a WHERE a.task_id=p.task_id) OR COALESCE(json_extract(t.input_snapshot,'$.adult'),0)=1)=? ORDER BY p.id DESC LIMIT 100",
         )
+        .bind(adult)
         .fetch_all(self.repo.pool())
         .await?
         .iter()
@@ -329,13 +369,12 @@ impl ProviderService {
         mut config: ProviderConfig,
     ) -> Result<(), RepositoryError> {
         validate_config(&config)?;
-        if (provider_id == FIXTURE_PROVIDER_ID
-            || ["tmdb", "anilist", "wikipedia.html"].contains(&provider_id))
-            && config.credential_ref.is_some()
-        {
+        let old = self.config(provider_id).await?;
+        // Generic limits/configuration never edits credential authority. Settings
+        // owns revisions, and typed jobs snapshot its resolved opaque reference.
+        if config.credential_ref != old.credential_ref {
             return Err(RepositoryError::InvalidInput);
         }
-        let old = self.config(provider_id).await?;
         config.revision = old
             .revision
             .checked_add(1)
@@ -396,7 +435,12 @@ impl ProviderService {
             .get(provider_id)
             .cloned()
             .ok_or(RepositoryError::NotFound)?;
-        if !adapter.descriptor().languages.iter().any(|s| s == language) {
+        if adapter
+            .descriptor()
+            .media_kinds
+            .contains(&MediaKind::AdultVideo)
+            || !adapter.descriptor().languages.iter().any(|s| s == language)
+        {
             return Err(RepositoryError::InvalidInput);
         }
         validate_query(query)?;
@@ -467,6 +511,29 @@ impl ProviderService {
         let entry = registrations.entry(id).or_insert((cancel, 0));
         entry.1 += 1;
         entry.0.clone()
+    }
+    /// Privacy lock cancels in-flight gallery/detail requests even when their
+    /// originating search task has already reached a terminal state.
+    pub async fn cancel_adult_requests(&self) -> Result<(), RepositoryError> {
+        let active = self
+            .cancellations
+            .lock()
+            .await
+            .iter()
+            .map(|(id, (token, _))| (*id, token.clone()))
+            .collect::<Vec<_>>();
+        for (id, token) in active {
+            let adult: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM adult_scrape_sessions WHERE task_id=?)",
+            )
+            .bind(id.to_string())
+            .fetch_one(self.repo.pool())
+            .await?;
+            if adult {
+                token.cancel();
+            }
+        }
+        Ok(())
     }
     pub async fn detach_cancellation(&self, id: Uuid) {
         let mut registrations = self.cancellations.lock().await;

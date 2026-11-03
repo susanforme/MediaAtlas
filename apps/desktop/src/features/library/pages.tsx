@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
 import { type FormEvent, lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { adultApi } from "../../api/adult";
 import {
   defaultBrowse,
   libraryApi,
@@ -9,6 +10,7 @@ import {
   type RootInput,
   type RootView,
 } from "../../api/library";
+import "../adult/translations";
 import { Button } from "../../components/ui/button";
 import { usePrivacy } from "./context";
 import {
@@ -92,18 +94,25 @@ const newRoot = (): RootInput => ({
   enabled: true,
   exclude_patterns: [],
 });
-export function RootsPage() {
+export function RootsPage({
+  adult = false,
+  onScan,
+}: {
+  adult?: boolean;
+  onScan?: (rootId: string) => void;
+}) {
   const { t } = useTranslation();
   const { date } = useFormat();
-  const { includeAdult } = usePrivacy();
+  const { includeAdult: unlockedAdult } = usePrivacy();
   const client = useQueryClient();
   const [form, setForm] = useState<RootInput | null>(null);
   const [excludes, setExcludes] = useState("");
   const [remove, setRemove] = useState<RootView | null>(null);
   const [validation, setValidation] = useState(false);
   const roots = useQuery({
-    queryKey: ["roots", includeAdult],
-    queryFn: () => libraryApi.roots(includeAdult),
+    queryKey: adult ? ["adult", "roots"] : ["roots", false],
+    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
+    enabled: !adult || unlockedAdult,
   });
   const save = useMutation({
     mutationFn: (input: RootInput) => libraryApi.saveRoot(input),
@@ -131,7 +140,10 @@ export function RootsPage() {
           enabled: root.enabled,
           exclude_patterns: root.exclude_patterns,
         }
-      : newRoot();
+      : {
+          ...newRoot(),
+          kind: adult ? ("adult_video" as const) : ("movie" as const),
+        };
     setForm(value);
     setExcludes(value.exclude_patterns.join("\n"));
   }
@@ -191,14 +203,14 @@ export function RootsPage() {
                 })
               }
             >
-              {ROOT_KINDS.filter(
-                (kind) => includeAdult || kind !== "adult_video",
+              {ROOT_KINDS.filter((kind) =>
+                adult ? kind === "adult_video" : kind !== "adult_video",
               ).map((kind) => (
                 <option value={kind} key={kind}>
                   {t(`kind_${kind}`)}
                 </option>
               ))}
-              <option value="mixed">{t("mixed")}</option>
+              {!adult && <option value="mixed">{t("mixed")}</option>}
             </select>
           </label>
           <label className="filter-field">
@@ -298,13 +310,23 @@ export function RootsPage() {
                   >
                     {t("remove")}
                   </Button>
-                  <Link
-                    className="action-link"
-                    to="/scanner"
-                    search={{ root: root.id }}
-                  >
-                    {t("scanRoot")}
-                  </Link>
+                  {adult ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => onScan?.(root.id)}
+                    >
+                      {t("scanRoot")}
+                    </Button>
+                  ) : (
+                    <Link
+                      className="action-link"
+                      to="/scanner"
+                      search={{ root: root.id }}
+                    >
+                      {t("scanRoot")}
+                    </Link>
+                  )}
                 </div>
               </div>
             </article>
@@ -323,8 +345,10 @@ const ProviderAuthSettings = lazy(() =>
 
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
-  const { includeAdult, setIncludeAdult } = usePrivacy();
-  const navigate = useNavigate();
+  const { settings, saveSettings, lock, error } = usePrivacy();
+  const [preferences, setPreferences] = useState(settings);
+  const [edited, setEdited] = useState(false);
+  const value = edited ? preferences : settings;
   return (
     <>
       <PageHeading title={t("settings")} />
@@ -350,18 +374,46 @@ export function SettingsPage() {
         </section>
         <section className="panel">
           <h2 className="section-title">{t("adultSettings")}</h2>
-          <p className="mb-4 text-sm text-muted-foreground">{t("adultHelp")}</p>
-          <label className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={includeAdult}
-              onChange={(event) => {
-                setIncludeAdult(event.target.checked);
-                if (!event.target.checked) void navigate({ to: "/" });
+          <p className="mb-4 text-sm text-muted-foreground">
+            {t("adultSettingsHelp")}
+          </p>
+          {(
+            ["entry_visible", "covers_visible", "remember_recent"] as const
+          ).map((key) => (
+            <label key={key} className="mb-4 flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={value[key]}
+                onChange={(event) => {
+                  setEdited(true);
+                  setPreferences({ ...value, [key]: event.target.checked });
+                }}
+              />
+              {t(
+                key === "entry_visible"
+                  ? "adultEntry"
+                  : key === "covers_visible"
+                    ? "adultCovers"
+                    : "adultRecent",
+              )}
+            </label>
+          ))}
+          <div className="flex gap-3">
+            <Button
+              onClick={() => {
+                void saveSettings(value);
+                setEdited(false);
               }}
-            />
-            {t("adultEnabled")}
-          </label>
+            >
+              {t("adultSavePrivacy")}
+            </Button>
+            {settings.unlocked && (
+              <Button variant="outline" onClick={() => void lock()}>
+                {t("adultLock")}
+              </Button>
+            )}
+          </div>
+          {error !== undefined && <ErrorNotice error={error} />}
         </section>
       </div>
     </>

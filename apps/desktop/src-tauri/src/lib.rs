@@ -86,13 +86,50 @@ pub fn run() {
                     repository.clone(),
                     providers.clone(),
                     std::sync::Arc::new(hub),
-                    engine,
+                    engine.clone(),
                     cache,
                 )
                 .with_auth_service(auth.clone());
                 scraper.initialize().await?;
+                let adult_cache = data_dir.join("artwork-cache").join("adult");
+                for descriptor in
+                    mediaatlas_infrastructure::adult_providers::AdultProviderHub::descriptors()
+                {
+                    providers.register_adult_descriptor(descriptor).await?;
+                }
+                let adult_hub = mediaatlas_infrastructure::adult_providers::AdultProviderHub::new(
+                    engine.clone(),
+                    credentials,
+                )
+                .with_auth_service(auth.clone());
+                let adult_scraper =
+                    mediaatlas_infrastructure::adult_scraper::AdultScraperService::new(
+                        repository.clone(),
+                        providers.clone(),
+                        std::sync::Arc::new(adult_hub),
+                        engine,
+                        adult_cache.clone(),
+                    )
+                    .with_auth_service(auth.clone());
+                adult_scraper.initialize().await?;
+                // Recovery only records interrupted work. No adult grant or filesystem replay at startup.
+                mediaatlas_infrastructure::adult_output::recover_adult_batches(&repository).await?;
+                let adult_privacy =
+                    mediaatlas_infrastructure::adult_privacy::AdultPrivacyService::new(
+                        repository.clone(),
+                        providers.clone(),
+                    );
                 scans.recover_interrupted().await?;
                 Ok::<_, mediaatlas_infrastructure::library::RepositoryError>(state::DesktopState {
+                    repository: repository.clone(),
+                    adult_cache: adult_cache.clone(),
+                    adult_browse: BrowseService::new(
+                        repository.clone(),
+                        data_dir.join("adult-thumbnails"),
+                    )
+                    .with_artwork_cache(adult_cache),
+                    adult_privacy,
+                    adult_scraper,
                     browse: BrowseService::new(repository, data_dir.join("thumbnails"))
                         .with_artwork_cache(data_dir.join("artwork-cache").join("general")),
                     scans,
@@ -154,6 +191,30 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
+            commands::adult_settings,
+            commands::adult_save_settings,
+            commands::adult_unlock,
+            commands::adult_lock,
+            commands::adult_search,
+            commands::adult_search_preview,
+            commands::adult_detail,
+            commands::adult_preview,
+            commands::adult_confirm,
+            commands::adult_media_detail,
+            commands::adult_artwork_preview,
+            commands::adult_output_preview,
+            commands::adult_output_execute,
+            commands::adult_output_discard,
+            commands::adult_batch_preview,
+            commands::adult_batch_execute,
+            commands::adult_batch_cancel,
+            commands::adult_batch_status,
+            commands::adult_providers,
+            commands::adult_list_media,
+            commands::adult_get_media,
+            commands::adult_list_roots,
+            commands::adult_tasks,
+            commands::adult_recent,
             commands::library_list_roots,
             commands::library_save_root,
             commands::library_remove_root,

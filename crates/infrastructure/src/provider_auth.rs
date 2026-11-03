@@ -78,7 +78,7 @@ impl ProviderAuthService {
     }
     async fn status_inner(&self, provider: &str) -> Result<AuthStatus, RepositoryError> {
         validate_provider(provider)?;
-        if provider != "tmdb" {
+        if !matches!(provider, "tmdb" | "dmm") {
             return Ok(AuthStatus {
                 provider_id: provider.into(),
                 supported_methods: vec!["none".into()],
@@ -106,11 +106,25 @@ impl ProviderAuthService {
                 },
             )
         } else {
-            ("bearer".into(), "system".into(), false, "not_configured")
+            (
+                if provider == "dmm" {
+                    "affiliate"
+                } else {
+                    "bearer"
+                }
+                .into(),
+                "system".into(),
+                false,
+                "not_configured",
+            )
         };
         Ok(AuthStatus {
             provider_id: provider.into(),
-            supported_methods: vec!["bearer".into(), "api_key".into()],
+            supported_methods: if provider == "dmm" {
+                vec!["affiliate".into()]
+            } else {
+                vec!["bearer".into(), "api_key".into()]
+            },
             method,
             storage,
             configured,
@@ -125,18 +139,23 @@ impl ProviderAuthService {
     pub async fn save(&self, input: AuthSaveInput) -> Result<AuthStatus, RepositoryError> {
         let _gate = self.gate.lock().await;
         validate_provider(&input.provider_id)?;
-        if input.provider_id != "tmdb"
-            || !matches!(input.method.as_str(), "bearer" | "api_key")
-            || input.secret.is_empty()
-            || input.secret.len() > 16384
-            || input.secret.chars().any(char::is_whitespace)
-            || input.secret.chars().any(char::is_control)
-        {
+        let valid = match (input.provider_id.as_str(), input.method.as_str()) {
+            ("tmdb", "bearer" | "api_key") => {
+                !input.secret.is_empty()
+                    && input.secret.len() <= 16384
+                    && !input.secret.chars().any(char::is_whitespace)
+                    && !input.secret.chars().any(char::is_control)
+            }
+            ("dmm", "affiliate") => parse_affiliate_credential(&input.secret).is_ok(),
+            _ => false,
+        };
+        if !valid {
             return Err(RepositoryError::InvalidInput);
         }
         let mode = storage_mode(&input.storage)?;
         let reference = format!(
-            "tmdb.auth.{}.{}.{}",
+            "{}.auth.{}.{}.{}",
+            input.provider_id,
             input.method,
             if mode == CredentialMode::System {
                 "system"
@@ -266,15 +285,16 @@ impl ProviderAuthService {
         let reference = reference.ok_or(ProviderFailure::CredentialsUnavailable)?;
         let pieces = reference.split('.').collect::<Vec<_>>();
         if pieces.len() != 5
-            || pieces[0] != "tmdb"
+            || !matches!(pieces[0], "tmdb" | "dmm")
             || pieces[1] != "auth"
             || Uuid::parse_str(pieces[4]).is_err()
         {
             return Err(ProviderFailure::InvalidConfiguration);
         }
-        let method = match pieces[2] {
-            "bearer" => "bearer",
-            "api_key" => "api_key",
+        let method = match (pieces[0], pieces[2]) {
+            ("tmdb", "bearer") => "bearer",
+            ("tmdb", "api_key") => "api_key",
+            ("dmm", "affiliate") => "affiliate",
             _ => return Err(ProviderFailure::InvalidConfiguration),
         };
         let mode = match pieces[3] {
@@ -296,8 +316,37 @@ impl ProviderAuthService {
         Ok(ResolvedAuth { method, secret })
     }
 }
+/// Secret-bearing multi-field credential. No Debug/Serialize implementation.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AffiliateCredential {
+    pub api_id: String,
+    pub affiliate_id: String,
+}
+pub(crate) fn parse_affiliate_credential(
+    value: &str,
+) -> Result<AffiliateCredential, ProviderFailure> {
+    if value.len() > 4096 {
+        return Err(ProviderFailure::InvalidConfiguration);
+    }
+    let parsed: AffiliateCredential =
+        serde_json::from_str(value).map_err(|_| ProviderFailure::InvalidConfiguration)?;
+    if [&parsed.api_id, &parsed.affiliate_id].iter().any(|v| {
+        v.is_empty()
+            || v.len() > 256
+            || !v
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+    }) {
+        return Err(ProviderFailure::InvalidConfiguration);
+    }
+    Ok(parsed)
+}
 fn validate_provider(provider: &str) -> Result<(), RepositoryError> {
-    if matches!(provider, "tmdb" | "anilist" | "wikipedia.html") {
+    if matches!(
+        provider,
+        "tmdb" | "anilist" | "wikipedia.html" | "dmm" | "wikidata"
+    ) {
         Ok(())
     } else {
         Err(RepositoryError::InvalidInput)
@@ -664,5 +713,73 @@ mod tests {
             restarted.snapshot_ref("tmdb").await.unwrap().as_deref(),
             Some(reference.as_str())
         );
+    }
+    #[tokio::test]
+    async fn affiliate_multifield_json_is_secret_only_revision_scoped_and_validated() {
+        let store = Arc::new(CredentialStore::new());
+        let (_dir, service) = service(store.clone()).await;
+        let mut input = AuthSaveInput {
+            provider_id: "dmm".into(),
+            method: "affiliate".into(),
+            storage: "session_only".into(),
+            secret: r#"{"api_id":"synthetic-api","affiliate_id":"synthetic-affiliate"}"#.into(),
+        };
+        let status = service
+            .save(AuthSaveInput {
+                provider_id: input.provider_id.clone(),
+                method: input.method.clone(),
+                storage: input.storage.clone(),
+                secret: input.secret.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(status.configured);
+        assert_eq!(status.supported_methods, vec!["affiliate"]);
+        assert!(!serde_json::to_string(&status)
+            .unwrap()
+            .contains("synthetic"));
+        let old = service.snapshot_ref("dmm").await.unwrap().unwrap();
+        assert!(old.starts_with("dmm.auth.affiliate.session."));
+        assert_eq!(
+            service.resolve(Some(&old)).await.unwrap().method,
+            "affiliate"
+        );
+        input.secret =
+            r#"{"api_id":"synthetic-new-api","affiliate_id":"synthetic-new-affiliate"}"#.into();
+        service.save(input).await.unwrap();
+        assert_ne!(
+            service.snapshot_ref("dmm").await.unwrap().as_deref(),
+            Some(old.as_str())
+        );
+        assert!(service.resolve(Some(&old)).await.is_err());
+        let rows: Vec<String> = sqlx::query_scalar(
+            "SELECT provider_id||method||storage||credential_ref FROM provider_auth_settings",
+        )
+        .fetch_all(service.repo.pool())
+        .await
+        .unwrap();
+        assert!(!rows.join("").contains("synthetic"));
+        for secret in [
+            r#"{"api_id":"synthetic"}"#,
+            r#"{"api_id":"a","affiliate_id":"b","cookie":"c"}"#,
+            r#"{"api_id":"a b","affiliate_id":"b"}"#,
+            r#"{"api_id":"a","affiliate_id":""}"#,
+        ] {
+            assert!(service
+                .save(AuthSaveInput {
+                    provider_id: "dmm".into(),
+                    method: "affiliate".into(),
+                    storage: "session_only".into(),
+                    secret: secret.into()
+                })
+                .await
+                .is_err());
+        }
+        assert_eq!(
+            service.status("wikidata").await.unwrap().status,
+            "not_required"
+        );
+        service.clear("dmm").await.unwrap();
+        assert!(!service.status("dmm").await.unwrap().configured);
     }
 }

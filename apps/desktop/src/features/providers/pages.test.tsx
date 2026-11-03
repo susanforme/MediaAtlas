@@ -99,7 +99,11 @@ it("validates editable limits before updating an immutable configuration snapsho
   await waitFor(() =>
     expect(providerApi.updateConfig).toHaveBeenCalledWith(
       "fixture.offline",
-      expect.objectContaining({ concurrency: 3, revision: 1 }),
+      expect.objectContaining({
+        concurrency: 3,
+        revision: 1,
+        credential_ref: null,
+      }),
     ),
   );
 });
@@ -240,7 +244,35 @@ it("routes real providers to Scraper and Settings without an offline fixture sea
     ),
   ).toBeInTheDocument();
   expect(
-    screen.getByLabelText("Credential reference (not a secret)"),
-  ).toHaveAttribute("readonly");
+    screen.queryByLabelText("Credential reference (not a secret)"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Open authentication settings" }),
+  ).toHaveAttribute("href", "/settings");
   expect(providerApi.start).not.toHaveBeenCalled();
+});
+
+it("never displays an opaque credential reference while editing limits", async () => {
+  const data = fixtureSnapshot();
+  data.providers[0].config.credential_ref = "opaque-backend-owned-reference";
+  vi.mocked(providerApi.snapshot).mockResolvedValue(data);
+  show(<ProvidersPage />);
+  await screen.findByText("Offline dual-engine fixture");
+  fireEvent.click(screen.getByText("Runtime configuration"));
+  expect(
+    screen.queryByDisplayValue("opaque-backend-owned-reference"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("opaque-backend-owned-reference"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Open authentication settings" }),
+  ).toHaveAttribute("href", "/settings");
+  fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+  await waitFor(() =>
+    expect(providerApi.updateConfig).toHaveBeenCalledWith(
+      "fixture.offline",
+      expect.objectContaining({ credential_ref: null }),
+    ),
+  );
 });

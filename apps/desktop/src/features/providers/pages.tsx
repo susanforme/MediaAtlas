@@ -41,7 +41,11 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
     setValue(provider.config);
   }, [provider.config]);
   const save = useMutation({
-    mutationFn: () => providerApi.updateConfig(provider.descriptor.id, value),
+    mutationFn: () =>
+      providerApi.updateConfig(provider.descriptor.id, {
+        ...value,
+        credential_ref: null,
+      }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["providers"] });
     },
@@ -53,17 +57,12 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
         className="mt-4"
         onSubmit={(event) => {
           event.preventDefault();
-          const reference = value.credential_ref;
-          const validReference =
-            reference === null || /^[A-Za-z0-9._-]{1,128}$/.test(reference);
-          const valid =
-            validReference &&
-            numericFields.every(
-              ([key, , min, max]) =>
-                Number.isSafeInteger(value[key]) &&
-                value[key] >= min &&
-                value[key] <= max,
-            );
+          const valid = numericFields.every(
+            ([key, , min, max]) =>
+              Number.isSafeInteger(value[key]) &&
+              value[key] >= min &&
+              value[key] <= max,
+          );
           setInvalid(!valid);
           if (valid) save.mutate();
         }}
@@ -91,26 +90,12 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
             </label>
           ))}
         </div>
-        <label className="filter-field mt-4">
-          <span>{t("providerCredentialRef")}</span>
-          <input
-            maxLength={128}
-            autoComplete="off"
-            value={value.credential_ref ?? ""}
-            readOnly={!provider.descriptor.fixture}
-            onChange={(event) =>
-              setValue((old) => ({
-                ...old,
-                credential_ref: event.target.value || null,
-              }))
-            }
-          />
-        </label>
-        {!provider.descriptor.fixture && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            {t("providerAuthSettingsHint")}
-          </p>
-        )}
+        <p className="mt-4 text-sm text-muted-foreground">
+          {t("providerAuthSettingsHint")}{" "}
+          <Link className="text-primary" to="/settings">
+            {t("providerAuthOpenSettings")}
+          </Link>
+        </p>
         <Button className="mt-4" type="submit" disabled={save.isPending}>
           {t("providerSaveConfig")}
         </Button>

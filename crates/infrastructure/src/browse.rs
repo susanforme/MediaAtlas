@@ -8,7 +8,12 @@ use mediaatlas_application::library::*;
 use mediaatlas_domain::{normalize_root_path, LibraryRoot, MediaItem, MediaKind, PathStyle};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqliteRow, QueryBuilder, Row, Sqlite};
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::OnceLock};
+
+fn root_mutation_gate() -> &'static tokio::sync::Mutex<()> {
+    static GATE: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+    GATE.get_or_init(|| tokio::sync::Mutex::new(()))
+}
 use uuid::Uuid;
 
 use crate::library::{LibraryRepository, RepositoryError};
@@ -28,6 +33,8 @@ pub struct BrowseService {
     repo: LibraryRepository,
     cache_dir: PathBuf,
     approved_artwork_cache: Option<PathBuf>,
+    adult_access: Option<crate::media_output::AdultOutputAccess>,
+    render_posters: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -44,12 +51,24 @@ impl BrowseService {
             repo,
             cache_dir,
             approved_artwork_cache: None,
+            adult_access: None,
+            render_posters: true,
         }
     }
 
     /// Only trusted desktop composition may approve the network artwork cache.
     pub fn with_artwork_cache(mut self, path: PathBuf) -> Self {
         self.approved_artwork_cache = Some(path);
+        self
+    }
+
+    pub fn with_adult_access(
+        mut self,
+        access: crate::media_output::AdultOutputAccess,
+        covers: bool,
+    ) -> Self {
+        self.adult_access = Some(access);
+        self.render_posters = covers;
         self
     }
 
@@ -89,6 +108,7 @@ impl BrowseService {
     }
 
     pub async fn save_root(&self, input: &RootInput) -> Result<RootView> {
+        let _root_mutation = root_mutation_gate().lock().await;
         if input.name.trim().is_empty()
             || input.name.len() > 256
             || input.name.contains('\0')
@@ -118,6 +138,20 @@ impl BrowseService {
         let path = strip_extended_windows_prefix(path);
         let normalized =
             normalize_root_path(&path, path_style).map_err(|_| RepositoryError::InvalidInput)?;
+        for root in self.repo.list_roots().await? {
+            if input.id == Some(root.id) {
+                continue;
+            }
+            let other_adult = root.kind == Some(MediaKind::AdultVideo);
+            let this_adult = input.kind == Some(MediaKind::AdultVideo);
+            if other_adult != this_adult {
+                let other = PathBuf::from(root.path);
+                let current = PathBuf::from(&path);
+                if current.starts_with(&other) || other.starts_with(&current) {
+                    return Err(RepositoryError::ProtectedMetadata);
+                }
+            }
+        }
         let id = input.id.unwrap_or_else(Uuid::new_v4);
         let now = Utc::now();
         let mut tx = self.repo.pool().begin().await?;
@@ -154,6 +188,20 @@ impl BrowseService {
                 }
             }
         }
+        if let Some(previous) = &existing {
+            let was_adult =
+                get::<Option<String>>(previous, "kind")?.as_deref() == Some("adult_video");
+            if was_adult != (input.kind == Some(MediaKind::AdultVideo)) {
+                let files: i64 =
+                    sqlx::query_scalar("SELECT count(*) FROM media_files WHERE root_id=?")
+                        .bind(id.to_string())
+                        .fetch_one(&mut *tx)
+                        .await?;
+                if files > 0 {
+                    return Err(RepositoryError::ProtectedMetadata);
+                }
+            }
+        }
         let kind = input.kind.map(|v| v.as_str().to_owned());
         sqlx::query("INSERT INTO library_roots(id,name,path,normalized_path,path_style,kind,enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,path=excluded.path,normalized_path=excluded.normalized_path,path_style=excluded.path_style,kind=excluded.kind,enabled=excluded.enabled,updated_at=excluded.updated_at")
             .bind(id.to_string()).bind(input.name.trim()).bind(&path).bind(normalized).bind(path_style.as_str()).bind(kind).bind(input.enabled).bind(created).bind(now.timestamp_millis())
@@ -172,6 +220,7 @@ impl BrowseService {
     }
 
     pub async fn remove_root(&self, id: Uuid) -> Result<bool> {
+        let _root_mutation = root_mutation_gate().lock().await;
         let mut tx = self.repo.pool().begin().await?;
         let active: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND t.state IN ('queued','running')")
             .bind(id.to_string()).fetch_one(&mut *tx).await?;

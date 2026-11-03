@@ -8,6 +8,7 @@ import {
   providerAuthApi,
 } from "../../api/provider-auth";
 import { Button } from "../../components/ui/button";
+import { usePrivacy } from "../library/context";
 import { ErrorNotice } from "../library/shared";
 import "./auth-translations";
 
@@ -18,6 +19,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
   const [method, setMethod] = useState<AuthMethod>("bearer");
   const [storage, setStorage] = useState<AuthStorage>("system");
   const [secret, setSecret] = useState("");
+  const [affiliate, setAffiliate] = useState("");
   const [pending, setPending] = useState<"save" | "clear" | null>(null);
   const [outcome, setOutcome] = useState<
     "saved" | "cleared" | "save_failed" | "clear_failed" | null
@@ -50,9 +52,16 @@ function AuthEditor({ providerId }: { providerId: string }) {
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending) return;
-    const submitted = secret.trim();
+    const submitted =
+      method === "affiliate"
+        ? JSON.stringify({
+            api_id: secret.trim(),
+            affiliate_id: affiliate.trim(),
+          })
+        : secret.trim();
     const valid =
-      submitted.length > 0 &&
+      secret.trim().length > 0 &&
+      (method !== "affiliate" || affiliate.trim().length > 0) &&
       !/\s/.test(submitted) &&
       [...submitted].every(
         (character) =>
@@ -61,9 +70,11 @@ function AuthEditor({ providerId }: { providerId: string }) {
     setInvalid(!valid);
     if (!valid) {
       setSecret("");
+      setAffiliate("");
       return;
     }
     setSecret("");
+    setAffiliate("");
     setPending("save");
     setOutcome(null);
     setError(undefined);
@@ -87,6 +98,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
     } finally {
       if (active.current) {
         setSecret("");
+        setAffiliate("");
         setPending(null);
       }
     }
@@ -94,6 +106,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
   async function clear() {
     if (pending) return;
     setSecret("");
+    setAffiliate("");
     setPending("clear");
     setOutcome(null);
     setError(undefined);
@@ -113,6 +126,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
     } finally {
       if (active.current) {
         setSecret("");
+        setAffiliate("");
         setPending(null);
       }
     }
@@ -172,6 +186,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
         disabled={pending !== null || status.isFetching}
         onClick={() => {
           setSecret("");
+          setAffiliate("");
           setInvalid(false);
           setOutcome(null);
           setError(undefined);
@@ -193,6 +208,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
             onChange={(event) => {
               setMethod(event.target.value as AuthMethod);
               setSecret("");
+              setAffiliate("");
               setOutcome(null);
               setError(undefined);
               setInvalid(false);
@@ -203,9 +219,11 @@ function AuthEditor({ providerId }: { providerId: string }) {
               .map((value) => (
                 <option key={value} value={value}>
                   {t(
-                    value === "bearer"
-                      ? "providerAuthBearer"
-                      : "providerAuthApiKey",
+                    value === "affiliate"
+                      ? "providerAuthAffiliate"
+                      : value === "bearer"
+                        ? "providerAuthBearer"
+                        : "providerAuthApiKey",
                   )}
                 </option>
               ))}
@@ -213,9 +231,11 @@ function AuthEditor({ providerId }: { providerId: string }) {
         </label>
         <p className="text-sm text-muted-foreground">
           {t(
-            method === "api_key"
-              ? "providerAuthApiKeyHelp"
-              : "providerAuthBearerHelp",
+            method === "affiliate"
+              ? "providerAuthAffiliateHelp"
+              : method === "api_key"
+                ? "providerAuthApiKeyHelp"
+                : "providerAuthBearerHelp",
           )}
         </p>
         <label className="filter-field">
@@ -241,7 +261,13 @@ function AuthEditor({ providerId }: { providerId: string }) {
           )}
         </p>
         <label className="filter-field">
-          <span>{t("providerAuthSecret")}</span>
+          <span>
+            {t(
+              method === "affiliate"
+                ? "providerAuthApiId"
+                : "providerAuthSecret",
+            )}
+          </span>
           <input
             type="password"
             name="provider-credential"
@@ -256,6 +282,24 @@ function AuthEditor({ providerId }: { providerId: string }) {
             }}
           />
         </label>
+        {method === "affiliate" && (
+          <label className="filter-field">
+            <span>{t("providerAuthAffiliateId")}</span>
+            <input
+              type="password"
+              name="provider-affiliate"
+              autoComplete="off"
+              spellCheck={false}
+              maxLength={4096}
+              value={affiliate}
+              disabled={pending !== null}
+              onChange={(event) => {
+                setAffiliate(event.target.value);
+                setInvalid(false);
+              }}
+            />
+          </label>
+        )}
         <p className="text-sm text-muted-foreground">
           {t("providerAuthNoEcho")}
         </p>
@@ -265,7 +309,14 @@ function AuthEditor({ providerId }: { providerId: string }) {
           </p>
         )}
         <div className="flex flex-wrap gap-3">
-          <Button type="submit" disabled={pending !== null || !secret.trim()}>
+          <Button
+            type="submit"
+            disabled={
+              pending !== null ||
+              !secret.trim() ||
+              (method === "affiliate" && !affiliate.trim())
+            }
+          >
             {t(pending === "save" ? "providerAuthSaving" : "providerAuthSave")}
           </Button>
           <Button
@@ -312,6 +363,9 @@ function AuthEditor({ providerId }: { providerId: string }) {
 export function ProviderAuthSettings() {
   const { t } = useTranslation();
   const [provider, setProvider] = useState("tmdb");
+  const { includeAdult } = usePrivacy();
+  const selectedProvider =
+    !includeAdult && ["dmm", "wikidata"].includes(provider) ? "tmdb" : provider;
   return (
     <section className="panel" aria-labelledby="provider-auth-title">
       <h2 id="provider-auth-title" className="section-title">
@@ -323,15 +377,21 @@ export function ProviderAuthSettings() {
       <label className="filter-field">
         <span>{t("providerAuthProvider")}</span>
         <select
-          value={provider}
+          value={selectedProvider}
           onChange={(event) => setProvider(event.target.value)}
         >
           <option value="tmdb">TMDB</option>
           <option value="anilist">AniList</option>
           <option value="wikipedia.html">Wikipedia</option>
+          {includeAdult && (
+            <>
+              <option value="dmm">DMM / FANZA</option>
+              <option value="wikidata">{t("providerAuthWikidata")}</option>
+            </>
+          )}
         </select>
       </label>
-      <AuthEditor key={provider} providerId={provider} />
+      <AuthEditor key={selectedProvider} providerId={selectedProvider} />
     </section>
   );
 }

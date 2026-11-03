@@ -5,7 +5,7 @@
 
 ## 当前状态与执行规则
 
-- 当前阶段：Phase 4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
+- 当前阶段：Phase 5 独立成人工作流与视频 MVP 候选实现见 [acceptance/phase-5.md](acceptance/phase-5.md)，实时多站与 Windows 平台门槛明确 pending；P4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
 - 执行顺序：P0 → P1 → P2 → P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8。
 - 每个 Phase 为独立 PR/提交单元；下表的任务 ID 用于跟踪，不要求每个 ID 单独创建 PR。
 - 本次会话用户明确授权连续执行 P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8：每阶段验收后立即使用 Codex 身份提交并推送，报告测试结果，再由 subagent 开始下一阶段；用户未要求中止时继续。不得自动创建 tag 或实际发布。
@@ -139,7 +139,7 @@ Phase 2 国际化补充（用户指定）：
 
 ## 视频 MVP 检查表
 
-以下逐项对应基线第 14 节，全部初始为未验收。TV 和基础 Anime 的 P4 验收同样不可省略。
+以下逐项对应基线第 14 节；P5 已在 [逐项视频 MVP 记录](acceptance/phase-5.md#视频-mvp基线第-14-节逐项) 填写真实证据与 pending，Windows 启动与 live 多站未验收，不能标记全量 MVP 通过。TV 和基础 Anime 的 P4 验收同样不可省略。
 
 | 基线条目 | 最迟落实 | 验收证据 |
 | --- | --- | --- |

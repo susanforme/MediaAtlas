@@ -11,7 +11,6 @@ import {
   type MediaKind,
 } from "../../api/library";
 import { Button } from "../../components/ui/button";
-import { usePrivacy } from "./context";
 import {
   ALL_KINDS,
   Empty,
@@ -102,11 +101,10 @@ export function LibraryPage({
   adult?: boolean;
 }) {
   const { t } = useTranslation();
-  const { includeAdult } = usePrivacy();
   const { number } = useFormat();
   const [advanced, setAdvanced] = useState(false);
   const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
-  const access = adult && includeAdult;
+  const access = false;
   const query: BrowseQuery = {
     ...defaultBrowse(access),
     root_id: search.root ?? null,
@@ -124,7 +122,7 @@ export function LibraryPage({
     sort: search.sort ?? "updated_desc",
     cursor: search.cursor ?? null,
   };
-  const allowed = !adult || includeAdult;
+  const allowed = !adult;
   const roots = useQuery({
     queryKey: ["roots", access],
     queryFn: () => libraryApi.roots(access),

@@ -2,9 +2,11 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
 
-当前实现 **Phase 4 Movie / TV / 基础 Anime 刮削闭环**：本地 Root 扫描、候选确认和真实媒体库继续可用；新增 TMDB Movie/TV、AniList GraphQL 与 Wikipedia HTML 补充适配、类型专属候选/详情、字段来源/语言/保护比较，以及独立确认的 NFO/所选海报输出。默认 Preserve，不移动、改写或删除原视频。Provider 默认禁用，真实站点授权/连通性仍未验收，自动化使用明确标记的 Mock/Fixture。UI 支持 `zh-CN`、`en-US`；网页预览明确提示需要桌面后端。
+当前实现 **Phase 5 独立 AdultVideo 工作台与视频 MVP 候选**：保留 Movie/TV/基础 Anime 和本地扫描闭环，新增独立番号/发行商匹配、FANZA 官方 DMM API 与 Wikidata 公共目录补充适配、成人库/任务/缩略图隔离、字段合并以及有界批量 NFO/图片输出。所有输出先 Preview 再显式确认，默认 Preserve，原视频不移动/改写/删除。Provider 默认禁用，实时站点/账号授权和 Windows 原生启动仍 pending；Mock 不代表 live 可用，当前不是已通过平台验收的可发布 MVP。
 
-在 **Settings → Provider 认证** 可选择 TMDB v4 Bearer Token 或 v3 API Key并保存到系统密钥服务；系统不可用时会明确失败，用户可显式选择退出即失效的会话存储。输入不会回显或进入本地设置/日志。AniList 与 Wikipedia 当前使用公开访问，无需凭据。保存认证与启用 Provider 分开，之后在 Scraper 搜索→人工选择→字段/图片预览→确认入库，再独立预览并执行文件输出。
+在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；成人区解锁后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
+
+成人入口默认隐藏，可在 Settings 保存“始终显示成人媒体入口”。该选项重启后仍保留，锁定时入口继续显示，内容需重新解锁；封面与最近访问偏好单独设置。普通海报墙、统计、查询、任务及 Network Inspector 始终排除成人数据。UI 仅 `zh-CN` / `en-US`，网页预览需要桌面后端，详情见 [P5 与视频 MVP 验收](docs/acceptance/phase-5.md)。
 
 ## 开发环境
 
@@ -105,10 +107,12 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 - [界面规范](docs/ui-spec.md)
 - [Phase 2 验收记录](docs/acceptance/phase-2.md)
 
-本轮提交 Phase 2 后停止，等待用户明确指示才开始 Phase 3。
+本会话按用户授权逐阶段实施、验收并以 Codex 身份提交/推送 P3→P4→P5→视频 MVP→P6→P7→P8；未验收项保留 pending，不自动创建 tag 或发布。
 
 ## Provider 开发与验收
 
-在桌面 Providers 页显式启用 Offline Fixture 后运行；Task Center 与 Network Inspector 可查看持久化任务和脱敏记录。Fixture 不联网、不写媒体，真实Provider留待P4。网络引擎和Adapter可脱离Tauri测试，常规CI仅依赖Mock HTTP和Fixtures。详见 [Provider契约](docs/provider-contract.md) 与 [Phase 3验收](docs/acceptance/phase-3.md)。
+在桌面 Providers 页显式启用 Offline Fixture 后运行；Task Center 与 Network Inspector 可查看持久化任务和脱敏记录。Fixture 不联网、不写媒体；P4/P5已接入真实请求代码，live授权与可用性独立验收。网络引擎和Adapter可脱离Tauri测试，常规CI仅依赖Mock HTTP和Fixtures。详见 [Provider契约](docs/provider-contract.md) 与 [Phase 3验收](docs/acceptance/phase-3.md)。
 
 P4 契约与边界：[phase-4-contract](docs/phase-4-contract.md)、[Provider 访问条件](docs/provider-access.md)、[安全输出](docs/media-output.md)、[阶段验收](docs/acceptance/phase-4.md)。系统密钥服务真实读写、实时授权及原生/跨平台 GUI 验收不由 Mock 测试替代。
+
+P5 契约与边界：[phase-5-contract](docs/phase-5-contract.md)、[P5/视频 MVP 验收](docs/acceptance/phase-5.md)。成人通道的 Preview/Confirm/批量取消不放宽普通输出隔离，测试只操作临时合成媒体。

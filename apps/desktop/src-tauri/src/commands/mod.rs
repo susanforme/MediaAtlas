@@ -1,3 +1,6 @@
+mod adult;
+pub use adult::*;
+
 use crate::state::DesktopState;
 use mediaatlas_application::library::*;
 use mediaatlas_desktop_bridge::{AppInfoDto, ErrorDto};
@@ -5,7 +8,7 @@ use mediaatlas_infrastructure::library::RepositoryError;
 use tauri::State;
 use uuid::Uuid;
 
-fn storage_error(error: RepositoryError) -> ErrorDto {
+pub(super) fn storage_error(error: RepositoryError) -> ErrorDto {
     let code = match error {
         RepositoryError::InvalidInput => "invalid_input",
         RepositoryError::NotFound => "not_found",
@@ -36,6 +39,9 @@ pub async fn library_list_roots(
     state: State<'_, DesktopState>,
     input: RootListInput,
 ) -> Result<ApiResponse<Vec<RootView>>, ErrorDto> {
+    if input.include_adult {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .browse
         .list_roots(input.include_adult)
@@ -49,6 +55,16 @@ pub async fn library_save_root(
     state: State<'_, DesktopState>,
     input: RootInput,
 ) -> Result<ApiResponse<RootView>, ErrorDto> {
+    if input.kind == Some(mediaatlas_domain::MediaKind::AdultVideo) {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
+    if let Some(id) = input.id {
+        state
+            .adult_privacy
+            .authorize_root(id)
+            .await
+            .map_err(storage_error)?;
+    }
     state
         .browse
         .save_root(&input)
@@ -63,6 +79,11 @@ pub async fn library_remove_root(
     input: RemoveRootInput,
 ) -> Result<ApiResponse<bool>, ErrorDto> {
     state
+        .adult_privacy
+        .authorize_root(input.root_id)
+        .await
+        .map_err(storage_error)?;
+    state
         .browse
         .remove_root(input.root_id)
         .await
@@ -75,6 +96,9 @@ pub async fn library_list_media(
     state: State<'_, DesktopState>,
     input: BrowseQuery,
 ) -> Result<ApiResponse<MediaPageView>, ErrorDto> {
+    if input.include_adult {
+        return Err(storage_error(RepositoryError::ProtectedMetadata));
+    }
     state
         .browse
         .list_media(&input)
@@ -88,6 +112,9 @@ pub async fn library_get_media(
     state: State<'_, DesktopState>,
     input: MediaDetailInput,
 ) -> Result<ApiResponse<MediaDetailView>, ErrorDto> {
+    if input.include_adult {
+        return Err(storage_error(RepositoryError::ProtectedMetadata));
+    }
     state
         .browse
         .get_media(&input)
@@ -101,6 +128,9 @@ pub async fn library_summary(
     state: State<'_, DesktopState>,
     input: BrowseQuery,
 ) -> Result<ApiResponse<LibrarySummaryView>, ErrorDto> {
+    if input.include_adult {
+        return Err(storage_error(RepositoryError::ProtectedMetadata));
+    }
     state
         .browse
         .summary(&input)
@@ -114,6 +144,9 @@ pub async fn library_facets(
     state: State<'_, DesktopState>,
     input: BrowseQuery,
 ) -> Result<ApiResponse<LibraryFacetsView>, ErrorDto> {
+    if input.include_adult {
+        return Err(storage_error(RepositoryError::ProtectedMetadata));
+    }
     state
         .browse
         .facets(&input)
@@ -128,6 +161,11 @@ pub async fn scan_start(
     input: StartInput,
 ) -> Result<ApiResponse<ScanTaskView>, ErrorDto> {
     state
+        .adult_privacy
+        .authorize_root(input.root_id)
+        .await
+        .map_err(storage_error)?;
+    state
         .scans
         .start(input.root_id)
         .await
@@ -140,6 +178,9 @@ pub async fn scan_list_tasks(
     state: State<'_, DesktopState>,
     input: ListTasksInput,
 ) -> Result<ApiResponse<Vec<ScanTaskView>>, ErrorDto> {
+    if input.include_adult {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .scans
         .list_tasks(input.include_adult)
@@ -153,6 +194,9 @@ pub async fn scan_get_preview(
     state: State<'_, DesktopState>,
     input: PreviewInput,
 ) -> Result<ApiResponse<PreviewPageView>, ErrorDto> {
+    if input.include_adult {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .scans
         .preview(&input)
@@ -166,6 +210,12 @@ pub async fn scan_confirm(
     state: State<'_, DesktopState>,
     input: ConfirmInput,
 ) -> Result<ApiResponse<ConfirmResult>, ErrorDto> {
+    let _confirmation = state.adult_privacy.confirmation_guard().await;
+    state
+        .adult_privacy
+        .authorize_task(input.task_id)
+        .await
+        .map_err(storage_error)?;
     state
         .scans
         .confirm(&input)
@@ -179,6 +229,11 @@ pub async fn scan_cancel(
     state: State<'_, DesktopState>,
     input: CancelInput,
 ) -> Result<ApiResponse<ScanTaskView>, ErrorDto> {
+    state
+        .adult_privacy
+        .authorize_task(input.task_id)
+        .await
+        .map_err(storage_error)?;
     state
         .scans
         .cancel(input.task_id)
@@ -233,6 +288,9 @@ pub async fn provider_set_enabled(
     state: State<'_, DesktopState>,
     input: ProviderEnabledInput,
 ) -> Result<ApiResponse<()>, ErrorDto> {
+    if state.providers.is_adult_provider(&input.provider_id).await {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .providers
         .set_enabled(&input.provider_id, input.enabled)
@@ -245,6 +303,9 @@ pub async fn provider_update_config(
     state: State<'_, DesktopState>,
     input: ProviderConfigInput,
 ) -> Result<ApiResponse<()>, ErrorDto> {
+    if state.providers.is_adult_provider(&input.provider_id).await {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .providers
         .update_config(&input.provider_id, &input.config)
@@ -269,6 +330,11 @@ pub async fn provider_cancel(
     state: State<'_, DesktopState>,
     input: ProviderCancelInput,
 ) -> Result<ApiResponse<bool>, ErrorDto> {
+    state
+        .adult_privacy
+        .authorize_task(input.task_id)
+        .await
+        .map_err(storage_error)?;
     state
         .providers
         .cancel(input.task_id)
@@ -451,6 +517,9 @@ pub async fn provider_auth_status(
     state: State<'_, DesktopState>,
     input: ProviderAuthInput,
 ) -> Result<ApiResponse<mediaatlas_infrastructure::provider_auth::AuthStatus>, ErrorDto> {
+    if state.providers.is_adult_provider(&input.provider_id).await {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .auth
         .status(&input.provider_id)
@@ -463,6 +532,9 @@ pub async fn provider_auth_save(
     state: State<'_, DesktopState>,
     input: mediaatlas_infrastructure::provider_auth::AuthSaveInput,
 ) -> Result<ApiResponse<mediaatlas_infrastructure::provider_auth::AuthStatus>, ErrorDto> {
+    if state.providers.is_adult_provider(&input.provider_id).await {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .auth
         .save(input)
@@ -475,6 +547,9 @@ pub async fn provider_auth_clear(
     state: State<'_, DesktopState>,
     input: ProviderAuthInput,
 ) -> Result<ApiResponse<mediaatlas_infrastructure::provider_auth::AuthStatus>, ErrorDto> {
+    if state.providers.is_adult_provider(&input.provider_id).await {
+        state.adult_privacy.access().await.map_err(storage_error)?;
+    }
     state
         .auth
         .clear(&input.provider_id)

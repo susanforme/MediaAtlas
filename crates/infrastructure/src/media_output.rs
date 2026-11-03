@@ -21,7 +21,10 @@ use std::{
     collections::BTreeMap,
     io::{Cursor, Read, Write},
     path::{Component, Path, PathBuf},
-    sync::{Arc, OnceLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, OnceLock,
+    },
 };
 use tokio::sync::{Mutex, Semaphore};
 use uuid::Uuid;
@@ -29,6 +32,7 @@ use uuid::Uuid;
 const MAX_NFO: usize = 2 * 1024 * 1024;
 const MAX_IMAGE: usize = 8 * 1024 * 1024;
 const MAX_PIXELS: u64 = 20_000_000;
+const MAX_ADULT_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputFileDiff {
@@ -60,6 +64,8 @@ pub struct OutputResult {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct OutputPlan {
+    #[serde(default)]
+    channel: OutputChannel,
     preview: OutputPreview,
     root: PathBuf,
     root_id: Uuid,
@@ -128,6 +134,7 @@ fn metadata_identity(_: &cap_std::fs::Metadata) -> Result<String, RepositoryErro
 // requires a fresh preview; it never falls back to path-only identity.
 #[cfg(windows)]
 struct WindowsSourceLease {
+    adult_access: Option<AdultOutputAccess>,
     _directories: Vec<Dir>,
     _source: cap_std::fs::File,
     created: std::time::Instant,
@@ -142,6 +149,7 @@ fn windows_leases() -> &'static Mutex<std::collections::HashMap<Uuid, Arc<Window
 fn windows_source_lease(
     root: &Path,
     relative: &Path,
+    adult_access: Option<AdultOutputAccess>,
 ) -> Result<WindowsSourceLease, RepositoryError> {
     use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
     use cap_std::fs::OpenOptionsExt;
@@ -191,6 +199,7 @@ fn windows_source_lease(
         return Err(RepositoryError::InvalidInput);
     }
     Ok(WindowsSourceLease {
+        adult_access,
         _directories: directories,
         _source: source,
         created: std::time::Instant::now(),
@@ -219,11 +228,50 @@ fn verify_source(plan: &OutputPlan) -> Result<(), RepositoryError> {
     }
     Ok(())
 }
+/// An in-process privacy grant issued only by the adult privacy service.
+/// It is deliberately absent from serde/IPC and is revoked across cloned services.
+#[derive(Clone)]
+pub struct AdultOutputAccess(Arc<AtomicBool>);
+impl AdultOutputAccess {
+    pub(crate) fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(true)))
+    }
+    pub(crate) fn revoke(&self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
+    pub fn ensure(&self) -> Result<(), RepositoryError> {
+        if self.0.load(Ordering::SeqCst) {
+            Ok(())
+        } else {
+            Err(RepositoryError::Provider(ProviderFailure::Cancelled))
+        }
+    }
+}
+/// Lock cleanup never needs a usable grant or a UI round trip. Active executions
+/// retain their own handle until completion, while unused previews release now.
+pub(crate) async fn release_revoked_adult_leases() {
+    #[cfg(windows)]
+    windows_leases().lock().await.retain(|_, lease| {
+        lease
+            .adult_access
+            .as_ref()
+            .is_none_or(|access| access.ensure().is_ok())
+    });
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum OutputChannel {
+    #[default]
+    Ordinary,
+    Adult,
+}
 #[derive(Clone)]
 pub struct MediaOutputService {
     repo: LibraryRepository,
     base_cache: PathBuf,
     gate: Arc<Mutex<()>>,
+    channel: OutputChannel,
+    adult_access: Option<AdultOutputAccess>,
 }
 impl MediaOutputService {
     pub fn new(repo: LibraryRepository, base_cache: PathBuf) -> Self {
@@ -231,7 +279,36 @@ impl MediaOutputService {
             repo,
             base_cache,
             gate: Arc::default(),
+            channel: OutputChannel::Ordinary,
+            adult_access: None,
         }
+    }
+    /// Trusted backend composition only; IPC cannot turn an ordinary plan adult.
+    pub fn new_adult(
+        repo: LibraryRepository,
+        base_cache: PathBuf,
+        access: AdultOutputAccess,
+    ) -> Self {
+        Self {
+            repo,
+            base_cache,
+            gate: Arc::default(),
+            channel: OutputChannel::Adult,
+            adult_access: Some(access),
+        }
+    }
+    #[cfg(test)]
+    pub(crate) async fn lock_for_test(&self) -> tokio::sync::OwnedMutexGuard<()> {
+        self.gate.clone().lock_owned().await
+    }
+    pub(crate) fn ensure_access(&self) -> Result<(), RepositoryError> {
+        if let Some(access) = &self.adult_access {
+            access.ensure()?;
+        }
+        Ok(())
+    }
+    pub(crate) fn is_adult_channel(&self) -> bool {
+        self.channel == OutputChannel::Adult
     }
     /// Opening/recovering never replays file I/O; execution needs a fresh UI call.
     pub async fn recover_interrupted(&self) -> Result<u64, RepositoryError> {
@@ -240,21 +317,12 @@ impl MediaOutputService {
     }
     pub async fn preview(&self, media_id: Uuid) -> Result<OutputPreview, RepositoryError> {
         let _gate = self.gate.lock().await;
+        self.ensure_access()?;
         let item = self
             .repo
             .get_media(media_id)
             .await?
             .ok_or(RepositoryError::NotFound)?;
-        if !matches!(
-            item.kind,
-            MediaKind::Movie
-                | MediaKind::TvSeries
-                | MediaKind::TvSeason
-                | MediaKind::TvEpisode
-                | MediaKind::Anime
-        ) {
-            return Err(RepositoryError::InvalidInput);
-        }
         let files = self.repo.list_files(media_id).await?;
         let source = files.first().ok_or(RepositoryError::NotFound)?;
         let root = self
@@ -262,8 +330,8 @@ impl MediaOutputService {
             .get_root(source.root_id)
             .await?
             .ok_or(RepositoryError::NotFound)?;
-        self.ensure_ordinary_media(media_id).await?;
-        if !root.enabled || root.kind == Some(MediaKind::AdultVideo) {
+        self.ensure_channel_media(media_id).await?;
+        if !root.enabled || !self.root_matches_channel(root.kind) {
             return Err(RepositoryError::InvalidInput);
         }
         let relative = checked_relative(&source.relative_path)?;
@@ -280,7 +348,8 @@ impl MediaOutputService {
             return Err(RepositoryError::InvalidInput);
         }
         #[cfg(windows)]
-        let windows_lease = windows_source_lease(Path::new(&root.path), &relative)?;
+        let windows_lease =
+            windows_source_lease(Path::new(&root.path), &relative, self.adult_access.clone())?;
         let source_fingerprint = source_fingerprint(&dir, source_name)?;
         let metadata = self.repo.list_metadata_values(media_id).await?;
         let ids = self.repo.list_external_ids(media_id).await?;
@@ -366,8 +435,9 @@ impl MediaOutputService {
         }
         // Selected artwork is persisted by the merge workflow. Only validated
         // content-addressed image bytes inside this service's cache are eligible.
+        let mut artwork_counts = BTreeMap::<String, usize>::new();
         for art in self.repo.list_artworks(media_id).await? {
-            if art.kind != ArtworkKind::Poster {
+            if !self.artwork_allowed(art.kind) {
                 continue;
             }
             let (Some(cache_path), Some(expected_hash)) = (&art.cache_path, &art.content_hash)
@@ -390,20 +460,50 @@ impl MediaOutputService {
             }
             let (format, _, _) = decode_image(&bytes).map_err(|_| RepositoryError::InvalidInput)?;
             let extension = extension(format).ok_or(RepositoryError::InvalidInput)?;
-            let poster_name = format!("{name}-poster.{extension}");
+            let kind = art.kind.as_str();
+            let count = artwork_counts.entry(kind.to_owned()).or_default();
+            *count += 1;
+            if *count
+                > if art.kind == ArtworkKind::Sample {
+                    20
+                } else {
+                    1
+                }
+            {
+                return Err(RepositoryError::InvalidInput);
+            }
+            let suffix = if art.kind == ArtworkKind::Sample {
+                format!("sample-{count:02}")
+            } else {
+                kind.into()
+            };
+            let poster_name = format!("{name}-{suffix}.{extension}");
             let existing = read_optional(&dir, &poster_name, MAX_IMAGE)?;
             diffs.push(OutputFileDiff {
                 destination: parent.join(&poster_name).to_string_lossy().into_owned(),
-                kind: "poster".into(),
+                kind: kind.into(),
                 old_text: None,
                 new_text: None,
                 expected_hash: existing.as_ref().map(|b| hash(b)),
                 content_hash: hash(&bytes),
                 protected: existing.is_some(),
             });
+            if self.channel == OutputChannel::Adult
+                && payloads
+                    .iter()
+                    .map(Vec::len)
+                    .sum::<usize>()
+                    .saturating_add(bytes.len())
+                    > MAX_ADULT_OUTPUT_BYTES
+            {
+                return Err(RepositoryError::Provider(ProviderFailure::ResponseTooLarge));
+            }
             payloads.push(bytes);
-            break;
+            if self.channel == OutputChannel::Ordinary {
+                break;
+            }
         }
+        self.ensure_access()?;
         let preview = OutputPreview {
             schema_version: 1,
             preview_id: Uuid::new_v4(),
@@ -413,6 +513,7 @@ impl MediaOutputService {
             state: "planned".into(),
         };
         let plan = OutputPlan {
+            channel: self.channel,
             preview: preview.clone(),
             root: PathBuf::from(root.path),
             root_id: root.id,
@@ -432,6 +533,7 @@ impl MediaOutputService {
             .bind(serialized)
             .execute(&mut *tx)
             .await?;
+        self.ensure_access()?;
         tx.commit().await?;
         #[cfg(windows)]
         {
@@ -453,11 +555,28 @@ impl MediaOutputService {
                 windows_leases().lock().await.remove(&preview_id);
             });
         }
+        if let Err(error) = self.ensure_access() {
+            let _ = self.discard(preview.preview_id).await;
+            return Err(error);
+        }
         Ok(preview)
     }
     /// Release platform source leases when a user dismisses an output preview.
     /// The persisted immutable plan remains as history and cannot regain a lease.
     pub async fn discard(&self, preview_id: Uuid) -> Result<(), RepositoryError> {
+        let snapshot: Option<String> =
+            sqlx::query_scalar("SELECT snapshot FROM output_previews WHERE id=?")
+                .bind(preview_id.to_string())
+                .fetch_optional(self.repo.pool())
+                .await?;
+        let Some(snapshot) = snapshot else {
+            return Err(RepositoryError::NotFound);
+        };
+        let plan: OutputPlan =
+            serde_json::from_str(&snapshot).map_err(|_| RepositoryError::CorruptData)?;
+        if plan.channel != self.channel {
+            return Err(RepositoryError::InvalidInput);
+        }
         #[cfg(windows)]
         {
             windows_leases().lock().await.remove(&preview_id);
@@ -465,7 +584,23 @@ impl MediaOutputService {
         sqlx::query("UPDATE file_operations SET state='interrupted',updated_at=MAX(updated_at,?) WHERE id=? AND state IN ('planned','failed') AND id IN (SELECT id FROM output_previews)").bind(Utc::now().timestamp_millis()).bind(preview_id.to_string()).execute(self.repo.pool()).await?;
         Ok(())
     }
-    async fn ensure_ordinary_media(&self, media_id: Uuid) -> Result<(), RepositoryError> {
+    fn root_matches_channel(&self, kind: Option<MediaKind>) -> bool {
+        match self.channel {
+            OutputChannel::Ordinary => kind != Some(MediaKind::AdultVideo),
+            OutputChannel::Adult => kind == Some(MediaKind::AdultVideo),
+        }
+    }
+    fn artwork_allowed(&self, kind: ArtworkKind) -> bool {
+        match self.channel {
+            OutputChannel::Ordinary => kind == ArtworkKind::Poster,
+            OutputChannel::Adult => matches!(
+                kind,
+                ArtworkKind::Cover | ArtworkKind::BackCover | ArtworkKind::Sample
+            ),
+        }
+    }
+    async fn ensure_channel_media(&self, media_id: Uuid) -> Result<(), RepositoryError> {
+        self.ensure_access()?;
         let isolated: bool =
             sqlx::query_scalar("SELECT adult_isolated FROM media_items WHERE id=?")
                 .bind(media_id.to_string())
@@ -476,36 +611,83 @@ impl MediaOutputService {
             .get_media(media_id)
             .await?
             .ok_or(RepositoryError::NotFound)?;
-        if isolated
-            || !matches!(
-                item.kind,
-                MediaKind::Movie
-                    | MediaKind::TvSeries
-                    | MediaKind::TvSeason
-                    | MediaKind::TvEpisode
-                    | MediaKind::Anime
-            )
-        {
+        let valid = match self.channel {
+            OutputChannel::Ordinary => {
+                !isolated
+                    && matches!(
+                        item.kind,
+                        MediaKind::Movie
+                            | MediaKind::TvSeries
+                            | MediaKind::TvSeason
+                            | MediaKind::TvEpisode
+                            | MediaKind::Anime
+                    )
+            }
+            OutputChannel::Adult => isolated && item.kind == MediaKind::AdultVideo,
+        };
+        if !valid {
             return Err(RepositoryError::InvalidInput);
+        }
+        for file in self.repo.list_files(media_id).await? {
+            let root = self
+                .repo
+                .get_root(file.root_id)
+                .await?
+                .ok_or(RepositoryError::NotFound)?;
+            if !root.enabled {
+                return Err(RepositoryError::Conflict);
+            }
+            if !self.root_matches_channel(root.kind) {
+                return Err(RepositoryError::InvalidInput);
+            }
         }
         Ok(())
     }
     pub async fn execute(&self, preview_id: Uuid) -> Result<OutputResult, RepositoryError> {
-        let result = self.execute_inner(preview_id).await;
+        self.execute_cancellable(preview_id, None).await
+    }
+    pub(crate) async fn execute_cancellable(
+        &self,
+        preview_id: Uuid,
+        cancel: Option<&CancellationToken>,
+    ) -> Result<OutputResult, RepositoryError> {
+        let result = self.execute_inner(preview_id, cancel).await;
         #[cfg(windows)]
         {
             windows_leases().lock().await.remove(&preview_id);
         }
+        if result.is_ok() {
+            self.ensure_access()?;
+        }
         result
     }
-    async fn execute_inner(&self, preview_id: Uuid) -> Result<OutputResult, RepositoryError> {
+    async fn execute_inner(
+        &self,
+        preview_id: Uuid,
+        cancel: Option<&CancellationToken>,
+    ) -> Result<OutputResult, RepositoryError> {
         let _gate = self.gate.lock().await;
         let row = sqlx::query("SELECT o.state,p.snapshot FROM file_operations o JOIN output_previews p ON p.id=o.id WHERE o.id=?").bind(preview_id.to_string()).fetch_optional(self.repo.pool()).await?.ok_or(RepositoryError::NotFound)?;
         let state: String = row.try_get("state")?;
         let snapshot: String = row.try_get("snapshot")?;
         let plan: OutputPlan =
             serde_json::from_str(&snapshot).map_err(|_| RepositoryError::CorruptData)?;
-        self.ensure_ordinary_media(plan.preview.media_item_id)
+        self.ensure_access()?;
+        if plan.channel != self.channel {
+            return Err(RepositoryError::InvalidInput);
+        }
+        if self.channel == OutputChannel::Adult {
+            let revoked: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM adult_revoked_output_previews WHERE preview_id=?)",
+            )
+            .bind(preview_id.to_string())
+            .fetch_one(self.repo.pool())
+            .await?;
+            if revoked {
+                return Err(RepositoryError::Conflict);
+            }
+        }
+        self.ensure_channel_media(plan.preview.media_item_id)
             .await?;
         let root = self
             .repo
@@ -513,7 +695,7 @@ impl MediaOutputService {
             .await?
             .ok_or(RepositoryError::NotFound)?;
         if !root.enabled
-            || root.kind == Some(MediaKind::AdultVideo)
+            || !self.root_matches_channel(root.kind)
             || Path::new(&root.path) != plan.root
         {
             return Err(RepositoryError::Conflict);
@@ -557,7 +739,7 @@ impl MediaOutputService {
         if acquired.rows_affected() != 1 {
             return Err(RepositoryError::Conflict);
         }
-        let result = execute_plan(&plan);
+        let result = execute_plan(&plan, self.adult_access.as_ref(), cancel);
         let state = if result.is_ok() {
             "succeeded"
         } else {
@@ -605,7 +787,11 @@ fn verify_completed_plan(plan: &OutputPlan) -> Result<(), RepositoryError> {
     }
     Ok(())
 }
-fn execute_plan(plan: &OutputPlan) -> Result<(usize, usize), RepositoryError> {
+fn execute_plan(
+    plan: &OutputPlan,
+    access: Option<&AdultOutputAccess>,
+    cancel: Option<&CancellationToken>,
+) -> Result<(usize, usize), RepositoryError> {
     if plan.preview.strategy != "preserve" || plan.payloads.len() != plan.preview.files.len() {
         return Err(RepositoryError::CorruptData);
     }
@@ -633,12 +819,26 @@ fn execute_plan(plan: &OutputPlan) -> Result<(usize, usize), RepositoryError> {
         }
     }
     for (diff, payload) in plan.preview.files.iter().zip(&plan.payloads) {
+        if let Some(access) = access {
+            access.ensure()?;
+        }
+        if cancel.is_some_and(CancellationToken::is_cancelled) {
+            return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+        }
         let name = target_name(diff, &plan.relative_parent)?;
         if diff.protected {
             preserved += 1;
             continue;
         }
-        match atomic_create(&dir, &name, payload) {
+        match atomic_create_checked(&dir, &name, payload, || {
+            if let Some(access) = access {
+                access.ensure()?;
+            }
+            if cancel.is_some_and(CancellationToken::is_cancelled) {
+                return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+            }
+            Ok(())
+        }) {
             Ok(true) => written += 1,
             Ok(false) => preserved += 1,
             Err(error) => return Err(error),
@@ -652,7 +852,10 @@ fn target_name(diff: &OutputFileDiff, parent: &Path) -> Result<PathBuf, Reposito
         return Err(RepositoryError::CorruptData);
     }
     let name = relative.file_name().ok_or(RepositoryError::CorruptData)?;
-    if !matches!(diff.kind.as_str(), "nfo" | "poster") {
+    if !matches!(
+        diff.kind.as_str(),
+        "nfo" | "poster" | "cover" | "back_cover" | "sample"
+    ) {
         return Err(RepositoryError::CorruptData);
     }
     Ok(PathBuf::from(name))
@@ -742,7 +945,16 @@ fn read_optional(
     }
     Ok(Some(bytes))
 }
+#[cfg(test)]
 fn atomic_create(dir: &Dir, name: impl AsRef<Path>, bytes: &[u8]) -> Result<bool, RepositoryError> {
+    atomic_create_checked(dir, name, bytes, || Ok(()))
+}
+fn atomic_create_checked(
+    dir: &Dir,
+    name: impl AsRef<Path>,
+    bytes: &[u8],
+    check: impl FnOnce() -> Result<(), RepositoryError>,
+) -> Result<bool, RepositoryError> {
     let name = name.as_ref();
     let temporary = format!(".mediaatlas-{}.tmp", Uuid::new_v4());
     let mut options = OpenOptions::new();
@@ -751,6 +963,8 @@ fn atomic_create(dir: &Dir, name: impl AsRef<Path>, bytes: &[u8]) -> Result<bool
     let result = (|| {
         file.write_all(bytes).map_err(io_error)?;
         file.sync_all().map_err(io_error)?;
+        // Recheck privacy/cancellation after staging and immediately before publication.
+        check()?;
         // Hard-link publication is atomic and cannot clobber an intervening file.
         match dir.hard_link(&temporary, dir, name) {
             Ok(()) => Ok(true),
@@ -821,6 +1035,12 @@ pub fn merge_nfo_known_fields(
         "aired",
         "sourceattribution",
         "sourcelicense",
+        "catalognumber",
+        "catalognamespace",
+        "studio",
+        "label",
+        "set",
+        "releasedate",
     ];
     let mut replacements = Vec::new();
     let mut additions = String::new();
@@ -899,10 +1119,40 @@ fn render_nfo(
     if let Some(value) = item.year {
         fields.insert("year", value.to_string());
     }
+    if item.kind == MediaKind::AdultVideo {
+        if let Some(id) = ids.iter().find(|id| id.is_primary) {
+            fields.insert("catalognumber", id.external_id.clone());
+            fields.insert("catalognamespace", id.namespace.clone());
+        }
+    }
     // Stable locale ordering is supplied by the repository; manual/locked values
     // take precedence when multiple locales must project to a single NFO tag.
     for protected in [false, true] {
         for value in values.iter().filter(|v| v.is_protected() == protected) {
+            if item.kind == MediaKind::AdultVideo && value.field_key == "catalog_numbers" {
+                if let Some(number) = value.value.as_array().and_then(|numbers| {
+                    numbers
+                        .iter()
+                        .find(|number| {
+                            number
+                                .get("is_primary")
+                                .and_then(serde_json::Value::as_bool)
+                                == Some(true)
+                        })
+                        .or_else(|| numbers.first())
+                }) {
+                    if let Some(normalized) =
+                        number.get("normalized").and_then(serde_json::Value::as_str)
+                    {
+                        fields.insert("catalognumber", normalized.to_owned());
+                    }
+                    if let Some(namespace) =
+                        number.get("namespace").and_then(serde_json::Value::as_str)
+                    {
+                        fields.insert("catalognamespace", namespace.to_owned());
+                    }
+                }
+            }
             let tag = match value.field_key.as_str() {
                 "title" => "title",
                 "original_title" => "originaltitle",
@@ -913,6 +1163,14 @@ fn render_nfo(
                 "episode" => "episode",
                 "attribution" => "sourceattribution",
                 "source_license" => "sourcelicense",
+                "catalog_number" if item.kind == MediaKind::AdultVideo => "catalognumber",
+                "namespace" | "catalog_namespace" if item.kind == MediaKind::AdultVideo => {
+                    "catalognamespace"
+                }
+                "studio" if item.kind == MediaKind::AdultVideo => "studio",
+                "label" if item.kind == MediaKind::AdultVideo => "label",
+                "series" if item.kind == MediaKind::AdultVideo => "set",
+                "release_date" if item.kind == MediaKind::AdultVideo => "releasedate",
                 _ => continue,
             };
             if let Some(text) = value
@@ -920,6 +1178,13 @@ fn render_nfo(
                 .as_str()
                 .map(str::to_owned)
                 .or_else(|| value.value.as_i64().map(|v| v.to_string()))
+                .or_else(|| {
+                    value
+                        .value
+                        .get("normalized")
+                        .and_then(serde_json::Value::as_str)
+                        .map(str::to_owned)
+                })
             {
                 if !text.trim().is_empty() {
                     fields.insert(tag, text);
@@ -930,6 +1195,31 @@ fn render_nfo(
     let mut result = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<{root}>\n");
     for (tag, value) in fields {
         result.push_str(&format!("  <{tag}>{}</{tag}>\n", xml_escape(&value)));
+    }
+    if item.kind == MediaKind::AdultVideo {
+        for key in ["performers", "directors"] {
+            let chosen = values
+                .iter()
+                .filter(|value| value.field_key == key)
+                .max_by_key(|value| value.is_protected());
+            if let Some(people) = chosen.and_then(|value| value.value.as_array()) {
+                for person in people.iter().take(200) {
+                    if let Some(name) = person.get("name").and_then(serde_json::Value::as_str) {
+                        if key == "performers" {
+                            result.push_str(&format!(
+                                "  <actor><name>{}</name></actor>\n",
+                                xml_escape(name)
+                            ));
+                        } else {
+                            result.push_str(&format!(
+                                "  <director>{}</director>\n",
+                                xml_escape(name)
+                            ));
+                        }
+                    }
+                }
+            }
+        }
     }
     for id in ids {
         result.push_str(&format!(
@@ -1039,6 +1329,7 @@ async fn decode_thumbnail(
 }
 impl MediaOutputService {
     pub fn thumbnail_bytes(&self, cached: &CachedArtwork) -> Result<Vec<u8>, RepositoryError> {
+        self.ensure_access()?;
         let path = Path::new(&cached.thumbnail_path);
         if path.parent() != Some(self.base_cache.as_path())
             || path.file_name().and_then(|v| v.to_str())
@@ -1077,6 +1368,7 @@ impl MediaOutputService {
         let mut reader = ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png);
         reader.limits(limits);
         reader.decode().map_err(|_| RepositoryError::InvalidInput)?;
+        self.ensure_access()?;
         Ok(bytes)
     }
     pub async fn cache_artwork(
@@ -1086,6 +1378,14 @@ impl MediaOutputService {
         url: &str,
         cancel: &CancellationToken,
     ) -> Result<CachedArtwork, ProviderFailure> {
+        self.ensure_access()
+            .map_err(|_| ProviderFailure::Cancelled)?;
+        if (self.channel == OutputChannel::Adult && job.media_kind != Some(MediaKind::AdultVideo))
+            || (self.channel == OutputChannel::Ordinary
+                && job.media_kind == Some(MediaKind::AdultVideo))
+        {
+            return Err(ProviderFailure::InvalidConfiguration);
+        }
         if cancel.is_cancelled() {
             return Err(ProviderFailure::Cancelled);
         }
@@ -1118,6 +1418,8 @@ impl MediaOutputService {
             .execute(&bounded, RequestSpec::get(url, EngineKind::Image), cancel)
             .await?;
         let decoded = decode_thumbnail(response.body, cancel).await?;
+        self.ensure_access()
+            .map_err(|_| ProviderFailure::Cancelled)?;
         let (format, width, height) = (decoded.format, decoded.width, decoded.height);
         let actual_mime = response
             .content_type
@@ -1135,11 +1437,13 @@ impl MediaOutputService {
             "{content_hash}.{}",
             extension(format).ok_or(ProviderFailure::ParseError)?
         );
-        atomic_create(&cache, &file_name, &decoded.bytes)
+        atomic_create_checked(&cache, &file_name, &decoded.bytes, || self.ensure_access())
             .map_err(|_| ProviderFailure::InvalidConfiguration)?;
         let thumbnail_name = format!("{content_hash}.thumb.png");
-        atomic_create(&cache, &thumbnail_name, &decoded.thumbnail)
-            .map_err(|_| ProviderFailure::InvalidConfiguration)?;
+        atomic_create_checked(&cache, &thumbnail_name, &decoded.thumbnail, || {
+            self.ensure_access()
+        })
+        .map_err(|_| ProviderFailure::InvalidConfiguration)?;
         let cached = CachedArtwork {
             cache_path: self
                 .base_cache
@@ -1158,12 +1462,15 @@ impl MediaOutputService {
         };
         // URL aliases are only create-new. A changed remote URL never overwrites
         // an existing cache snapshot or weakens content-hash validation.
-        atomic_create(
+        atomic_create_checked(
             &cache,
             &mapping,
             &serde_json::to_vec(&cached).map_err(|_| ProviderFailure::ParseError)?,
+            || self.ensure_access(),
         )
         .map_err(|_| ProviderFailure::InvalidConfiguration)?;
+        self.ensure_access()
+            .map_err(|_| ProviderFailure::Cancelled)?;
         Ok(cached)
     }
 }
@@ -1230,6 +1537,210 @@ mod tests {
         .unwrap();
         let service = MediaOutputService::new(repo.clone(), temporary.path().join("cache"));
         (temporary, repo, service, media_id)
+    }
+    async fn adult_library() -> (
+        tempfile::TempDir,
+        LibraryRepository,
+        MediaOutputService,
+        AdultOutputAccess,
+        Uuid,
+    ) {
+        let (temp, repo, _, id) = library().await;
+        let mut item = repo.get_media(id).await.unwrap().unwrap();
+        item.kind = MediaKind::AdultVideo;
+        repo.save_media(&item).await.unwrap();
+        let root_id = repo.list_files(id).await.unwrap()[0].root_id;
+        let mut root = repo.get_root(root_id).await.unwrap().unwrap();
+        root.kind = Some(MediaKind::AdultVideo);
+        repo.save_root(&root).await.unwrap();
+        let access = AdultOutputAccess::new();
+        let service = MediaOutputService::new_adult(
+            repo.clone(),
+            temp.path().join("adult-cache"),
+            access.clone(),
+        );
+        (temp, repo, service, access, id)
+    }
+    #[tokio::test]
+    async fn adult_channel_is_explicit_revocable_and_never_crosses_ordinary_plans() {
+        let (temp, repo, service, access, id) = adult_library().await;
+        let ordinary = MediaOutputService::new(repo.clone(), temp.path().join("cache"));
+        assert_eq!(
+            ordinary.preview(id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        let preview = service.preview(id).await.unwrap();
+        assert_eq!(
+            ordinary.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert_eq!(
+            ordinary.discard(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        access.revoke();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Provider(ProviderFailure::Cancelled)
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        let fresh = MediaOutputService::new_adult(
+            repo.clone(),
+            temp.path().join("adult-cache"),
+            AdultOutputAccess::new(),
+        );
+        assert_eq!(fresh.execute(preview.preview_id).await.unwrap().written, 1);
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
+            b"untouched video bytes"
+        );
+        sqlx::query("UPDATE media_items SET adult_isolated=0 WHERE id=?")
+            .bind(id.to_string())
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            fresh.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+    }
+    #[test]
+    fn adult_nfo_projects_catalog_studio_and_scoped_people_without_movie_matching() {
+        let now = Utc::now();
+        let item = MediaItem {
+            id: Uuid::new_v4(),
+            kind: MediaKind::AdultVideo,
+            title: "Synthetic neutral metadata".into(),
+            original_title: None,
+            year: None,
+            created_at: now,
+            updated_at: now,
+        };
+        let values: Vec<_> = [("catalog_numbers", serde_json::json!([{"raw":"syn_001","normalized":"SYN-001","namespace":"synthetic","is_primary":true}])), ("studio",serde_json::json!("Synthetic & Co")), ("label",serde_json::json!("Synthetic label")), ("series",serde_json::json!("Synthetic series")), ("performers",serde_json::json!([{"provider_id":"synthetic","remote_id":"person-a","name":"Neutral person","aliases":[]}]))].into_iter().map(|(key,value)| MetadataValue { id:Uuid::new_v4(),media_item_id:item.id,field_key:key.into(),locale:None,value,provider_id:Some("synthetic".into()),source_url:None,fetched_at:Some(now),confidence:None,is_user_modified:false,is_locked:false }).collect();
+        let nfo = render_nfo(&item, &values, &[]).unwrap();
+        for expected in [
+            "<catalognumber>SYN-001</catalognumber>",
+            "<catalognamespace>synthetic</catalognamespace>",
+            "<studio>Synthetic &amp; Co</studio>",
+            "<label>Synthetic label</label>",
+            "<set>Synthetic series</set>",
+            "<actor><name>Neutral person</name></actor>",
+        ] {
+            assert!(nfo.contains(expected), "{expected}");
+        }
+    }
+    #[tokio::test]
+    async fn selected_adult_cover_and_samples_export_only_from_separate_approved_cache() {
+        let (temp, repo, service, access, id) = adult_library().await;
+        let cache = temp.path().join("adult-cache");
+        std::fs::create_dir(&cache).unwrap();
+        let bytes = png();
+        let content_hash = hash(&bytes);
+        let cached = cache.join(format!("{content_hash}.png"));
+        std::fs::write(&cached, &bytes).unwrap();
+        for kind in [
+            ArtworkKind::Cover,
+            ArtworkKind::BackCover,
+            ArtworkKind::Sample,
+            ArtworkKind::Sample,
+        ] {
+            repo.save_artwork(&mediaatlas_domain::Artwork {
+                id: Uuid::new_v4(),
+                media_item_id: id,
+                kind,
+                cache_path: Some(cached.to_string_lossy().into_owned()),
+                source_url: None,
+                provider_id: Some("synthetic.image".into()),
+                width: Some(32),
+                height: Some(48),
+                content_hash: Some(content_hash.clone()),
+                created_at: Utc::now(),
+            })
+            .await
+            .unwrap();
+        }
+        let preview = service.preview(id).await.unwrap();
+        assert_eq!(preview.files.len(), 5);
+        assert!(!temp.path().join("media/Example-cover.png").exists());
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap().written,
+            5
+        );
+        for name in [
+            "Example-cover.png",
+            "Example-back_cover.png",
+            "Example-sample-01.png",
+            "Example-sample-02.png",
+        ] {
+            assert_eq!(
+                std::fs::read(temp.path().join("media").join(name)).unwrap(),
+                bytes
+            );
+        }
+        let ordinary = MediaOutputService::new(repo, temp.path().join("cache"));
+        let mut job = image_job();
+        job.media_kind = Some(MediaKind::AdultVideo);
+        assert_eq!(
+            ordinary
+                .cache_artwork(
+                    &NetworkEngine::for_loopback(1),
+                    &job,
+                    "http://127.0.0.1:1/not-requested",
+                    &CancellationToken::new()
+                )
+                .await
+                .unwrap_err(),
+            ProviderFailure::InvalidConfiguration
+        );
+        access.revoke();
+        assert_eq!(
+            service
+                .cache_artwork(
+                    &NetworkEngine::for_loopback(1),
+                    &job,
+                    "http://127.0.0.1:1/not-requested",
+                    &CancellationToken::new()
+                )
+                .await
+                .unwrap_err(),
+            ProviderFailure::Cancelled
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
+            b"untouched video bytes"
+        );
+    }
+    #[test]
+    fn revoked_grant_after_staging_cannot_publish_and_cleans_the_temporary_file() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = open_absolute_dir(temp.path(), false).unwrap();
+        let access = AdultOutputAccess::new();
+        assert_eq!(
+            atomic_create_checked(&dir, "never.nfo", b"synthetic staged payload", || {
+                access.revoke();
+                access.ensure()
+            })
+            .unwrap_err(),
+            RepositoryError::Provider(ProviderFailure::Cancelled)
+        );
+        assert!(!temp.path().join("never.nfo").exists());
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 0);
+    }
+    #[tokio::test]
+    async fn cancelled_output_token_rejects_unstarted_publication() {
+        let (temp, _, service, _, id) = adult_library().await;
+        let preview = service.preview(id).await.unwrap();
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        assert_eq!(
+            service
+                .execute_cancellable(preview.preview_id, Some(&cancel))
+                .await
+                .unwrap_err(),
+            RepositoryError::Provider(ProviderFailure::Cancelled)
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
     }
     #[tokio::test]
     async fn explicit_preview_execute_records_idempotency_and_preserves_source() {
