@@ -139,13 +139,19 @@ function AdultWorkspace() {
       ) : tab === "roots" ? (
         <RootsPage
           adult
-          onScan={(rootId) => {
-            setScanSearch({ root: rootId });
+          onScan={(rootId, taskId) => {
+            setScanSearch({ root: rootId, task: taskId });
             setTab("scanner");
           }}
         />
       ) : tab === "scanner" ? (
-        <ScannerPage adult search={scanSearch} onSearch={setScanSearch} />
+        <ScannerPage
+          adult
+          search={scanSearch}
+          onSearch={setScanSearch}
+          onAddRoot={() => setTab("roots")}
+          onBrowse={() => setTab("library")}
+        />
       ) : (
         <AdultTasks />
       )}

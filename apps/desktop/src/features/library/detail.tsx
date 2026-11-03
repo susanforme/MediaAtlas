@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { libraryApi } from "../../api/library";
 import { Button } from "../../components/ui/button";
 import { NativeOpen } from "./native-open";
+import "../scraper/translations";
 import {
   Empty,
   ErrorNotice,
@@ -50,6 +51,13 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         description={`${t(`kind_${data.media.kind}`)} · ${data.media.year ?? t("unknownYear")}`}
       >
         <NativeOpen files={data.files} />
+        {["movie", "tv_series", "anime"].includes(data.media.kind) && (
+          <Button asChild variant="outline">
+            <Link to="/scraper" search={{ media: data.media.id }}>
+              {t("scraperThisMedia")}
+            </Link>
+          </Button>
+        )}
         <Button asChild variant="ghost">
           <Link to="/tools" className="action-link">
             {t("videoTools")}

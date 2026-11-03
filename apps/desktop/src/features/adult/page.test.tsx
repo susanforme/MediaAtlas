@@ -319,9 +319,16 @@ it("shows adult roots and scans only through the dedicated tools", async () => {
   expect(adultApi.roots).toHaveBeenCalled();
   expect(libraryApi.roots).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "File scanner" }));
-  await screen.findByLabelText("Choose an enabled root");
+  const addDirectory = await screen.findByRole("button", {
+    name: "Add media directory",
+  });
   expect(adultApi.tasks).toHaveBeenCalled();
   expect(libraryApi.tasks).not.toHaveBeenCalled();
+  fireEvent.click(addDirectory);
+  expect(
+    await screen.findByRole("button", { name: "Add root" }),
+  ).toBeInTheDocument();
+  expect(libraryApi.roots).not.toHaveBeenCalled();
 });
 it("renders the independent workflow in simplified Chinese", async () => {
   await i18n.changeLanguage("zh-CN");

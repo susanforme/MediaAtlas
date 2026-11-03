@@ -16,8 +16,10 @@ import {
   ProvidersPage,
 } from "./features/providers/pages";
 import "./features/scraper/navigation";
+import { validateScraperSearch } from "./features/scraper/search";
 import "./features/music/translations";
 import "./features/tools/navigation";
+import { validateToolsSearch } from "./features/tools/search";
 
 const DashboardPage = lazyRouteComponent(
   () => import("./features/library/pages"),
@@ -83,13 +85,18 @@ const adultToolsRoute = createRoute({
     "AdultToolsPage",
   ),
 });
+const MediaToolsPage = lazyRouteComponent(
+  () => import("./features/tools/page"),
+  "MediaToolsPage",
+);
 const toolsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tools",
-  component: lazyRouteComponent(
-    () => import("./features/tools/page"),
-    "MediaToolsPage",
-  ),
+  validateSearch: validateToolsSearch,
+  component: () => {
+    const { media } = toolsRoute.useSearch();
+    return <MediaToolsPage key={media ?? "local"} mediaId={media} />;
+  },
 });
 const adultDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -114,7 +121,14 @@ const detailRoute = createRoute({
 const rootsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/roots",
-  component: RootsPage,
+  component: () => {
+    const navigate = rootsRoute.useNavigate();
+    return (
+      <RootsPage
+        onNavigateScan={(search) => void navigate({ to: "/scanner", search })}
+      />
+    );
+  },
 });
 const scannerRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -132,13 +146,18 @@ const scannerRoute = createRoute({
     );
   },
 });
+const ScraperPage = lazyRouteComponent(
+  () => import("./features/scraper/page"),
+  "ScraperPage",
+);
 const scraperRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/scraper",
-  component: lazyRouteComponent(
-    () => import("./features/scraper/page"),
-    "ScraperPage",
-  ),
+  validateSearch: validateScraperSearch,
+  component: () => {
+    const { media } = scraperRoute.useSearch();
+    return <ScraperPage key={media ?? "search"} mediaId={media} />;
+  },
 });
 const MusicAlbumRoute = lazyRouteComponent(
   () => import("./features/music/page"),

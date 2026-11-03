@@ -14,7 +14,8 @@
       "!**/target",
       "!**/gen",
       "!pnpm-lock.yaml",
-      "!**/*.md"
+      "!**/*.md",
+      "!work"
     ],
     "maxSize": 3145728
   },
