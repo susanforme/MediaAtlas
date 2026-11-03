@@ -16,7 +16,10 @@ import {
   ProvidersPage,
 } from "./features/providers/pages";
 import "./features/scraper/navigation";
-import { validateScraperSearch } from "./features/scraper/search";
+import {
+  validateScraperReturnSearch,
+  validateScraperSearch,
+} from "./features/scraper/search";
 import "./features/music/translations";
 import "./features/tools/navigation";
 import { validateToolsSearch } from "./features/tools/search";
@@ -207,7 +210,16 @@ const tasksRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  component: SettingsPage,
+  validateSearch: validateScraperReturnSearch,
+  component: () => {
+    const search = settingsRoute.useSearch();
+    return (
+      <SettingsPage
+        returnToScraper={search.from === "scraper"}
+        returnMediaId={search.media}
+      />
+    );
+  },
 });
 const diagnosticsRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -220,7 +232,16 @@ const diagnosticsRoute = createRoute({
 const providersRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/providers",
-  component: ProvidersPage,
+  validateSearch: validateScraperReturnSearch,
+  component: () => {
+    const search = providersRoute.useSearch();
+    return (
+      <ProvidersPage
+        returnToScraper={search.from === "scraper"}
+        returnMediaId={search.media}
+      />
+    );
+  },
 });
 const networkRoute = createRoute({
   getParentRoute: () => rootRoute,
