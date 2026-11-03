@@ -1,0 +1,49 @@
+{
+  "version": "0.1.0-beta.1",
+  "mode": "Browser rendering only; not native application, real backend or installation evidence",
+  "locale": "zh-CN",
+  "viewport": {
+    "width": 1440,
+    "height": 1080
+  },
+  "synthetic_data": true,
+  "native_backend": false,
+  "page_errors": [],
+  "screenshots": [
+    {
+      "route": "/library",
+      "file": "browser-mock-01-library.png",
+      "heading": "媒体库",
+      "mode": "Chromium browser with synthetic Mock IPC",
+      "errors": 0
+    },
+    {
+      "route": "/tools?media=synthetic-film-1",
+      "file": "browser-mock-02-tools.png",
+      "heading": "媒体工具",
+      "mode": "Chromium browser with synthetic Mock IPC",
+      "errors": 0
+    },
+    {
+      "route": "/music",
+      "file": "browser-mock-03-music.png",
+      "heading": "音乐",
+      "mode": "Chromium browser with synthetic Mock IPC",
+      "errors": 0
+    },
+    {
+      "route": "/settings",
+      "file": "browser-mock-04-settings.png",
+      "heading": "设置",
+      "mode": "Chromium browser with synthetic Mock IPC",
+      "errors": 0
+    },
+    {
+      "route": "/diagnostics",
+      "file": "browser-mock-05-maintenance.png",
+      "heading": "备份与维护",
+      "mode": "Chromium browser with synthetic Mock IPC",
+      "errors": 0
+    }
+  ]
+}

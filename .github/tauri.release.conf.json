@@ -1,5 +1,42 @@
 {
   "bundle": {
-    "active": true
+    "active": true,
+    "createUpdaterArtifacts": false,
+    "resources": {
+      "../../../LICENSE-STATUS.md": "LICENSE-STATUS.md",
+      "../../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../../../docs/dependency-licenses.json": "docs/dependency-licenses.json",
+      "../../../docs/third-party-licenses/": "docs/third-party-licenses/"
+    },
+    "windows": {
+      "nsis": {
+        "compression": "zlib"
+      },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "bundleVCRuntime": false
+    },
+    "linux": {
+      "appimage": {
+        "bundleMediaFramework": false
+      },
+      "deb": {
+        "depends": [
+          "libc6 (>= 2.35)",
+          "libwebkit2gtk-4.1-0",
+          "libgtk-3-0",
+          "libglib2.0-0",
+          "libdbus-1-3",
+          "xdg-utils"
+        ]
+      }
+    }
+  },
+  "build": {
+    "windows": {
+      "staticVCRuntime": true
+    }
   }
 }

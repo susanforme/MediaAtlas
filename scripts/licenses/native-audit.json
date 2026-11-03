@@ -1,0 +1,371 @@
+{
+  "schema_version": 1,
+  "date_utc": "2026-11-03",
+  "linux_target": "x86_64-unknown-linux-gnu",
+  "features": {
+    "keyring": "sync-secret-service + crypto-rust; vendored feature removed",
+    "libdbus-sys": "dynamic system pkg-config; not bundled in current release",
+    "libsqlite3-sys": "bundled SQLite 3.46.0",
+    "reqwest": "default-features=false; rustls-tls-native-roots + json + http2",
+    "openssl-sys": "no enabled node; cargo tree --workspace --locked --target x86_64-unknown-linux-gnu -e features -i openssl-sys prints nothing",
+    "openssl-probe": "pure-Rust CA location probe, not OpenSSL library"
+  },
+  "libdbus": {
+    "version": "1.14.4",
+    "binding_version": "0.2.7",
+    "selected_license": "AFL-2.1",
+    "not_lgpl": "vendor/dbus/COPYING grants AFL-2.1 OR GPL-2.0-or-later. The bindings MIT/Apache license does not replace the vendored C library license.",
+    "source_strategy": "Supply entire unmodified libdbus-sys-0.2.7.crate with lockfile-verified hash, including vendor/dbus, build_vendored.rs, all original copyright headers and COPYING. No MediaAtlas source license is selected; no LGPL relinking obligation applies to the selected AFL library alternative.",
+    "source_files": [
+      {
+        "path": "vendor/dbus/dbus/dbus-address.c",
+        "sha256": "734205c689c2c875480e590e5161f9f75c2d5f3b768b5a0e1d096942f9ba56c0",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-address.c  Server address parser.\n *\n * Copyright (C) 2003  CodeFactory AB\n * Copyright (C) 2004-2007  Red Hat, Inc.\n * Copyright (C) 2007  Ralf Habacker\n * Copyright (C) 2013  Chengwei Yang / Intel\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-auth.c",
+        "sha256": "c30a70e3a69f37c9502f2fbbd22f3ae32d4faf037135bfcddcdd3ad391378397",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-auth.c Authentication\n *\n * Copyright (C) 2002, 2003, 2004 Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-bus.c",
+        "sha256": "fd3eb57aa49cdb8324b03e1dff2e3ff19ce7ce086b75d69ade7e4903fc3e0c62",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-bus.c  Convenience functions for communicating with the bus.\n *\n * Copyright (C) 2003  CodeFactory AB\n * Copyright (C) 2003  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-connection.c",
+        "sha256": "e91977833aabe04827b5028817c98d5f8b53629fb3696d00c41ab39e8ef84291",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-connection.c DBusConnection object\n *\n * Copyright (C) 2002-2006  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-credentials.c",
+        "sha256": "90abde0d8cbdd7a4e89a65caf82e4e7661ae1c28437a3cc86a66bcac5b5bb809",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-credentials.c Credentials provable through authentication\n *\n * Copyright (C) 2007 Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-errors.c",
+        "sha256": "6cb7e4a9698bcfea2ee56a645d223a94ef6f3795e5603cfb60a47f3b95ee48f7",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-errors.c Error reporting\n *\n * Copyright (C) 2002, 2004  Red Hat Inc.\n * Copyright (C) 2003  CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-keyring.c",
+        "sha256": "748efa82167b2a786e71827782a722f9f2cba3b3dc6e0626123835f4459bc99e",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-keyring.c Store secret cookies in your homedir\n *\n * Copyright (C) 2003, 2004  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-marshal-byteswap.c",
+        "sha256": "4f3f798daa1d315e9ed1c68eace5a63862338cd69068ed797660d9c8ad9c29bc",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-marshal-byteswap.c  Swap a block of marshaled data\n *\n * Copyright (C) 2005 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-marshal-header.c",
+        "sha256": "523edab210e7af838b4469c9ddacd189217a2ee237b608934d5a52c6d22eb188",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-marshal-header.c  Managing marshaling/demarshaling of message headers\n *\n * Copyright (C) 2005  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-marshal-recursive.c",
+        "sha256": "7e9237fa810b04ba5dfeaf053f1eddd98aca1f1c5894d6c9c7af5e54443d3752",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-marshal-recursive.c  Marshalling routines for recursive types\n *\n * Copyright (C) 2004, 2005 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-marshal-validate.c",
+        "sha256": "e65afdc80be613b23f80592cdfe10223a498a14473ba74a5d131c63b364d05f0",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-marshal-validate.c Validation routines for marshaled data\n *\n * Copyright (C) 2005 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-message.c",
+        "sha256": "433c3a0c91c5bf7e98f320386a74d277b7a65d360b1aeda30886dac2ec57b893",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-message.c  DBusMessage object\n *\n * Copyright (C) 2002, 2003, 2004, 2005  Red Hat Inc.\n * Copyright (C) 2002, 2003  CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-misc.c",
+        "sha256": "6d1789e9eaf5d5386deb66c0a6f467b2701911b4bd40e255243f21ef4ccd2bee",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-misc.c  A few assorted public functions that don't fit elsewhere\n *\n * Copyright (C) 2006 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-nonce.c",
+        "sha256": "6352bb3092fcc78d58b598908ae5bda674c27a591c038360c718b32d3f494ac6",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-nonce.c  Nonce handling functions used by nonce-tcp (internal to D-Bus implementation)\n *\n * Copyright (C) 2009 Klaralvdalens Datakonsult AB, a KDAB Group company, info@kdab.net\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-object-tree.c",
+        "sha256": "4d26336fded71ca1e2a05534a605a4cf98d572759672323363f8e8f7ffc019e9",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-object-tree.c  DBusObjectTree (internals of DBusConnection)\n *\n * Copyright (C) 2003, 2005  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-pending-call.c",
+        "sha256": "16dee76e1c3e758016a4d941f3d5a0ffdeace992ae5807547c69d8da19899bf0",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-pending-call.c Object representing a call in progress.\n *\n * Copyright (C) 2002, 2003 Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-resources.c",
+        "sha256": "bc919687f25f667d71b9f329c3c8074be50dfa4624ad5499e1a26ac841e3bc0e",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-resources.c Resource tracking/limits\n *\n * Copyright (C) 2003  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-server-debug-pipe.c",
+        "sha256": "065c20be529d2dd0c335a5291be2f7752c69721f9a300aa6688fc885514dfcda",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-server-debug-pipe.c In-proc debug server implementation\n *\n * Copyright (C) 2003  CodeFactory AB\n * Copyright (C) 2003, 2004  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-server-socket.c",
+        "sha256": "8592455bddad3913cb981c12ff783f6e1bdb082dd48563959b1846ab25d6fdd8",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-server-socket.c Server implementation for sockets\n *\n * Copyright (C) 2002, 2003, 2004, 2006  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-server.c",
+        "sha256": "c76c6c49785b320267e37ddf65e4e534c842cc91bfe00a5b37e2f46248433102",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-server.c DBusServer object\n *\n * Copyright (C) 2002, 2003, 2004, 2005 Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-sha.c",
+        "sha256": "0f17343877056f7bc46a2a7911fcd5dac1f8cfe213ded79f524674d66afc5f4c",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-sha.c SHA-1 implementation\n *\n * Copyright (C) 2003 Red Hat Inc.\n * Copyright (C) 1995 A. M. Kuchling\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-signature.c",
+        "sha256": "90ea486088e783e2749fdc832a256ab3ff165890cd3dc96d311163e2739e351f",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-signature.c  Routines for reading recursive type signatures\n *\n * Copyright (C) 2005 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-syntax.c",
+        "sha256": "8c8038a7ca6a08089651fe2efc1054bea0d3a810b18b2b47e8234bf59a5de4fd",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-syntax.c - utility functions for strings with special syntax\n *\n * Author: Simon McVittie <simon.mcvittie@collabora.co.uk>\n * Copyright \u00a9 2011 Nokia Corporation\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-threads.c",
+        "sha256": "d3b27f8aa6413f9b8502a7b6b5bca24d91940ec224055d7d8d12747375e5e2e7",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-threads.h  D-Bus threads handling\n *\n * Copyright (C) 2002, 2003, 2006 Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-timeout.c",
+        "sha256": "2b14cc034ed6c464b67b833a82be8f6363af7907600cf9bb3ebc049ece24ed6b",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-timeout.c DBusTimeout implementation\n *\n * Copyright (C) 2003  CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-transport-socket.c",
+        "sha256": "c51f42326c6240f1e81376a7ef67113570378cfadfe15514555cc9bcabd79e16",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-transport-socket.c  Socket subclasses of DBusTransport\n *\n * Copyright (C) 2002, 2003, 2004, 2006  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-transport.c",
+        "sha256": "1ed1effc5d72f2698bf6e22235707a92c15deae458f8e06caea584ceac404e7d",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-transport.c DBusTransport object (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-watch.c",
+        "sha256": "08df96bf42719ffa2ec2668fc62904048665f062deb576abd140f3d7bd5dc25b",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-watch.c DBusWatch implementation\n *\n * Copyright (C) 2002, 2003  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-dataslot.c",
+        "sha256": "67a60fba8aa1f5b089d317ed5d73b6c977e0bd072f8f27b46740bc978308789b",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-dataslot.c  storing data on objects\n *\n * Copyright (C) 2003 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-file.c",
+        "sha256": "22023a3eddb084d064f6d16ee5f12124818337bb7e45601af550ccd4aabc175c",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-sysdeps-unix.c Wrappers around UNIX system/libc features (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n * Copyright (C) 2003 CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-hash.c",
+        "sha256": "9c0f63103b5673c1d0b6c21f419b2fc8605ef39faa0f2b0ccf212d02174272cc",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-hash.c Generic hash table utility (internal to D-Bus implementation)\n *\n * Copyright 1991-1993 The Regents of the University of California.\n * Copyright 1994 Sun Microsystems, Inc.\n * Copyright 2002-2005 Red Hat, Inc.\n * Copyright 2003 Joe Shaw\n * Copyright 2006 Sjoerd Simons\n * Copyright 2010 Fridrich \u0160trba\n * Copyright 2016 Ralf Habacker\n * Copyright 2017 Endless Mobile, Inc.\n *\n * Hash table implementation based on generic/tclHash.c from the Tcl\n * source code. The original Tcl license applies to portions of the\n * code from tclHash.c; the Tcl license follows this standad D-Bus\n * license information.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n/*\n * The following copyright applies to code from the Tcl distribution.\n *\n * Copyright (c) 1991-1993 The Regents of the University of California.\n * Copyright (c) 1994 Sun Microsystems, Inc.\n *\n * This software is copyrighted by the Regents of the University of\n * California, Sun Microsystems, Inc., Scriptics Corporation, and\n * other parties.  The following terms apply to all files associated\n * with the software unless explicitly disclaimed in individual files.\n *\n * The authors hereby grant permission to use, copy, modify,\n * distribute, and license this software and its documentation for any\n * purpose, provided that existing copyright notices are retained in\n * all copies and that this notice is included verbatim in any\n * distributions. No written agreement, license, or royalty fee is\n * required for any of the authorized uses.  Modifications to this\n * software may be copyrighted by their authors and need not follow\n * the licensing terms described here, provided that the new terms are\n * clearly indicated on the first page of each file where they apply.\n *\n * IN NO EVENT SHALL THE AUTHORS OR DISTRIBUTORS BE LIABLE TO ANY\n * PARTY FOR DIRECT, INDIRECT, SPECIAL, INCIDENTAL, OR CONSEQUENTIAL\n * DAMAGES ARISING OUT OF THE USE OF THIS SOFTWARE, ITS DOCUMENTATION,\n * OR ANY DERIVATIVES THEREOF, EVEN IF THE AUTHORS HAVE BEEN ADVISED\n * OF THE POSSIBILITY OF SUCH DAMAGE.\n *\n * THE AUTHORS AND DISTRIBUTORS SPECIFICALLY DISCLAIM ANY WARRANTIES,\n * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF\n * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND\n * NON-INFRINGEMENT.  THIS SOFTWARE IS PROVIDED ON AN \"AS IS\" BASIS,\n * AND THE AUTHORS AND DISTRIBUTORS HAVE NO OBLIGATION TO PROVIDE\n * MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.\n *\n * GOVERNMENT USE: If you are acquiring this software on behalf of the\n * U.S. government, the Government shall have only \"Restricted Rights\"\n * in the software and related documentation as defined in the Federal\n * Acquisition Regulations (FARs) in Clause 52.227.19 (c) (2).  If you\n * are acquiring the software on behalf of the Department of Defense,\n * the software shall be classified as \"Commercial Computer Software\"\n * and the Government shall have only \"Restricted Rights\" as defined\n * in Clause 252.227-7013 (c) (1) of DFARs.  Notwithstanding the\n * foregoing, the authors grant the U.S. Government and others acting\n * in its behalf permission to use and distribute the software in\n * accordance with the terms specified in this license.\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-internals.c",
+        "sha256": "c6dc83b6c4a13921c2a423f0a0354648523f41b2a468af5d4d18c5f383bde756",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-internals.c  random utility stuff (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-list.c",
+        "sha256": "52cd0df14439c33af224b046213013074caa28a8820e29c76da3280c42720e85",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-list.c Generic linked list utility (internal to D-Bus implementation)\n *\n * Copyright (C) 2002  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-marshal-basic.c",
+        "sha256": "5695218fd4a61e3e888395eafcae9ffaaf307bae6534f03db5cc9cb88f2c019e",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-marshal-basic.c  Marshalling routines for basic (primitive) types\n *\n * Copyright (C) 2002 CodeFactory AB\n * Copyright (C) 2003, 2004, 2005 Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-memory.c",
+        "sha256": "fa7db65ae5a27cc9898dcdc72a80eaf918e30f1e7c040a83814420e6c8da69c7",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-memory.c  D-Bus memory handling\n *\n * Copyright (C) 2002, 2003  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-mempool.c",
+        "sha256": "89c6075e5695f6dea4ad34958e26281acbc952a9a54fa603cf74350882e32ef3",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-mempool.h Memory pools\n *\n * Copyright (C) 2002, 2003  Red Hat, Inc.\n * Copyright (C) 2003  CodeFactory AB\n * Copyright (C) 2011-2012  Collabora Ltd.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-pipe.c",
+        "sha256": "c826903ff91eaccf359e043c1a8a5bf34eb347200c5c7ae5790d0e262eea2ec8",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-pipe.c pipe implementation (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n * Copyright (C) 2003 CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-string.c",
+        "sha256": "cc9f6be7fff9b81675dd8990c45897b0e29009dd210754fdc9817e3b76c50c44",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-string.c String utility class (internal to D-Bus implementation)\n *\n * Copyright 2002-2007 Red Hat, Inc.\n * Copyright 2003 CodeFactory AB\n * Copyright 2003 Mark McLoughlin\n * Copyright 2004 Michael Meeks\n * Copyright 2006-2014 Ralf Habacker <ralf.habacker@freenet.de>\n * Copyright 2006-2018 Collabora Ltd.\n * Copyright 2007 Allison Lortie\n * Copyright 2011 Roberto Guido\n * Copyright 2013 Chengwei Yang / Intel\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-sysdeps.c",
+        "sha256": "b13dc86ada924016c585f48db8988a86fac78e07db9d3a9f906b90e6304dae29",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-sysdeps.c Wrappers around system/libc features shared between UNIX and Windows (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n * Copyright (C) 2003 CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-uuidgen.c",
+        "sha256": "114d57c0f2bf579e8bd0d6bb2734c88413fd9a54ac6c617767bad66b21ece3a5",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-uuidgen.c  The guts of the dbus-uuidgen binary live in libdbus, in this file.\n *\n * Copyright (C) 2006  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-server-unix.c",
+        "sha256": "77b5f6b89723a1bb76addcc02fd07e49329e3737b305330fcec93bf06e7ab048",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-server-unix.c Server implementation for Unix network protocols.\n *\n * Copyright (C) 2002, 2003, 2004  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-file-unix.c",
+        "sha256": "615e0fdd00567198be9e959fc83565c9911ff68afd13844a4ec3608a169001e2",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-file-unix.c unix related file implementation (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n * Copyright (C) 2003 CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-pipe-unix.c",
+        "sha256": "bb6483794fd09461f0867a0cfe24a1da92f2df5c46cce4086e819c0d448ec39c",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-pipe-unix.c unix related pipe implementation\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n * Copyright (C) 2003 CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-sysdeps-pthread.c",
+        "sha256": "1f867e164631eb65cd574ee5c35db2b5e2a10ff61fb70eaf3b41eab0cdfcd33d",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-sysdeps-pthread.c Implements threads using pthreads (internal to libdbus)\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-sysdeps-unix.c",
+        "sha256": "d33c16198f83865438e253b7b7e946b10713eb6c034866aa5fa7e6174e74e3ae",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-sysdeps-unix.c Wrappers around UNIX system/libc features (internal to D-Bus implementation)\n *\n * Copyright (C) 2002, 2003, 2006  Red Hat, Inc.\n * Copyright (C) 2003 CodeFactory AB\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-transport-unix.c",
+        "sha256": "7de0ef9fc515b554a1e651efdfa1aaf17447308e5f68baa9025e14b63b3f0303",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-transport-unix.c UNIX socket subclasses of DBusTransport\n *\n * Copyright (C) 2002, 2003, 2004  Red Hat Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n\n",
+        "other_permissive_license_in_header": false
+      },
+      {
+        "path": "vendor/dbus/dbus/dbus-userdb.c",
+        "sha256": "b828f2906e54a0a36a2f794b84789fdbf1086c4fd6a612e320e4eda9c13ea355",
+        "afl_2_1_option_in_header": true,
+        "header": "/* -*- mode: C; c-file-style: \"gnu\"; indent-tabs-mode: nil; -*- */\n/* dbus-userdb.c User database abstraction\n *\n * Copyright (C) 2003, 2004  Red Hat, Inc.\n *\n * Licensed under the Academic Free License version 2.1\n *\n * This program is free software; you can redistribute it and/or modify\n * it under the terms of the GNU General Public License as published by\n * the Free Software Foundation; either version 2 of the License, or\n * (at your option) any later version.\n *\n * This program is distributed in the hope that it will be useful,\n * but WITHOUT ANY WARRANTY; without even the implied warranty of\n * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the\n * GNU General Public License for more details.\n *\n * You should have received a copy of the GNU General Public License\n * along with this program; if not, write to the Free Software\n * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA\n *\n */\n",
+        "other_permissive_license_in_header": false
+      }
+    ],
+    "scope": "The vendored 1.14.4 source/headers below are retained as over-inclusive historical/optional source materials. They are not compiled into the current release."
+  },
+  "native_build_candidates": [
+    ["gdk-sys", "0.18.2"],
+    ["gtk", "0.18.2"],
+    ["inotify-sys", "0.1.8"],
+    ["libdbus-sys", "0.2.7"],
+    ["libsqlite3-sys", "0.30.1"],
+    ["ring", "0.17.14"],
+    ["wry", "0.57.1"],
+    ["x11", "2.21.0"],
+    ["x11-dl", "2.21.0"]
+  ],
+  "method": "cargo tree --workspace --locked --target x86_64-unknown-linux-gnu -e normal,build --prefix none, then inspect build.rs for C build/link/pkg-config markers. This is static feature/build-script evidence; actual release ELF and package inspection remain required.",
+  "current_release_graph": {
+    "target": "x86_64-unknown-linux-gnu",
+    "selected_openssl_sys": false,
+    "method": "cargo tree --workspace --locked --target TARGET, selected normal/build edges plus inverted libdbus features. Static feature evidence only; actual executable and package inspection are separate.",
+    "libdbus_features": "libdbus-sys v0.2.7\n\u251c\u2500\u2500 libdbus-sys feature \"default\"\n\u2502   \u2514\u2500\u2500 dbus v0.9.12\n\u2502       \u2514\u2500\u2500 dbus feature \"default\"\n\u2502           \u251c\u2500\u2500 dbus-secret-service v4.1.0\n\u2502           \u2502   \u251c\u2500\u2500 dbus-secret-service feature \"crypto-rust\"\n\u2502           \u2502   \u2502   \u2514\u2500\u2500 keyring feature \"crypto-rust\"\n\u2502           \u2502   \u2502       \u2514\u2500\u2500 mediaatlas-infrastructure v0.1.0-beta.1 (./crates/infrastructure)\n\u2502           \u2502   \u2502           \u2514\u2500\u2500 mediaatlas-infrastructure feature \"default\" (command-line)\n\u2502           \u2502   \u2502               \u2514\u2500\u2500 mediaatlas-desktop v0.1.0-beta.1 (./apps/desktop/src-tauri)\n\u2502           \u2502   \u2502                   \u2514\u2500\u2500 mediaatlas-desktop feature \"default\" (command-line)\n\u2502           \u2502   \u2514\u2500\u2500 dbus-secret-service feature \"default\"\n\u2502           \u2502       \u2514\u2500\u2500 keyring v3.6.3\n\u2502           \u2502           \u251c\u2500\u2500 keyring feature \"apple-native\"\n\u2502           \u2502           \u2502   \u2514\u2500\u2500 mediaatlas-infrastructure v0.1.0-beta.1 (./crates/infrastructure) (*)\n\u2502           \u2502           \u251c\u2500\u2500 keyring feature \"crypto-rust\" (*)\n\u2502           \u2502           \u251c\u2500\u2500 keyring feature \"default\"\n\u2502           \u2502           \u2502   \u2514\u2500\u2500 mediaatlas-infrastructure v0.1.0-beta.1 (./crates/infrastructure) (*)\n\u2502           \u2502           \u251c\u2500\u2500 keyring feature \"sync-secret-service\"\n\u2502           \u2502           \u2502   \u2514\u2500\u2500 mediaatlas-infrastructure v0.1.0-beta.1 (./crates/infrastructure) (*)\n\u2502           \u2502           \u2514\u2500\u2500 keyring feature \"windows-native\"\n\u2502           \u2502               \u2514\u2500\u2500 mediaatlas-infrastructure v0.1.0-beta.1 (./crates/infrastructure) (*)\n\u2502           \u2514\u2500\u2500 tao v0.37.2\n\u2502               \u251c\u2500\u2500 tao feature \"dbus\"\n\u2502               \u2502   \u2514\u2500\u2500 tauri-runtime-wry feature \"dbus\"\n\u2502               \u2502       \u2514\u2500\u2500 tauri feature \"dbus\"\n\u2502               \u2502           \u2514\u2500\u2500 tauri feature \"default\"\n\u2502               \u2502               \u2514\u2500\u2500 mediaatlas-desktop v0.1.0-beta.1 (./apps/desktop/src-tauri) (*)\n\u2502               \u251c\u2500\u2500 tao feature \"rwh_06\"\n\u2502               \u2502   \u2514\u2500\u2500 tauri-runtime-wry v2.12.3\n\u2502               \u2502       \u2514\u2500\u2500 tauri v2.12.5\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"common-controls-v6\"\n\u2502               \u2502           \u2502   \u2514\u2500\u2500 tauri feature \"default\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"compression\"\n\u2502               \u2502           \u2502   \u2514\u2500\u2500 tauri feature \"default\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"dbus\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"default\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"dynamic-acl\"\n\u2502               \u2502           \u2502   \u2514\u2500\u2500 tauri feature \"default\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"tauri-runtime-wry\"\n\u2502               \u2502           \u2502   \u2514\u2500\u2500 tauri feature \"wry\"\n\u2502               \u2502           \u2502       \u2514\u2500\u2500 tauri feature \"default\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"webkit2gtk\"\n\u2502               \u2502           \u2502   \u2514\u2500\u2500 tauri feature \"wry\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"webview2-com\"\n\u2502               \u2502           \u2502   \u2514\u2500\u2500 tauri feature \"wry\" (*)\n\u2502               \u2502           \u251c\u2500\u2500 tauri feature \"wry\" (*)\n\u2502               \u2502           \u2514\u2500\u2500 tauri feature \"x11\"\n\u2502               \u2502               \u2514\u2500\u2500 tauri feature \"default\" (*)\n\u2502               \u2502       \u251c\u2500\u2500 tauri-runtime-wry feature \"common-controls-v6\"\n\u2502               \u2502       \u2502   \u2514\u2500\u2500 tauri feature \"common-controls-v6\" (*)\n\u2502               \u2502       \u251c\u2500\u2500 tauri-runtime-wry feature \"dbus\" (*)\n\u2502               \u2502       \u2514\u2500\u2500 tauri-runtime-wry feature \"x11\"\n\u2502               \u2502           \u2514\u2500\u2500 tauri feature \"x11\" (*)\n\u2502               \u2514\u2500\u2500 tao feature \"x11\"\n\u2502                   \u2514\u2500\u2500 tauri-runtime-wry feature \"x11\" (*)\n\u2514\u2500\u2500 libdbus-sys feature \"pkg-config\"\n    \u2514\u2500\u2500 libdbus-sys feature \"default\" (*)\n",
+    "libdbus_linkage": "System pkg-config, not vendored. Confirm DT_NEEDED libdbus-1.so.3 and package depends libdbus-1-3 on the actual release."
+  }
+}

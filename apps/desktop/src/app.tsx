@@ -28,7 +28,6 @@ import {
 import "./features/scraper/navigation";
 import "./features/music/translations";
 import "./features/tools/navigation";
-import { HomePage } from "./routes/home";
 
 const DashboardPage = lazyRouteComponent(
   () => import("./features/library/pages"),
@@ -311,7 +310,10 @@ const settingsRoute = createRoute({
 const diagnosticsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/diagnostics",
-  component: HomePage,
+  component: lazyRouteComponent(
+    () => import("./features/maintenance/page"),
+    "MaintenancePage",
+  ),
 });
 const providersRoute = createRoute({
   getParentRoute: () => rootRoute,

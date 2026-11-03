@@ -117,7 +117,14 @@ impl LibraryRepository {
             .max_connections(4)
             .connect_with(options)
             .await?;
-        sqlx::migrate!("./migrations")
+        if crate::migration_compat::normalize_current_database(&pool, path)
+            .await
+            .is_err()
+        {
+            pool.close().await;
+            return Err(RepositoryError::Migration);
+        }
+        crate::migration_compat::canonical_migrator()
             .run(&pool)
             .await
             .map_err(|_| RepositoryError::Migration)?;

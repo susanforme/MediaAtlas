@@ -1,0 +1,12 @@
+# Keep project source and lockfile bytes stable across native checkout platforms.
+* text=auto eol=lf
+
+# Original upstream notice/source resources retain their exact published bytes.
+docs/third-party-licenses/** -text -whitespace
+*.crate -text
+*.png -text
+*.ico -text
+*.zip -text
+*.deb -text
+*.dmg -text
+*.exe -text

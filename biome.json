@@ -15,7 +15,8 @@
       "!**/gen",
       "!pnpm-lock.yaml",
       "!**/*.md"
-    ]
+    ],
+    "maxSize": 3145728
   },
   "formatter": {
     "enabled": true,

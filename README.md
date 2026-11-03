@@ -1,8 +1,8 @@
 # MediaAtlas
 
-Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
+Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust，复用系统 WebView，不捆绑 Chromium：Windows 使用系统 WebView2（安装器可下载官方 bootstrapper），macOS 使用系统 WKWebView，Linux deb 依赖系统 WebKitGTK/GTK。
 
-当前实现 **Phase 7 文件整理与高级媒体库**：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，仅生成只读扫描候选；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读消费有可信元数据来源的本地资源，点击资源请求系统关联应用打开，多版本/Part 明确选择。远端音乐版本与尚未刮削资源保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
+当前候选 **0.1.0-beta.1 / Phase 8 发布与维护**，增加完整数据库 Preview/确认备份、下次启动独占恢复、安全诊断与缓存清理。维护说明见 [数据维护与升级](docs/maintenance.md)，原生包状态见 [发布矩阵](docs/release-matrix.md)。已实现的文件整理与高级媒体库：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，仅生成只读扫描候选；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读消费有可信元数据来源的本地资源，点击资源请求系统关联应用打开，多版本/Part 明确选择。远端音乐版本与尚未刮削资源保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
 
 在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；成人区解锁后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
 
@@ -18,7 +18,7 @@ Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 T
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+sudo apt-get install -y build-essential libwebkit2gtk-4.1-dev libxdo-dev libayatana-appindicator3-dev libdbus-1-dev librsvg2-dev patchelf
 ```
 
 准备好 Node 后，可使用支持的包管理器安装固定版本：
@@ -39,7 +39,7 @@ pnpm build           # 前端生产构建
 pnpm build:desktop   # 本平台桌面可执行文件，不生成安装包、不发布
 ```
 
-桌面启动后在 Root 页面输入本地目录、名称和媒体类型，再进入扫描页。扫描完成先显示候选，勾选并再次确认后写入本地工具索引；只有实际本地 NFO/标签或明确刮削确认等可信来源的本地资源才进入只读媒体库，裸文件名推断仍在工具区。诊断页保留本地核心连接检查和真实版本；网页模式无法调用后端，不伪造媒体记录。
+桌面启动后在 Root 页面输入本地目录、名称和媒体类型，再进入扫描页。扫描完成先显示候选，勾选并再次确认后写入本地工具索引；只有实际本地 NFO/标签或明确刮削确认等可信来源的本地资源才进入只读媒体库，裸文件名推断仍在工具区。诊断页提供真实数据库备份/恢复、诊断与缓存维护；网页模式无法调用后端，不伪造媒体记录。
 
 默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读；视频输出仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。P6 音频标签修改和恢复各自要求 Preview 与明确确认，备份原字节保留，外部改动或来源关联变化时拒绝旧计划。海报使用本地缓存缩略图，远程图片仅由受控后端按所选候选获取。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
 
@@ -62,9 +62,9 @@ cargo test --workspace --locked
 ## CI 与 tag 发布
 
 - `.github/workflows/ci.yml`：`main` push、PR 和手动运行仅在 Windows/macOS/Linux 执行 `pnpm test` 与 `cargo test --locked`；Rust 默认成员包含 SQLite 测试，不构建 Tauri 桌面、不安装 GTK、不打包或发布。
-- `.github/workflows/release.yml`：只由 push tag 触发。分别构建 Windows NSIS、macOS DMG 和 Linux AppImage/deb，所有平台打包成功后才创建/更新对应 GitHub Release 并上传产物。不由普通分支 push、PR 或手动按钮触发，也不自行创建 tag。
+- `.github/workflows/release.yml`：只由 beta tag push 触发，Windows x64、Linux x64、macOS x64/ARM64 四个原生 runner 并行构建。验证安装器实际 payload 架构/版本/许可后，汇总 SHA-256 与 manifest，完整上传 draft 后才公开 beta。Windows/Linux ARM 本次明确不构建。普通分支 push/PR 不发布。
 - `.github/tauri.release.conf.json` 只在 tag 构建时启用打包；本地 `pnpm build:desktop` 仍只生成可执行文件。
-- tag 名称不会自动修改应用版本，发布前需同步 Cargo workspace、Tauri 和前端包的版本。当前工作流未接入签名凭据或自动更新发布，完整发布验收仍属 P8。
+- tag 名称不会自动修改应用版本，发布前需同步 Cargo workspace、Tauri 和前端包的版本。本 beta 未接入发行签名、Apple 公证或自动更新，请按手动更新说明操作；CI 包验证不替代交互式安装/卸载、实机播放、OS keyring 或实时 Provider 验收。
 
 工作流配置及静态检查不等于远端 CI/安装包已验证；Phase 0 平台启动待验收项仍保留在记录中。
 
@@ -120,3 +120,7 @@ P5 契约与边界：[phase-5-contract](docs/phase-5-contract.md)、[P5/视频 M
 P6 契约与验证：[Music 契约](docs/phase-6-contract.md)、[P6 验收](docs/acceptance/phase-6.md)。音乐 Library 仅供浏览与系统应用打开；刮削、标签编辑和恢复在独立工具区。P7 已将影视/成人的刮削、导出、批量写入和整理迁入独立工具区。
 
 P7 契约与验证：[组织与消费契约](docs/phase-7-contract.md)、[P7 验收](docs/acceptance/phase-7.md)。原生打开仅返回已提交系统请求，不内置播放器、转码或媒体服务。
+
+项目源码许可尚未指定，见 [LICENSE-STATUS.md](LICENSE-STATUS.md)；第三方许可与完整原文见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和随安装包附带的清单。开发夹具使用的 FFmpeg/ffprobe 不作为运行依赖或随包分发。
+
+应用截图见 [screenshots/README.md](screenshots/README.md)：真实 Chromium 渲染的合成 Mock IPC 演示，涵盖媒体库、工具、音乐、设置和备份维护；截图模式与原生验收边界逐项说明。

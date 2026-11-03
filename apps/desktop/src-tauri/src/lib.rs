@@ -19,6 +19,11 @@ struct TaskEvent {
     data: ScanTaskView,
 }
 
+// Rust statics are retained until process termination. This keeps the OS lock
+// beyond any unspecified Tauri managed-state or background-runtime drop order.
+static DATABASE_LEASE: std::sync::OnceLock<mediaatlas_infrastructure::maintenance::DatabaseLease> =
+    std::sync::OnceLock::new();
+
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
@@ -32,8 +37,36 @@ pub fn run() {
             })?;
             std::fs::create_dir_all(&data_dir)
                 .map_err(|_| io::Error::other("Application data directory is unavailable."))?;
+            let data_dir = std::fs::canonicalize(&data_dir)
+                .map_err(|_| io::Error::other("Application data directory is unavailable."))?;
+            let database_path = data_dir.join("library.sqlite");
+            let maintenance_dir = data_dir.join("maintenance");
+            let lease =
+                mediaatlas_infrastructure::maintenance::DatabaseLease::acquire(&database_path)
+                    .map_err(|_| io::Error::other("The library is already open or unavailable."))?;
+            DATABASE_LEASE
+                .set(lease)
+                .map_err(|_| io::Error::other("The library process was already initialized."))?;
+            let lease = DATABASE_LEASE.get().ok_or_else(|| {
+                io::Error::other("The library process could not acquire its lifetime lock.")
+            })?;
+            tauri::async_runtime::block_on(lease.apply_pending_restore(&maintenance_dir)).map_err(
+                |_| {
+                    io::Error::other(
+                        "Database recovery requires attention; all recovery files are retained.",
+                    )
+                },
+            )?;
+            // The process-static lease outlives every pool/service/runtime handle.
             let desktop = tauri::async_runtime::block_on(async {
-                let repository = LibraryRepository::open(&data_dir.join("library.sqlite")).await?;
+                let repository = LibraryRepository::open(&database_path).await?;
+                let maintenance = mediaatlas_infrastructure::maintenance::MaintenanceService::new(
+                    repository.clone(),
+                    database_path.clone(),
+                    maintenance_dir.clone(),
+                    data_dir.join("artwork-cache").join("general"),
+                )
+                .map_err(|_| mediaatlas_infrastructure::library::RepositoryError::Database)?;
                 mediaatlas_infrastructure::library_ready::backfill_local_nfo(&repository).await?;
                 let scans = ScanService::new(repository.clone());
                 let providers =
@@ -161,6 +194,7 @@ pub fn run() {
                 watcher.restore().await?;
                 Ok::<_, mediaatlas_infrastructure::library::RepositoryError>(state::DesktopState {
                     repository: repository.clone(),
+                    maintenance,
                     organization,
                     watcher,
                     health: mediaatlas_infrastructure::health::HealthService::new(
@@ -246,6 +280,15 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
+            commands::maintenance_status,
+            commands::maintenance_backup_preview,
+            commands::maintenance_backup_confirm,
+            commands::maintenance_restore_preview,
+            commands::maintenance_restore_confirm,
+            commands::maintenance_diagnostics_export,
+            commands::maintenance_cache_preview,
+            commands::maintenance_cache_confirm,
+            commands::maintenance_cancel,
             commands::music_tools_library,
             commands::music_tools_album,
             commands::organization_plan,

@@ -1,0 +1,180 @@
+[
+  {
+    "ecosystem": "native",
+    "name": "Microsoft.Web.WebView2 SDK loader",
+    "version": "1.0.3800.47",
+    "license": "BSD-3-Clause",
+    "scope": "Windows loader shipped through webview2-com-sys; runtime itself installed separately under Microsoft terms",
+    "notices": [
+      {
+        "path": "docs/third-party-licenses/native/WebView2-LICENSE.txt",
+        "sha256": "0af8f1b807512aae39c2ac1aa4d0cae65cabecb6fd554b8439a5162a0d6eca55",
+        "original_path": "LICENSE.txt",
+        "origin": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3800.47/microsoft.web.webview2.1.0.3800.47.nupkg"
+      },
+      {
+        "path": "docs/third-party-licenses/native/WebView2-NOTICE.txt",
+        "sha256": "106423785c5b7eba0a8e61d1837f2132e9c828e20ad530f565d981c1df60dd90",
+        "original_path": "NOTICE.txt",
+        "origin": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3800.47/microsoft.web.webview2.1.0.3800.47.nupkg"
+      }
+    ],
+    "verified_binaries": [
+      {
+        "architecture": "x64",
+        "crate_original_path": "x64/WebView2Loader.dll",
+        "nuget_original_path": "build/native/x64/WebView2Loader.dll",
+        "sha256": "86545b66cdb0603bc26b626fb9ad610cb6e71f28d468f5ea66df23b03dda96d5",
+        "matches_official_sdk": true
+      },
+      {
+        "architecture": "arm64",
+        "crate_original_path": "arm64/WebView2Loader.dll",
+        "nuget_original_path": "build/native/arm64/WebView2Loader.dll",
+        "sha256": "a0de1844933a10c898f833771a85f0ab9a0e3c745d4715f63d2d9730f9416025",
+        "matches_official_sdk": true
+      }
+    ],
+    "sdk_archive_sha256": "56c9f26bdd07916a2d1949fb58a5c7e434dfa1173577dca879206050c4e718db"
+  },
+  {
+    "ecosystem": "native",
+    "name": "SQLite amalgamation",
+    "version": "3.46.0",
+    "license": "LicenseRef-SQLite-Public-Domain",
+    "scope": "bundled libsqlite3-sys sqlite3 source, not SQLCipher",
+    "notices": [
+      {
+        "path": "docs/third-party-licenses/native/SQLite-PUBLIC-DOMAIN.txt",
+        "sha256": "49cf7bcb103eb3244150a23bb23d840370a4762914faf1b450072a4b03c14670",
+        "original_path": "sqlite3/sqlite3.c initial public-domain blessing",
+        "origin": "https://static.crates.io/crates/libsqlite3-sys/libsqlite3-sys-0.30.1.crate"
+      }
+    ]
+  },
+  {
+    "ecosystem": "native",
+    "name": "NSIS installer stub and bundled standard plugins",
+    "version": "3.13",
+    "license": "Zlib",
+    "scope": "Windows NSIS installer selects zlib compression; COPYING also preserves terms for unselected archive compression modules",
+    "notices": [
+      {
+        "path": "docs/third-party-licenses/native/NSIS-COPYING.txt",
+        "sha256": "388357c1215ff403c5ebde3a5ecd273e68f8b79a579996775245d1ee65442aba",
+        "original_path": "nsis-3.13/COPYING",
+        "origin": "https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.13/nsis-3.13.zip"
+      }
+    ],
+    "archive_additional_unselected_module_terms": ["BZip2-1.0.6", "CPL-1.0"]
+  },
+  {
+    "ecosystem": "native",
+    "name": "nsis_tauri_utils",
+    "version": "0.5.3",
+    "license": "MIT OR Apache-2.0",
+    "scope": "Tauri Windows NSIS plugin",
+    "notices": [
+      {
+        "path": "docs/third-party-licenses/native/nsis-tauri-utils-LICENSE_APACHE-2.0.txt",
+        "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+        "original_path": "nsis-tauri-utils-nsis_tauri_utils-v0.5.3/LICENSE_APACHE-2.0",
+        "origin": "https://codeload.github.com/tauri-apps/nsis-tauri-utils/tar.gz/refs/tags/nsis_tauri_utils-v0.5.3"
+      },
+      {
+        "path": "docs/third-party-licenses/native/nsis-tauri-utils-LICENSE_MIT.txt",
+        "sha256": "1c1020fa10a6bf318717e82c911bcc54ebdfb9bb280460ae332bcb2f82f57fbe",
+        "original_path": "nsis-tauri-utils-nsis_tauri_utils-v0.5.3/LICENSE_MIT",
+        "origin": "https://codeload.github.com/tauri-apps/nsis-tauri-utils/tar.gz/refs/tags/nsis_tauri_utils-v0.5.3"
+      }
+    ]
+  },
+  {
+    "ecosystem": "native",
+    "name": "Rust standard library and compiler runtime",
+    "version": "1.90.0",
+    "license": "MIT OR Apache-2.0",
+    "scope": "Rust runtime linked into release binaries; complete library-only copyright inventory from pinned official toolchain, with all referenced standard license texts. Compiler/toolchain executables are not distributed.",
+    "notices": [
+      {
+        "path": "docs/third-party-licenses/native/rust/COPYRIGHT-library.html.txt",
+        "sha256": "025c0dd1236493fcd5b6386b68453852e6528722bd5f8dce5949e94d225e7a60",
+        "original_path": "share/doc/rust/COPYRIGHT-library.html",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/Apache-2.0.txt",
+        "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+        "original_path": "share/doc/rust/licenses/Apache-2.0.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/BSD-2-Clause.txt",
+        "sha256": "f32fb3b417a194167cfad068223fc975ba96c5960513a10f66a3c28720aec1df",
+        "original_path": "share/doc/rust/licenses/BSD-2-Clause.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/CC-BY-SA-4.0.txt",
+        "sha256": "23ee78c8bae49cf08ea2f0c84945c66b987ebe4520881fb51b3dad4fb43d07c2",
+        "original_path": "share/doc/rust/licenses/CC-BY-SA-4.0.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/GCC-exception-3.1.txt",
+        "sha256": "a3966c9410ef94a1efbfa9ec04e9c1994026a70623fbf0885ce36737bfba3b54",
+        "original_path": "share/doc/rust/licenses/GCC-exception-3.1.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/GPL-2.0-only.txt",
+        "sha256": "54b212ba1f97f6948fa5486239ab505dd820b02e50cbfd296b4062c8609a70af",
+        "original_path": "share/doc/rust/licenses/GPL-2.0-only.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/GPL-3.0-or-later.txt",
+        "sha256": "05315fce6c35f79b8a35454828995fa26336f235895ac64557abc028f4ffcea2",
+        "original_path": "share/doc/rust/licenses/GPL-3.0-or-later.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/ISC.txt",
+        "sha256": "0ff61769b238634e042ab759dddfd104a8e69d091e3600ae3410e401a6164381",
+        "original_path": "share/doc/rust/licenses/ISC.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/LLVM-exception.txt",
+        "sha256": "e34c58338bd89d43e709e226610d8f32b3e3c47f4ad9a99a8dc1d4ac7842488e",
+        "original_path": "share/doc/rust/licenses/LLVM-exception.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/MIT.txt",
+        "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+        "original_path": "share/doc/rust/licenses/MIT.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/NCSA.txt",
+        "sha256": "39cb0234065c92b9e6cee3830cbb52b1aa289aa8fe9ba2e66730fec5cf05c630",
+        "original_path": "share/doc/rust/licenses/NCSA.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/OFL-1.1.txt",
+        "sha256": "8eea8287e5876b539670cadb82e99f9a7afddec6f6730811be1daf25d2e9bcfd",
+        "original_path": "share/doc/rust/licenses/OFL-1.1.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      },
+      {
+        "path": "docs/third-party-licenses/native/rust/Unicode-3.0.txt",
+        "sha256": "f5062c9a188d81dfe66b56db4182dcf9e4b17c0d9b0d311a8e20b3a1b075c443",
+        "original_path": "share/doc/rust/licenses/Unicode-3.0.txt",
+        "origin": "Rust 1.90.0 official rustup toolchain: https://static.rust-lang.org/dist/rustc-1.90.0-x86_64-unknown-linux-gnu.tar.xz"
+      }
+    ],
+    "license_detail": "Nested library components, runtime exceptions, and exact attributions are specified in the preserved official COPYRIGHT-library inventory and its complete referenced license texts."
+  }
+]

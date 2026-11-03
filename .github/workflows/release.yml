@@ -1,8 +1,8 @@
-name: Tagged release
+name: Tagged beta release
 
 on:
   push:
-    tags: ["**"]
+    tags: ["v*-beta.*"]
 
 permissions:
   contents: read
@@ -11,63 +11,138 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  PYTHONUTF8: "1"
+  CARGO_BUILD_JOBS: 2
+  CARGO_INCREMENTAL: 0
+
 jobs:
+  preflight:
+    name: Validate beta version and release tooling
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.preflight.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: python -m unittest discover -s scripts/release -p 'test_*.py' -v
+      - run: python -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      - name: Verify complete locked dependency license materials
+        run: python scripts/licenses/verify.py
+      - id: preflight
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/release/release.py preflight --tag "$RELEASE_TAG"
+
   build:
-    name: Package (${{ matrix.os }})
+    name: Package ${{ matrix.target }}
+    needs: preflight
+    timeout-minutes: 90
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            bundles: nsis
-            artifacts: target/release/bundle/nsis/*.exe
-          - os: macos-latest
-            bundles: dmg
-            artifacts: target/release/bundle/dmg/*.dmg
-          - os: ubuntu-24.04
-            bundles: appimage,deb
-            artifacts: |
-              target/release/bundle/appimage/*.AppImage
-              target/release/bundle/deb/*.deb
-    runs-on: ${{ matrix.os }}
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.preflight.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ github.sha }}
+      RELEASE_TARGET: ${{ matrix.target }}
+      RELEASE_BUNDLES: ${{ matrix.bundles }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Verify checked-out license bytes on each native platform
+        run: python scripts/licenses/verify.py
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libayatana-appindicator3-dev librsvg2-dev libdbus-1-dev patchelf xdg-utils
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 24
           cache: pnpm
-      - run: rustup show active-toolchain
+      - name: Install repository-pinned Rust and native target
+        run: |
+          rustup show active-toolchain
+          rustup target add "$RELEASE_TARGET"
+          rustc -vV
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: release-${{ matrix.runner }}-${{ matrix.target }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          cache-on-failure: false
       - run: pnpm install --frozen-lockfile
-      - name: Build tagged packages
-        run: pnpm --filter @mediaatlas/desktop tauri build --config "${{ github.workspace }}/.github/tauri.release.conf.json" --bundles ${{ matrix.bundles }}
+      - name: Verify dynamic Linux native dependency features
+        if: runner.os == 'Linux'
+        run: python scripts/licenses/verify-native-features.py --target "$RELEASE_TARGET"
+      - name: Frontend tests
+        run: pnpm test
+      - name: Rust core tests on native operating system and architecture
+        run: python scripts/ci/rust_tests.py -- cargo test --locked --target "$RELEASE_TARGET"
+      - name: Build tagged application and native packages
+        run: pnpm --filter @mediaatlas/desktop tauri build --ci --config "$GITHUB_WORKSPACE/.github/tauri.release.conf.json" --target "$RELEASE_TARGET" --bundles "$RELEASE_BUNDLES" -- --locked
+      - name: Verify native payloads and stage complete target
+        run: python scripts/release/release.py stage --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --target "$RELEASE_TARGET" --tests-passed --output verified-packages
       - uses: actions/upload-artifact@v4
         with:
-          name: packages-${{ matrix.os }}
-          path: ${{ matrix.artifacts }}
+          name: packages-${{ matrix.target }}
+          path: verified-packages/${{ matrix.target }}/
           if-no-files-found: error
+          retention-days: 14
 
   publish:
-    name: Publish release after all packages succeed
-    needs: build
+    name: Verify complete release and publish beta
+    needs: [preflight, build]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_COMMIT: ${{ github.sha }}
+      RELEASE_REPOSITORY: ${{ github.repository }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
           pattern: packages-*
-          path: release-assets
-          merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+          path: downloaded
+      - name: Restore per-target directories
+        run: |
+          mkdir verified-packages
+          for path in downloaded/packages-*; do
+            target="${path#downloaded/packages-}"
+            mv "$path" "verified-packages/$target"
+          done
+      - name: Revalidate provenance, required targets, sizes and SHA-256
+        run: python scripts/release/release.py aggregate --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --repository "$RELEASE_REPOSITORY" --input verified-packages --output release-assets
+      - name: Preserve verified release assets
+        uses: actions/upload-artifact@v4
         with:
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: release-assets/*
+          name: verified-release-assets
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create draft, upload all assets, then publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --verify-tag --draft --prerelease --latest=false --title "MediaAtlas $RELEASE_TAG" --notes-file release-assets/RELEASE_NOTES.md
+          gh release upload "$RELEASE_TAG" release-assets/* --repo "$RELEASE_REPOSITORY"
+          gh release edit "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --draft=false --prerelease --latest=false

@@ -1,0 +1,86 @@
+{
+  "version": "0.1.0-beta.1",
+  "mode": "Actual locally built Tauri release application and real Rust/SQLite IPC in Ubuntu 22.04 container; not a published GitHub Release artifact",
+  "binary_sha256": "e492dc82ba7881c3d104d26ee3ec030800bfd27e9b06e61ce8b00495b7896a22",
+  "runtime": {
+    "os": "Ubuntu 22.04",
+    "webview": "system WebKitGTK 4.1",
+    "display": "Xvfb :99",
+    "uid": 1000,
+    "locale": "en-US",
+    "window_pixels": {
+      "width": 1440,
+      "height": 1080
+    },
+    "capture": "ImageMagick import of the actual X11 application window; no compositing or image repair",
+    "sandbox_disabled": false,
+    "tls_verification_disabled": false,
+    "mock_ipc": false,
+    "isolated_app_data": true
+  },
+  "synthetic_data": {
+    "root": "Synthetic Demo Library",
+    "media_items": 1,
+    "title": "Synthetic Demo Mountain Journey",
+    "source": "generated dummy video bytes and local NFO, imported via real native Root -> Scan -> Preview -> explicit second Confirm",
+    "playback_attempted": false,
+    "source_bytes_preserved": true,
+    "adult_content": false,
+    "credential_values_entered": false,
+    "music": "actual empty library; no invented native album records"
+  },
+  "maintenance_evidence": {
+    "backup_preview_and_confirm": "performed through real native UI",
+    "backup_bytes": 602112,
+    "manifest_sha256_verified": true,
+    "sqlite_integrity_check": "ok",
+    "backup_app_version": "0.1.0-beta.1"
+  },
+  "scope_limits": [
+    "This is a local uncommitted beta candidate, not GitHub Release availability.",
+    "No live Provider, OS keyring save, media playback, Windows or macOS interactive acceptance is claimed.",
+    "Initial numeric UID 1000 had no passwd entry and caused D-Bus warnings. A standard user entry was created before the normal-close retest; OS keyring saving was still not tested."
+  ],
+  "screenshots": [
+    {
+      "file": "native-linux-01-library.png",
+      "sha256": "069889534963ceb2a7bf905df58d3bcf09b589ba29e57f29b077ea4edb03d919",
+      "visually_inspected": true,
+      "loading_or_error_notice": false
+    },
+    {
+      "file": "native-linux-02-tools.png",
+      "sha256": "9e8379a2cfaafd90e9f1f31b49d8966a573d20108650a11302e2e9350d996b5a",
+      "visually_inspected": true,
+      "loading_or_error_notice": false
+    },
+    {
+      "file": "native-linux-03-music.png",
+      "sha256": "54b8da5ccc79d07757a36d42e56564a9773134ccc3272ad083d8596048919bff",
+      "visually_inspected": true,
+      "loading_or_error_notice": false
+    },
+    {
+      "file": "native-linux-04-settings.png",
+      "sha256": "b894a3ce3ecf544d66df97dc26adf3312d2558ad0652ff48e61fb1a813a3bdc0",
+      "visually_inspected": true,
+      "loading_or_error_notice": false
+    },
+    {
+      "file": "native-linux-05-maintenance.png",
+      "sha256": "05b6599d5bcef5a17b5c563d3bc4a175e7ad4694c0a079cbe4f395a6c1ec2807",
+      "visually_inspected": true,
+      "loading_or_error_notice": false
+    }
+  ],
+  "normal_close_evidence": {
+    "method": "Direct X11 ClientMessage: message_type WM_PROTOCOLS, format 32, data[0]=WM_DELETE_WINDOW, data[1]=CurrentTime; no window manager required",
+    "reopened_same_isolated_app_data": true,
+    "app_pid": 18058,
+    "app_ready_utc": "2026-11-03T09:40:07Z",
+    "app_and_dbus_session_exit_code": 0,
+    "product_changes": false,
+    "sandbox_disabled": false,
+    "historical_automation_error": "Earlier xdotool windowclose used XDestroyWindow and caused GDK BadWindow exit 133. The standard WM_DELETE_WINDOW retest exits 0; the earlier destructive automation is not evidence of a normal application close failure."
+  }
+}

@@ -244,3 +244,9 @@ P6 实际结果：独立实体/Release 版本、MB/CAA Mock HTTP、六格式合�
 ## 用户允许的文件系统与索引库候选
 
 后续文件系统工作可评估 BurntSushi/ripgrep 的 `crates/ignore`、`notify`、`notify/file-id`，分别用于遍历、Watcher 与文件身份；按实际搜索需求评估 `tantivy`。`rusqlite` 也是允许候选，但不代表要求迁移现有 SQLx Repository；P3 不重写扫描器或数据库栈。P7 实施时先核验平台能力、许可、现有契约和基准，再决定是否引入。
+
+P8 维护契约与升级范围见 [phase-8-contract.md](phase-8-contract.md)、[maintenance.md](maintenance.md)。最终 beta 包须等真实 CI 构建、提取和校验后才记录可用；工作流配置、本地编译或 tag 本身均不算完整发布。
+
+P8 本地实现范围已冻结：安全 SQLite 备份/启动前恢复、精确官方 LF/CRLF 迁移兼容、脱敏诊断、缓存隔离重置、许可完整材料和真实 Linux 候选安装/重装/卸载证据均见 [P8 验收](acceptance/phase-8.md)。正式 beta 必须在最终 source commit 的主 CI 通过后创建 tag，再由四个原生 runner 重建与发布；不复用未提交候选冒称正式产物。
+
+P8 冻结最终本地门槛：pnpm check 156 tests / 25 files；完整 Rust workspace 303 tests（infrastructure unit 210），fmt/full all-target Clippy 0 warnings；release verifier 24、CI 摘要 helper 7、beta 版本 preflight 与 971 项依赖/1,587 许可引用 hash 验证通过。正式产物仍等待最终 source commit 的实际 CI/Release，不将这些本地结果写为发布完成。

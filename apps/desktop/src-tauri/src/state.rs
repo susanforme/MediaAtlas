@@ -1,6 +1,7 @@
 use mediaatlas_infrastructure::{browse::BrowseService, scan_service::ScanService};
 
 pub struct DesktopState {
+    pub maintenance: mediaatlas_infrastructure::maintenance::MaintenanceService,
     pub organization: mediaatlas_infrastructure::organization::OrganizationService,
     pub watcher: mediaatlas_infrastructure::watcher::WatcherService,
     pub health: mediaatlas_infrastructure::health::HealthService,

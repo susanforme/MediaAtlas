@@ -72,12 +72,19 @@ pub async fn adult_save_settings(
     state: State<'_, DesktopState>,
     input: AdultSettingsInput,
 ) -> Result<ApiResponse<AdultSettings>, ErrorDto> {
-    state
+    let settings = state
         .adult_privacy
         .save(input)
         .await
-        .map(ApiResponse::new)
-        .map_err(storage_error)
+        .map_err(storage_error)?;
+    if !settings.unlocked {
+        state
+            .maintenance
+            .revoke_private_restore()
+            .await
+            .map_err(super::maintenance::maintenance_error)?;
+    }
+    Ok(ApiResponse::new(settings))
 }
 
 #[tauri::command]
@@ -100,12 +107,13 @@ pub async fn adult_lock(
     input: EmptyInput,
 ) -> Result<ApiResponse<AdultSettings>, ErrorDto> {
     let _ = input;
+    let settings = state.adult_privacy.lock().await.map_err(storage_error)?;
     state
-        .adult_privacy
-        .lock()
+        .maintenance
+        .revoke_private_restore()
         .await
-        .map(ApiResponse::new)
-        .map_err(storage_error)
+        .map_err(super::maintenance::maintenance_error)?;
+    Ok(ApiResponse::new(settings))
 }
 
 #[tauri::command]
