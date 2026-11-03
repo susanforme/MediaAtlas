@@ -1,4 +1,20 @@
-//! Domain errors have stable codes and safe public messages, with no I/O dependencies.
+//! Media identities and type-specific models, independent of storage and desktop I/O.
+
+pub mod adult;
+pub mod library;
+pub mod metadata;
+pub mod music;
+pub mod paths;
+pub mod tasks;
+pub mod video;
+
+pub use adult::*;
+pub use library::*;
+pub use metadata::*;
+pub use music::*;
+pub use paths::*;
+pub use tasks::*;
+pub use video::*;
 
 use std::fmt;
 

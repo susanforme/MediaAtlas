@@ -1,4 +1,7 @@
-//! Local infrastructure adapters. P0 only provides payload-free structured logs.
+//! Local infrastructure adapters: structured logs and SQLite persistence.
+
+pub mod library;
+pub mod tasks;
 
 use std::{io, path::Path};
 use tracing_appender::non_blocking::WorkerGuard;

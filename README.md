@@ -2,7 +2,7 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
 
-当前仅实现 **Phase 0 工程骨架**：空桌面窗口、简体中文/英文界面、本地核心连接检查、真实构建版本、版本化 IPC、结构化滚动日志和 CI。尚无扫描、数据库或 Provider 功能。浏览器预览会明确提示需要桌面运行。
+当前完成 **Phase 1 领域与 SQLite 基础**：独立媒体类型模型、公共媒体索引 Repository、来源/锁定、多语言键、跨平台路径身份和任务记录。桌面界面仍为 Phase 0 的连接诊断页，尚未接入数据库、扫描或 Provider；浏览器预览会明确提示需要桌面运行。
 
 ## 开发环境
 
@@ -53,17 +53,34 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 cargo test --workspace --locked
 ```
 
-`.github/workflows/ci.yml` 配置 Windows/macOS/Linux 原生检查，Windows 额外构建可执行文件并执行进程启动冒烟检查。该检查仅验证进程持续运行，窗口渲染和 IPC 仍需手动验收；配置工作流不等于已通过远端 CI。不创建 GitHub Release 或自动更新发布。
+## CI 与 tag 发布
+
+- `.github/workflows/ci.yml`：`main` push、PR 和手动运行仅在 Windows/macOS/Linux 执行 `pnpm test` 与 `cargo test --locked`；Rust 默认成员包含 SQLite 测试，不构建 Tauri 桌面、不安装 GTK、不打包或发布。
+- `.github/workflows/release.yml`：只由 push tag 触发。分别构建 Windows NSIS、macOS DMG 和 Linux AppImage/deb，所有平台打包成功后才创建/更新对应 GitHub Release 并上传产物。不由普通分支 push、PR 或手动按钮触发，也不自行创建 tag。
+- `.github/tauri.release.conf.json` 只在 tag 构建时启用打包；本地 `pnpm build:desktop` 仍只生成可执行文件。
+- tag 名称不会自动修改应用版本，发布前需同步 Cargo workspace、Tauri 和前端包的版本。当前工作流未接入签名凭据或自动更新发布，完整发布验收仍属 P8。
+
+工作流配置及静态检查不等于远端 CI/安装包已验证；Phase 0 平台启动待验收项仍保留在记录中。
+
+## Phase 1 本地存储示例
+
+```bash
+cargo run -p mediaatlas-infrastructure --example library_roundtrip --locked
+```
+
+该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。数据库由调用方显式创建，桌面应用启动不自动打开用户媒体库。
+
+Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，P1 Repository 保存公共索引；具体扩展表和业务按对应阶段追加。任务/刮削运行/文件计划只持久化不可变输入与状态，调度、恢复和文件执行尚未实现。
 
 ## 目录与契约
 
 ```text
 apps/desktop/src/             React、路由、i18n、typed IPC
 apps/desktop/src-tauri/       Tauri 宿主、窗口、command/event、最小权限
-crates/domain/               领域错误；后续独立媒体模型
+crates/domain/               公共实体、独立媒体模型、路径与元数据验证
 crates/application/          应用信息用例
 crates/desktop-bridge/       不依赖 Tauri 的 DTO 和错误协议
-crates/infrastructure/       结构化日志适配
+crates/infrastructure/       结构化日志、SQLite Repository、追加迁移
 docs/                        基线、架构决策、任务与验收
 ```
 
@@ -76,5 +93,8 @@ docs/                        基线、架构决策、任务与验收
 - [架构与 IPC](docs/architecture.md)
 - [初始仓库审计](docs/repo-audit.md)
 - [Phase 0 验收记录](docs/acceptance/phase-0.md)
+- [领域模型](docs/domain-model.md)
+- [数据库 Schema](docs/database-schema.md)
+- [Phase 1 验收记录](docs/acceptance/phase-1.md)
 
-本轮按要求在 Phase 0 停止，不启动 Phase 1。
+本轮提交 Phase 1 后停止，等待用户明确指示才开始 Phase 2。
