@@ -1,9 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DesktopError } from "../../api/desktop";
 import { libraryApi } from "../../api/library";
+import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import { scraperApi, scraperOutputApi } from "../../api/scraper";
 import i18n from "../../i18n";
@@ -16,13 +23,21 @@ import {
 } from "./fixtures";
 import { ScraperPage } from "./page";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
+}));
+vi.mock("../../api/provider-auth", () => ({
+  providerAuthApi: { status: vi.fn() },
+}));
 vi.mock("../../api/providers", async (original) => ({
   ...(await original<typeof import("../../api/providers")>()),
   providerApi: { snapshot: vi.fn() },
 }));
 vi.mock("../../api/library", async (original) => ({
   ...(await original<typeof import("../../api/library")>()),
-  libraryApi: { toolsMedia: vi.fn() },
+  libraryApi: { toolsMedia: vi.fn(), toolsDetail: vi.fn() },
 }));
 vi.mock("../../api/scraper", async (original) => ({
   ...(await original<typeof import("../../api/scraper")>()),
@@ -41,21 +56,54 @@ vi.mock("../../api/scraper", async (original) => ({
     discard: vi.fn(),
   },
 }));
-function show() {
-  return render(
+function show(mediaId?: string) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const content = (id?: string) => (
     <I18nextProvider i18n={i18n}>
-      <QueryClientProvider
-        client={
-          new QueryClient({ defaultOptions: { queries: { retry: false } } })
-        }
-      >
-        <ScraperPage />
+      <QueryClientProvider client={client}>
+        <ScraperPage mediaId={id} />
       </QueryClientProvider>
-    </I18nextProvider>,
+    </I18nextProvider>
   );
+  const view = render(content(mediaId));
+  return { ...view, changeTarget: (id?: string) => view.rerender(content(id)) };
+}
+const localFilm = {
+  id: "media-1",
+  title: "Local film",
+  kind: "movie" as const,
+  original_title: null,
+  year: 2024,
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+function localDetail(id = "media-1") {
+  return {
+    media: { ...localFilm, id },
+    files: [],
+    artworks: [],
+    external_ids: [],
+    metadata_values: [],
+    health: [],
+    relations: [],
+    poster_uri: null,
+  };
 }
 beforeEach(async () => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  vi.mocked(providerAuthApi.status).mockResolvedValue({
+    provider_id: "tmdb",
+    supported_methods: ["bearer"],
+    method: "bearer",
+    storage: "system",
+    configured: true,
+    status: "configured",
+  });
+  vi.mocked(libraryApi.toolsDetail).mockImplementation(async (id) =>
+    localDetail(id),
+  );
   await i18n.changeLanguage("en-US");
   const snapshot = fixtureSnapshot();
   snapshot.providers[0].descriptor.id = "tmdb";
@@ -108,7 +156,15 @@ beforeEach(async () => {
 });
 async function searchAndChoose() {
   const view = show();
-  await screen.findByText("tmdb");
+  await screen.findByText("Local film · 2024");
+  fireEvent.change(screen.getByLabelText("Local media item"), {
+    target: { value: "media-1" },
+  });
+  await waitFor(() =>
+    expect(
+      screen.getByLabelText("Title or exact Wikipedia article title"),
+    ).toHaveValue("Local film"),
+  );
   fireEvent.change(
     screen.getByLabelText("Title or exact Wikipedia article title"),
     { target: { value: "Synthetic film" } },
@@ -123,10 +179,6 @@ async function searchAndChoose() {
     screen.getByRole("button", { name: "Choose this candidate" }),
   );
   await screen.findByText("Selected metadata: Synthetic film");
-  await screen.findByText("Local film · 2024");
-  fireEvent.change(screen.getByLabelText("Local media item"), {
-    target: { value: "media-1" },
-  });
   return view;
 }
 it("keeps search, explicit candidate selection, protected merge and sidecar execution separate", async () => {
@@ -181,8 +233,10 @@ it("does not search automatically and validates input before invoking providers"
   show();
   await screen.findByText("tmdb");
   expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("button", { name: "Search providers" }),
+  ).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
-  await screen.findByRole("alert");
   expect(scraperApi.search).not.toHaveBeenCalled();
 });
 it("localizes the workflow in Chinese and snapshots the query language", async () => {
@@ -324,7 +378,7 @@ it("uses the independent Anime query and displays aliases", async () => {
     },
   });
   show();
-  await screen.findByText("anilist");
+  await screen.findByText(/anilist/);
   fireEvent.change(screen.getByLabelText("Media type"), {
     target: { value: "anime" },
   });
@@ -368,10 +422,7 @@ it("restores saved candidates without issuing a new provider search", async () =
   await screen.findByText(
     "Saved candidates restored. No new provider search was sent.",
   );
-  expect(scraperApi.searchPreview).toHaveBeenCalledWith(
-    "saved-run",
-    expect.anything(),
-  );
+  expect(scraperApi.searchPreview).toHaveBeenCalledWith("saved-run");
   expect(scraperApi.search).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole("button", { name: "Choose this candidate" }),
@@ -396,4 +447,266 @@ it("discards an abandoned output preview on component unmount without executing 
     expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
   );
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("prefills and locks an explicit local target without issuing a provider search", async () => {
+  show("media-1");
+  await waitFor(() =>
+    expect(
+      screen.getByLabelText("Title or exact Wikipedia article title"),
+    ).toHaveValue("Local film"),
+  );
+  expect(screen.getByLabelText("Release year (optional)")).toHaveValue(2024);
+  expect(screen.getByLabelText("Media type")).toBeDisabled();
+  expect(screen.queryByLabelText("Local media item")).not.toBeInTheDocument();
+  expect(libraryApi.toolsDetail).toHaveBeenCalledWith("media-1");
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(
+    screen.getByText("External identifiers (advanced)").closest("details"),
+  ).not.toHaveAttribute("open");
+});
+it("ignores a late candidate detail after switching the actual local target", async () => {
+  let finish!: (value: typeof syntheticMetadata) => void;
+  vi.mocked(scraperApi.detail).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const view = show("media-1");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Search providers" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Choose this candidate" }),
+  );
+  await waitFor(() => expect(scraperApi.detail).toHaveBeenCalled());
+  view.changeTarget("media-2");
+  await waitFor(() =>
+    expect(libraryApi.toolsDetail).toHaveBeenCalledWith("media-2"),
+  );
+  await act(async () => {
+    finish(syntheticMetadata);
+  });
+  expect(
+    screen.queryByText("Selected metadata: Synthetic film"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Preview merge" }),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.preview).not.toHaveBeenCalled();
+});
+it("discards a sidecar preview that arrives after target context is left", async () => {
+  const view = await searchAndChoose();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  let finish!: (value: typeof syntheticOutput) => void;
+  vi.mocked(scraperOutputApi.preview).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Preview NFO and poster output",
+    }),
+  );
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalled());
+  view.changeTarget("media-2");
+  await act(async () => {
+    finish(syntheticOutput);
+  });
+  await waitFor(() =>
+    expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
+  );
+  expect(
+    screen.queryByText("/synthetic/library/film.nfo"),
+  ).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+it("cancels merge and output previews without any writes", async () => {
+  await searchAndChoose();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Cancel merge preview" }),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Confirm selected metadata" }),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Preview NFO and poster output",
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Cancel output preview" }),
+  );
+  await waitFor(() =>
+    expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
+  );
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+it("requires configured credentials and offers manual setup without enabling providers", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor.id = "tmdb";
+  snapshot.providers[0].descriptor.requires_api_key = true;
+  snapshot.providers[0].config.enabled = true;
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  vi.mocked(providerAuthApi.status).mockResolvedValue({
+    provider_id: "tmdb",
+    supported_methods: ["bearer"],
+    method: "bearer",
+    storage: "system",
+    configured: false,
+    status: "not_configured",
+  });
+  show("media-1");
+  await screen.findByText("tmdb (Credential required)");
+  expect(
+    screen.getByRole("button", { name: "Search providers" }),
+  ).toBeDisabled();
+  expect(
+    screen.getByRole("link", { name: "Configure credentials" }),
+  ).toHaveAttribute("href", "/settings");
+  expect(scraperApi.search).not.toHaveBeenCalled();
+});
+it("rejects adult and unsupported local targets instead of defaulting to movie", async () => {
+  vi.mocked(libraryApi.toolsDetail).mockResolvedValue({
+    ...localDetail(),
+    media: { ...localFilm, title: "PRIVATE TITLE", kind: "adult_video" },
+  });
+  show("media-1");
+  await screen.findByRole("alert");
+  expect(screen.queryByText("PRIVATE TITLE")).not.toBeInTheDocument();
+  expect(
+    screen.getByLabelText("Title or exact Wikipedia article title"),
+  ).toHaveValue("");
+  expect(
+    screen.getByRole("button", { name: "Search providers" }),
+  ).toBeDisabled();
+  expect(scraperApi.search).not.toHaveBeenCalled();
+});
+
+it("filters private and unsupported titles out of local target choices", async () => {
+  vi.mocked(libraryApi.toolsMedia).mockResolvedValue({
+    items: [
+      {
+        media: {
+          ...localFilm,
+          id: "private",
+          kind: "adult_video",
+          title: "PRIVATE OPTION",
+        },
+        poster_uri: null,
+        health: [],
+      },
+      {
+        media: {
+          ...localFilm,
+          id: "music",
+          kind: "music_release",
+          title: "MUSIC OPTION",
+        },
+        poster_uri: null,
+        health: [],
+      },
+    ],
+    next_cursor: null,
+  });
+  show();
+  await waitFor(() =>
+    expect(screen.getByLabelText("Local media item")).toBeEnabled(),
+  );
+  expect(screen.queryByText("PRIVATE OPTION · 2024")).not.toBeInTheDocument();
+  expect(screen.queryByText("MUSIC OPTION · 2024")).not.toBeInTheDocument();
+});
+it("keeps disabled sources disabled and allows an explicitly selected public source", async () => {
+  const snapshot = fixtureSnapshot();
+  const tmdb = snapshot.providers[0];
+  tmdb.descriptor.id = "tmdb";
+  tmdb.config.enabled = false;
+  const wiki = {
+    ...tmdb,
+    descriptor: { ...tmdb.descriptor, id: "wikipedia.html" },
+    config: { ...tmdb.config, enabled: true },
+  };
+  snapshot.providers.push(wiki);
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  show();
+  await screen.findByText("tmdb (Disabled)");
+  expect(
+    screen.getByRole("checkbox", { name: "tmdb (Disabled)" }),
+  ).toBeDisabled();
+  fireEvent.change(
+    screen.getByLabelText("Title or exact Wikipedia article title"),
+    { target: { value: "Synthetic article" } },
+  );
+  expect(
+    screen.getByRole("button", { name: "Search providers" }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("checkbox", { name: "wikipedia.html" }));
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  await waitFor(() =>
+    expect(scraperApi.search).toHaveBeenCalledWith(
+      expect.objectContaining({ providers: ["wikipedia.html"] }),
+    ),
+  );
+  expect(providerAuthApi.status).not.toHaveBeenCalled();
+});
+
+it("invalidates a merge preview when a local target selection changes", async () => {
+  await searchAndChoose();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  await screen.findByRole("button", { name: "Confirm selected metadata" });
+  fireEvent.change(screen.getByLabelText("Local media item"), {
+    target: { value: "" },
+  });
+  expect(
+    screen.queryByRole("button", { name: "Confirm selected metadata" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByText("Selected metadata: Synthetic film"),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+it("cancels a pending candidate selection and ignores its late response", async () => {
+  let finish!: (value: typeof syntheticMetadata) => void;
+  vi.mocked(scraperApi.detail).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  show("media-1");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Search providers" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Choose this candidate" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Cancel candidate selection" }),
+  );
+  await act(async () => {
+    finish(syntheticMetadata);
+  });
+  expect(
+    screen.queryByText("Selected metadata: Synthetic film"),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.preview).not.toHaveBeenCalled();
 });

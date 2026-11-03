@@ -1,10 +1,12 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Candidate and field positions are immutable server snapshot indices. */
 import { Label } from "../../components/ui/label";
 import "./styles.css";
+import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { VideoKind } from "../../api/scraper";
 import { Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
+import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Select } from "../../components/ui/select";
 import {
@@ -15,11 +17,17 @@ import {
   useFormat,
 } from "../library/shared";
 import "./translations";
-import { providerChoices, value } from "./scraper-model";
+import { providerChoices, scrapeKind, value } from "./scraper-model";
 import { VideoSourceDetails } from "./source-detail";
 import { useScraper } from "./use-scraper";
 
-export function ScraperPage() {
+export function ScraperPage({ mediaId }: { mediaId?: string } = {}) {
+  return (
+    <ScraperWorkspace key={mediaId ?? "local-selection"} mediaId={mediaId} />
+  );
+}
+
+function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
   const { t } = useTranslation();
   const format = useFormat();
   const {
@@ -33,7 +41,6 @@ export function ScraperPage() {
     setNamespace,
     externalId,
     setExternalId,
-    providers,
     setProviders,
     search,
     setSearch,
@@ -44,6 +51,9 @@ export function ScraperPage() {
     selectedArtwork,
     setSelectedArtwork,
     target,
+    targetDetail,
+    targetKind,
+    validTarget,
     setTarget,
     localSearch,
     setLocalSearch,
@@ -70,13 +80,78 @@ export function ScraperPage() {
     busy,
     error,
     available,
-    supported,
+    providerState,
+    selectedProviders,
+    searchValid,
     selectCandidate,
     clearDetail,
-  } = useScraper();
+  } = useScraper(mediaId);
   return (
     <>
       <PageHeading title={t("scraper")} />
+      <section className="panel mb-6 space-y-4">
+        {mediaId ? (
+          targetDetail.isPending ? (
+            <Loading />
+          ) : targetDetail.error ? (
+            <ErrorNotice error={targetDetail.error} />
+          ) : validTarget ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-semibold">
+                {targetDetail.data?.media.title}
+              </h2>
+              <span className="badge">{t("scraperTargetLocked")}</span>
+            </div>
+          ) : null
+        ) : (
+          <>
+            <form
+              className="flex flex-wrap items-end gap-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                setLocalQuery(localSearch.trim());
+              }}
+            >
+              <Label className="filter-field min-w-0 flex-1">
+                <span>{t("scraperTargetSearch")}</span>
+                <Input
+                  type="search"
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
+                />
+              </Label>
+              <Button variant="outline" type="submit">
+                {t("scraperLocalSearch")}
+              </Button>
+            </form>
+            <Label className="filter-field">
+              <span>{t("scraperTarget")}</span>
+              <Select
+                value={target}
+                disabled={local.isPending}
+                onChange={(e) => setTarget(e.target.value)}
+              >
+                <option value="">{t("scraperAnonymous")}</option>
+                {local.data?.items
+                  .filter((card) => scrapeKind(card.media.kind))
+                  .map((card) => (
+                    <option key={card.media.id} value={card.media.id}>
+                      {card.media.title} · {card.media.year ?? t("unknownYear")}
+                    </option>
+                  ))}
+              </Select>
+            </Label>
+            {local.isPending && <Loading />}
+            {local.error && <ErrorNotice error={local.error} />}
+            {targetDetail.error && <ErrorNotice error={targetDetail.error} />}
+          </>
+        )}
+        {target && targetDetail.data && !validTarget && (
+          <p role="alert" className="notice error-notice">
+            {t("scraperUnsupportedTarget")}
+          </p>
+        )}
+      </section>
       {snapshot.isPending && <Loading />}
       {snapshot.error && <ErrorNotice error={snapshot.error} />}
       <form
@@ -84,14 +159,7 @@ export function ScraperPage() {
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          const valid =
-            (title.trim() || (namespace.trim() && externalId.trim())) &&
-            (year === "" ||
-              (Number.isInteger(Number(year)) &&
-                Number(year) >= 1800 &&
-                Number(year) <= 2200)) &&
-            providers.length > 0 &&
-            providers.every((id) => available(id) && supported(id));
+          const valid = searchValid;
           setInvalid(!valid);
           if (valid) {
             clearDetail();
@@ -114,7 +182,7 @@ export function ScraperPage() {
                 clearDetail();
                 setSearch(undefined);
               }}
-              disabled={busy}
+              disabled={busy || Boolean(target)}
             >
               {(["movie", "tv", "anime"] as const).map((k) => (
                 <option key={k} value={k}>
@@ -149,33 +217,38 @@ export function ScraperPage() {
               disabled={busy}
             />
           </Label>
-          <Label className="filter-field">
-            <span>{t("scraperExternalNamespace")}</span>
-            <Input
-              value={namespace}
-              maxLength={32}
-              onChange={(e) => setNamespace(e.target.value)}
-              disabled={busy}
-            />
-          </Label>
-          <Label className="filter-field">
-            <span>{t("scraperExternalId")}</span>
-            <Input
-              value={externalId}
-              maxLength={128}
-              onChange={(e) => setExternalId(e.target.value)}
-              disabled={busy}
-            />
-          </Label>
         </div>
+        <Details className="mt-4">
+          <DetailsSummary>{t("scraperAdvanced")}</DetailsSummary>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <Label className="filter-field">
+              <span>{t("scraperExternalNamespace")}</span>
+              <Input
+                value={namespace}
+                maxLength={32}
+                onChange={(e) => setNamespace(e.target.value)}
+                disabled={busy}
+              />
+            </Label>
+            <Label className="filter-field">
+              <span>{t("scraperExternalId")}</span>
+              <Input
+                value={externalId}
+                maxLength={128}
+                onChange={(e) => setExternalId(e.target.value)}
+                disabled={busy}
+              />
+            </Label>
+          </div>
+        </Details>
         <fieldset className="my-4">
           <legend className="mb-2 font-medium">{t("scraperProviders")}</legend>
           <div className="flex flex-wrap gap-5">
             {providerChoices.map((id) => (
               <Label key={id} className="flex items-center gap-2">
                 <Checkbox
-                  checked={providers.includes(id)}
-                  disabled={busy || !available(id) || !supported(id)}
+                  checked={selectedProviders.includes(id)}
+                  disabled={busy || !available(id)}
                   onChange={(e) =>
                     setProviders((old) =>
                       e.target.checked
@@ -185,20 +258,47 @@ export function ScraperPage() {
                   }
                 />
                 <span>
-                  {id} {!available(id) && `(${t("disabled")})`}
+                  {id}{" "}
+                  {providerState(id) !== "ready" &&
+                    `(${t(`scraperProviderState_${providerState(id)}`)})`}
                 </span>
               </Label>
             ))}
           </div>
         </fieldset>
+        {providerChoices.some((id) =>
+          ["disabled", "credentials"].includes(providerState(id)),
+        ) && (
+          <div className="mb-4 flex flex-wrap gap-3">
+            <Button asChild variant="outline" size="sm">
+              <Link to="/providers">{t("scraperConfigureProviders")}</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/settings">{t("scraperConfigureAuth")}</Link>
+            </Button>
+          </div>
+        )}
         {invalid && (
           <p role="alert" className="notice error-notice mb-3">
             {t("scraperInvalid")}
           </p>
         )}
-        <Button type="submit" disabled={busy || !snapshot.data}>
+        <Button type="submit" disabled={busy || !snapshot.data || !searchValid}>
           {run.isPending ? t("scraperSearching") : t("scraperSearch")}
         </Button>
+        {(run.isPending || restore.isPending) && (
+          <Button
+            className="ml-3"
+            variant="outline"
+            onClick={() => {
+              clearDetail();
+              restore.reset();
+              setSearch(undefined);
+            }}
+          >
+            {t("scraperStopWaiting")}
+          </Button>
+        )}
       </form>
       {error && (
         <div className="mt-4">
@@ -270,6 +370,17 @@ export function ScraperPage() {
         </section>
       )}
       {detail.isPending && <Loading />}
+      {candidateIndex !== undefined && (
+        <Button
+          className="mt-4"
+          variant="outline"
+          onClick={clearDetail}
+          disabled={confirm.isPending || write.isPending}
+        >
+          {t("scraperCancelSelection")}
+        </Button>
+      )}
+
       {metadata && (
         <section className="panel mt-7" aria-labelledby="scraper-detail">
           <h2 id="scraper-detail" className="text-lg font-semibold">
@@ -377,48 +488,19 @@ export function ScraperPage() {
             </div>
           </fieldset>
           <div className="mt-6 border-t border-border pt-5">
-            <Label className="filter-field">
-              <span>{t("scraperTargetSearch")}</span>
-              <Input
-                value={localSearch}
-                onChange={(e) => setLocalSearch(e.target.value)}
-                disabled={busy}
-              />
-            </Label>
-            <Button
-              className="mt-2"
-              variant="outline"
-              disabled={busy}
-              onClick={() => setLocalQuery(localSearch.trim())}
-            >
-              {t("scraperLocalSearch")}
-            </Button>
-            <Label className="filter-field mt-4">
-              <span>{t("scraperTarget")}</span>
-              <Select
-                value={target}
-                disabled={busy || local.isPending}
-                onChange={(e) => {
-                  setTarget(e.target.value);
-                  setPreview(undefined);
-                  setOutput(undefined);
-                  confirm.reset();
-                  write.reset();
-                }}
-              >
-                <option value="">{t("scraperChooseTarget")}</option>
-                {local.data?.items.map((card) => (
-                  <option key={card.media.id} value={card.media.id}>
-                    {card.media.title} · {card.media.year ?? t("unknownYear")}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-            {local.error && <ErrorNotice error={local.error} />}
+            {!target && (
+              <p className="notice">{t("scraperSelectBeforeMerge")}</p>
+            )}
+            {target && metadata.kind !== targetKind && (
+              <p role="alert" className="notice error-notice">
+                {t("scraperTypeMismatch")}
+              </p>
+            )}
             <Button
               className="mt-4"
               disabled={
-                !target ||
+                !validTarget ||
+                metadata.kind !== targetKind ||
                 busy ||
                 (!selectedFields.length && !selectedArtwork.length)
               }
@@ -506,6 +588,20 @@ export function ScraperPage() {
           >
             {t("scraperConfirm")}
           </Button>
+          {!confirm.isSuccess && !preview.confirmed && (
+            <Button
+              className="mt-5 ml-3"
+              variant="outline"
+              disabled={busy}
+              onClick={() => {
+                setPreview(undefined);
+                setOutput(undefined);
+                confirm.reset();
+              }}
+            >
+              {t("scraperCancelMerge")}
+            </Button>
+          )}
           {confirm.data && (
             <p role="status" className="notice mt-4">
               {confirm.data.already_applied

@@ -1,7 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { defaultBrowse, libraryApi } from "../../api/library";
+import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import {
   type MergePreview,
@@ -12,8 +18,9 @@ import {
   type VideoKind,
   type VideoMetadata,
 } from "../../api/scraper";
+import { scrapeKind } from "./scraper-model";
 
-export function useScraper() {
+export function useScraper(mediaId?: string) {
   const { i18n } = useTranslation();
   const client = useQueryClient();
   const [kind, setKind] = useState<VideoKind>("movie");
@@ -27,7 +34,23 @@ export function useScraper() {
   const [candidateIndex, setCandidateIndex] = useState<number>();
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [selectedArtwork, setSelectedArtwork] = useState<number[]>([]);
-  const [target, setTarget] = useState("");
+  const [selectedTarget, setSelectedTarget] = useState("");
+  const target = mediaId ?? selectedTarget;
+  const generation = useRef(0);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+      generation.current += 1;
+    };
+  }, []);
+  async function guarded<T>(action: () => Promise<T>) {
+    const epoch = generation.current;
+    return { value: await action(), epoch };
+  }
+  const current = (epoch: number) =>
+    active.current && epoch === generation.current;
   const [localSearch, setLocalSearch] = useState("");
   const [localQuery, setLocalQuery] = useState("");
   const [preview, setPreview] = useState<MergePreview>();
@@ -53,57 +76,104 @@ export function useScraper() {
     queryFn: scraperOutputApi.history,
   });
   const local = useQuery({
-    queryKey: ["scraper-local", metadata?.kind, localQuery],
-    enabled: Boolean(metadata),
+    queryKey: ["scraper-local", kind, localQuery],
+    enabled: !mediaId,
     queryFn: () =>
       libraryApi.toolsMedia({
         ...defaultBrowse(false),
-        kind: metadata?.kind === "tv" ? "tv_series" : (metadata?.kind ?? null),
+        kind: kind === "tv" ? "tv_series" : kind,
         query: localQuery || null,
         limit: 48,
       }),
   });
+  const targetDetail = useQuery({
+    queryKey: ["tools-detail", target],
+    queryFn: () => libraryApi.toolsDetail(target),
+    enabled: Boolean(target),
+  });
+  const targetKind = targetDetail.data
+    ? scrapeKind(targetDetail.data.media.kind)
+    : null;
+  const validTarget = Boolean(
+    targetDetail.data && targetKind && targetDetail.data.media.id === target,
+  );
+  const seededTarget = useRef("");
+  useEffect(() => {
+    if (
+      !targetDetail.data ||
+      !targetKind ||
+      targetDetail.data.media.id !== target ||
+      seededTarget.current === target
+    )
+      return;
+    seededTarget.current = target;
+    setTitle(targetDetail.data.media.title);
+    setYear(
+      targetDetail.data.media.year === null
+        ? ""
+        : String(targetDetail.data.media.year),
+    );
+    setKind(targetKind);
+    setProviders(targetKind === "anime" ? ["anilist"] : ["tmdb"]);
+  }, [targetDetail.data, targetKind, target]);
   function clearDetail() {
+    generation.current += 1;
     setMetadata(undefined);
     setCandidateIndex(undefined);
     setPreview(undefined);
     setOutput(undefined);
-    setTarget("");
     setThumbnails({});
     run.reset();
     detail.reset();
     artworkLoad.reset();
     merge.reset();
     outputPlan.reset();
+    discard.reset();
     confirm.reset();
     write.reset();
   }
+  function setTarget(value: string) {
+    clearDetail();
+    restore.reset();
+    setSearch(undefined);
+    seededTarget.current = "";
+    setSelectedTarget(value);
+    if (!value) {
+      setTitle("");
+      setYear("");
+    }
+  }
   const run = useMutation({
     mutationFn: () =>
-      scraperApi.search({
-        query: {
-          kind,
-          title: title.trim(),
-          year: year === "" ? null : Number(year),
-          external_ids: externalId.trim()
-            ? [{ namespace: namespace.trim(), value: externalId.trim() }]
-            : [],
-          language: i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
-        },
-        providers,
-      }),
-    onSuccess: (result) => {
+      guarded(() =>
+        scraperApi.search({
+          query: {
+            kind,
+            title: title.trim(),
+            year: year === "" ? null : Number(year),
+            external_ids: externalId.trim()
+              ? [{ namespace: namespace.trim(), value: externalId.trim() }]
+              : [],
+            language: i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
+          },
+          providers: selectedProviders,
+        }),
+      ),
+    onSuccess: ({ value: result, epoch }) => {
+      if (!current(epoch)) return;
       setSearch(result);
       void client.invalidateQueries({ queryKey: ["scraper-history"] });
     },
   });
   const restore = useMutation({
-    mutationFn: scraperApi.searchPreview,
-    onSuccess: (result, runId) => {
+    mutationFn: (runId: string) =>
+      guarded(() => scraperApi.searchPreview(runId)),
+    onSuccess: ({ value: result, epoch }, runId) => {
+      if (!current(epoch)) return;
       clearDetail();
       setSearch(result);
       const saved = history.data?.find((entry) => entry.id === runId);
-      if (saved) {
+      if (saved && !target) {
         setKind(saved.query.kind);
         setTitle(saved.query.title);
         setYear(saved.query.year === null ? "" : String(saved.query.year));
@@ -121,8 +191,9 @@ export function useScraper() {
   });
   const detail = useMutation({
     mutationFn: ({ runId, index }: { runId: string; index: number }) =>
-      scraperApi.detail(runId, index),
-    onSuccess: (result) => {
+      guarded(() => scraperApi.detail(runId, index)),
+    onSuccess: ({ value: result, epoch }) => {
+      if (!current(epoch)) return;
       setMetadata(result);
       setSelectedFields(result.data.fields.map((f) => f.key));
       setSelectedArtwork([]);
@@ -130,24 +201,32 @@ export function useScraper() {
   });
   const artworkLoad = useMutation({
     mutationFn: (index: number) =>
-      scraperApi.artworkPreview(
-        search?.run_id ?? "",
-        candidateIndex ?? 0,
-        index,
+      guarded(() =>
+        scraperApi.artworkPreview(
+          search?.run_id ?? "",
+          candidateIndex ?? 0,
+          index,
+        ),
       ),
-    onSuccess: (result, index) =>
-      setThumbnails((old) => ({ ...old, [index]: result.thumbnail })),
+    onSuccess: ({ value: result, epoch }, index) => {
+      if (current(epoch))
+        setThumbnails((old) => ({ ...old, [index]: result.thumbnail }));
+    },
   });
   const merge = useMutation({
     mutationFn: () =>
-      scraperApi.preview({
-        run_id: search?.run_id ?? "",
-        candidate_index: candidateIndex ?? 0,
-        media_item_id: target,
-        selected_fields: selectedFields,
-        selected_artwork: selectedArtwork,
-      }),
-    onSuccess: setPreview,
+      guarded(() =>
+        scraperApi.preview({
+          run_id: search?.run_id ?? "",
+          candidate_index: candidateIndex ?? 0,
+          media_item_id: target,
+          selected_fields: selectedFields,
+          selected_artwork: selectedArtwork,
+        }),
+      ),
+    onSuccess: ({ value, epoch }) => {
+      if (current(epoch)) setPreview(value);
+    },
   });
   const confirm = useMutation({
     mutationFn: () => scraperApi.confirm(preview?.preview_id ?? ""),
@@ -159,12 +238,17 @@ export function useScraper() {
     },
   });
   const outputPlan = useMutation({
-    mutationFn: () => scraperOutputApi.preview(target),
-    onSuccess: setOutput,
+    mutationFn: () => guarded(() => scraperOutputApi.preview(target)),
+    onSuccess: ({ value, epoch }) => {
+      if (current(epoch)) setOutput(value);
+      else void scraperOutputApi.discard(value.preview_id).catch(() => {});
+    },
   });
   const discard = useMutation({
-    mutationFn: () => scraperOutputApi.discard(output?.preview_id ?? ""),
-    onSuccess: () => {
+    mutationFn: () =>
+      guarded(() => scraperOutputApi.discard(output?.preview_id ?? "")),
+    onSuccess: ({ epoch }) => {
+      if (!current(epoch)) return;
       setOutput(undefined);
       write.reset();
     },
@@ -197,18 +281,62 @@ export function useScraper() {
     confirm.error ??
     outputPlan.error ??
     write.error;
-  const available = (id: string) =>
-    snapshot.data?.providers.some(
-      (p) => p.descriptor.id === id && p.config.enabled,
+  const authProviders =
+    snapshot.data?.providers.filter(
+      (p) =>
+        ["tmdb", "anilist", "wikipedia.html"].includes(p.descriptor.id) &&
+        (p.descriptor.requires_api_key || p.descriptor.requires_login),
+    ) ?? [];
+  const auth = useQueries({
+    queries: authProviders.map((p) => ({
+      queryKey: ["provider-auth", p.descriptor.id],
+      queryFn: () => providerAuthApi.status(p.descriptor.id),
+      retry: false,
+    })),
+  });
+  const providerState = (id: string) => {
+    const provider = snapshot.data?.providers.find(
+      (p) => p.descriptor.id === id,
     );
+    if (!provider) return "missing";
+    if (!provider.config.enabled) return "disabled";
+    if (
+      !provider.descriptor.media_kinds.includes(
+        kind === "tv" ? "tv_series" : kind,
+      )
+    )
+      return "unsupported";
+    const index = authProviders.findIndex((p) => p.descriptor.id === id);
+    if (index !== -1) {
+      if (auth[index].isPending) return "checking";
+      if (
+        auth[index].isError ||
+        !(
+          auth[index].data?.configured ||
+          auth[index].data?.status === "not_required"
+        )
+      )
+        return "credentials";
+    }
+    return "ready";
+  };
+  const available = (id: string) => providerState(id) === "ready";
   const supported = (id: string) =>
     snapshot.data?.providers.some(
-      (provider) =>
-        provider.descriptor.id === id &&
-        provider.descriptor.media_kinds.includes(
-          kind === "tv" ? "tv_series" : kind,
-        ),
+      (p) =>
+        p.descriptor.id === id &&
+        p.descriptor.media_kinds.includes(kind === "tv" ? "tv_series" : kind),
     );
+  const selectedProviders = providers.filter(available);
+  const searchValid = Boolean(
+    (title.trim() || (namespace.trim() && externalId.trim())) &&
+      (year === "" ||
+        (Number.isInteger(Number(year)) &&
+          Number(year) >= 1800 &&
+          Number(year) <= 2200)) &&
+      selectedProviders.length > 0 &&
+      (!target || validTarget),
+  );
   const selectCandidate = (index: number) => {
     if (!search) return;
     clearDetail();
@@ -237,6 +365,9 @@ export function useScraper() {
     selectedArtwork,
     setSelectedArtwork,
     target,
+    targetDetail,
+    targetKind,
+    validTarget,
     setTarget,
     localSearch,
     setLocalSearch,
@@ -264,6 +395,9 @@ export function useScraper() {
     error,
     available,
     supported,
+    providerState,
+    selectedProviders,
+    searchValid,
     selectCandidate,
     clearDetail,
   };

@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
+import { DesktopError } from "../../api/desktop";
 import { defaultBrowse, libraryApi } from "../../api/library";
 import {
   maintenanceApi,
@@ -16,6 +17,7 @@ import { Select } from "../../components/ui/select";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { useOrganization } from "./use-organization";
 import "./translations";
+import "../scraper/translations";
 
 const ScraperPage = lazy(() =>
   import("../scraper/page").then((m) => ({ default: m.ScraperPage })),
@@ -285,17 +287,17 @@ export function OrganizationPanel({
 export function LocalCandidates({
   adult = false,
   renderExtra,
+  initialMediaId,
 }: {
   adult?: boolean;
+  initialMediaId?: string;
   renderExtra?: (id: string) => React.ReactNode;
 }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
   const [cursors, setCursors] = useState<(string | null)[]>([null]);
   const [page, setPage] = useState(0);
-  const [selected, setSelected] = useState(
-    () => new URLSearchParams(window.location.search).get("media") ?? "",
-  );
+  const [selected, setSelected] = useState(initialMediaId ?? "");
   const media = useQuery({
     queryKey: adult
       ? ["adult", "tools", query, cursors[page]]
@@ -344,11 +346,13 @@ export function LocalCandidates({
               onChange={(e) => setSelected(e.target.value)}
             >
               <option value="">{t("toolsSelect")}</option>
-              {media.data.items.map((c) => (
-                <option key={c.media.id} value={c.media.id}>
-                  {c.media.title}
-                </option>
-              ))}
+              {media.data.items
+                .filter((c) => adult || c.media.kind !== "adult_video")
+                .map((c) => (
+                  <option key={c.media.id} value={c.media.id}>
+                    {c.media.title}
+                  </option>
+                ))}
             </Select>
           </Label>
           <div className="flex gap-3">
@@ -381,9 +385,23 @@ export function LocalCandidates({
             <Loading />
           ) : detail.error ? (
             <ErrorNotice error={detail.error} />
+          ) : !adult && detail.data.media.kind === "adult_video" ? (
+            <ErrorNotice error={new DesktopError("invalid_response")} />
           ) : (
             <section className="panel">
-              <h2>{detail.data.media.title}</h2>
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-semibold">{detail.data.media.title}</h2>
+                {!adult &&
+                  ["movie", "tv_series", "anime"].includes(
+                    detail.data.media.kind,
+                  ) && (
+                    <Button asChild>
+                      <Link to="/scraper" search={{ media: selected }}>
+                        {t("scraperThisMedia")}
+                      </Link>
+                    </Button>
+                  )}
+              </div>
               <ul>
                 {detail.data.files.map((f) => (
                   <li className="break-all" key={f.id}>
@@ -393,8 +411,17 @@ export function LocalCandidates({
               </ul>
             </section>
           )}
-          <OrganizationPanel key={selected} mediaId={selected} adult={adult} />
-          {renderExtra?.(selected)}
+          {detail.data &&
+            (adult || detail.data.media.kind !== "adult_video") && (
+              <>
+                <OrganizationPanel
+                  key={selected}
+                  mediaId={selected}
+                  adult={adult}
+                />
+                {renderExtra?.(selected)}
+              </>
+            )}
         </>
       )}
     </section>
@@ -493,7 +520,11 @@ function Maintenance() {
     </>
   );
 }
-export function MediaToolsPage() {
+export function MediaToolsPage({ mediaId }: { mediaId?: string } = {}) {
+  return <MediaToolsWorkspace key={mediaId ?? "tools"} mediaId={mediaId} />;
+}
+
+function MediaToolsWorkspace({ mediaId }: { mediaId?: string }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"local" | "scraper" | "health">("local");
   return (
@@ -525,7 +556,7 @@ export function MediaToolsPage() {
         ))}
       </fieldset>
       {tab === "local" ? (
-        <LocalCandidates />
+        <LocalCandidates initialMediaId={mediaId} />
       ) : tab === "scraper" ? (
         <Suspense fallback={<Loading />}>
           <ScraperPage />

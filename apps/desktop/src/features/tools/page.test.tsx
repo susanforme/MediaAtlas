@@ -301,3 +301,47 @@ it("discards a late Preview response after the tools view closes", async () => {
   expect(api.discard).toHaveBeenCalledWith("plan");
   expect(api.execute).not.toHaveBeenCalled();
 });
+
+it("does not expose a private item returned to the ordinary local workflow", async () => {
+  const media = {
+    id: "private",
+    kind: "adult_video" as const,
+    title: "PRIVATE TITLE",
+    original_title: null,
+    year: 2024,
+    created_at: "2026-01-01",
+    updated_at: "2026-01-01",
+  };
+  vi.mocked(libraryApi.toolsMedia).mockResolvedValue({
+    items: [{ media, poster_uri: null, health: [] }],
+    next_cursor: null,
+  });
+  vi.mocked(libraryApi.toolsDetail).mockResolvedValue({
+    media,
+    files: [
+      {
+        id: "file",
+        media_item_id: "private",
+        root_id: "root",
+        relative_path: "PRIVATE FILE.mkv",
+        size_bytes: 1,
+        modified_at: null,
+        part: null,
+      },
+    ],
+    artworks: [],
+    external_ids: [],
+    metadata_values: [],
+    relations: [],
+    health: [],
+    poster_uri: null,
+  });
+  show(<MediaToolsPage mediaId="private" />);
+  await screen.findByRole("alert");
+  expect(screen.queryByText("PRIVATE TITLE")).not.toBeInTheDocument();
+  expect(screen.queryByText("PRIVATE FILE.mkv")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Scrape this media" }),
+  ).not.toBeInTheDocument();
+  expect(api.history).not.toHaveBeenCalled();
+});
