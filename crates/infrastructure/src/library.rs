@@ -8,7 +8,7 @@ use mediaatlas_domain::{
 use serde::{de::DeserializeOwned, Serialize};
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteRow},
-    QueryBuilder, Row, Sqlite, SqlitePool,
+    ConnectOptions, QueryBuilder, Row, Sqlite, SqlitePool,
 };
 use std::{fmt, path::Path, time::Duration};
 use uuid::Uuid;
@@ -109,7 +109,8 @@ impl LibraryRepository {
             .create_if_missing(true)
             .foreign_keys(true)
             .journal_mode(SqliteJournalMode::Wal)
-            .busy_timeout(Duration::from_secs(5));
+            .busy_timeout(Duration::from_secs(5))
+            .disable_statement_logging();
         let pool = SqlitePoolOptions::new()
             .max_connections(4)
             .connect_with(options)

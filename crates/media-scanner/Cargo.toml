@@ -1,0 +1,22 @@
+[package]
+name = "mediaatlas-media-scanner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mediaatlas-domain.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+regex = "1"
+walkdir = "2"
+globset = "0.4"
+roxmltree = "0.20"
+lofty = "0.22"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

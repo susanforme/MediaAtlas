@@ -2,7 +2,7 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
 
-当前完成 **Phase 1 领域与 SQLite 基础**：独立媒体类型模型、公共媒体索引 Repository、来源/锁定、多语言键、跨平台路径身份和任务记录。桌面界面仍为 Phase 0 的连接诊断页，尚未接入数据库、扫描或 Provider；浏览器预览会明确提示需要桌面运行。
+当前实现 **Phase 2 本地扫描与媒体库**：添加/管理 Root、后台手动及增量扫描、分页候选预览、勾选确认入库、任务进度/取消，以及真实本地海报墙、列表、筛选和详情。只读本地 NFO/音频标签，不访问在线 Provider，不移动或改写源媒体。UI 暂时仅支持 `zh-CN`、`en-US`；浏览器预览明确提示需要桌面运行。
 
 ## 开发环境
 
@@ -35,7 +35,9 @@ pnpm build           # 前端生产构建
 pnpm build:desktop   # 本平台桌面可执行文件，不生成安装包、不发布
 ```
 
-桌面启动后应显示“本地核心已连接”和构建版本 `0.1.0`。切换语言、重新检查连接属于 P0 手动验收；网页模式应显示“请在桌面应用中打开”。
+桌面启动后在 Root 页面输入本地目录、名称和媒体类型，再进入扫描页。扫描完成先显示候选，只有勾选并再次确认的条目才进入媒体库。诊断页保留本地核心连接检查和真实版本；网页模式无法调用后端，不伪造媒体记录。
+
+默认使用本机应用数据目录中的 `library.sqlite`；原媒体目录只读。海报来自本地文件，在应用缓存中生成小图。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
 
 ## 检查
 
@@ -46,7 +48,7 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
-默认 Rust 成员为四个 core crate，可在未安装 GTK/WebKit 的环境独立测试。完成前端构建、安装平台依赖后，检查完整桌面 workspace：
+默认 Rust 成员为四个 core crate 和独立只读 scanner，可在未安装 GTK/WebKit 的环境独立测试。完成前端构建、安装平台依赖后，检查完整桌面 workspace：
 
 ```bash
 cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -68,9 +70,9 @@ cargo test --workspace --locked
 cargo run -p mediaatlas-infrastructure --example library_roundtrip --locked
 ```
 
-该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。数据库由调用方显式创建，桌面应用启动不自动打开用户媒体库。
+该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。P2 桌面启动会打开应用自身的 SQLite，但不会自动扫描用户媒体目录。
 
-Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，P1 Repository 保存公共索引；具体扩展表和业务按对应阶段追加。任务/刮削运行/文件计划只持久化不可变输入与状态，调度、恢复和文件执行尚未实现。
+Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体在线业务按阶段追加。P2 支持目录扫描任务的后台执行、取消和遗留任务标记 Interrupted；等待确认的候选保留，运行中任务不会自动重放。文件移动、标签写入、在线刮削与 Watcher 均未实现。
 
 ## 目录与契约
 
@@ -81,10 +83,11 @@ crates/domain/               公共实体、独立媒体模型、路径与元数
 crates/application/          应用信息用例
 crates/desktop-bridge/       不依赖 Tauri 的 DTO 和错误协议
 crates/infrastructure/       结构化日志、SQLite Repository、追加迁移
+crates/media-scanner/        只读遍历、分类型文件名解析、本地 NFO/音频标签
 docs/                        基线、架构决策、任务与验收
 ```
 
-当前仅 `get_app_info` 命令，`schema_version: 1`。启动事件 `app-ready` 仅为诊断，不保证 UI 必达；UI 通过命令握手。前端不访问刮削站点，不把浏览器预览伪装成核心连接成功。
+P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{schema_version:1,data:T}`。任务事件用于刷新提示，持久化查询和轮询为权威来源，UI 不依赖事件必达。完整契约见 [Phase 2 接口](docs/phase-2-contract.md)。前端不访问刮削站点。
 
 日志写入 Tauri `app_log_dir`，每日滚动、最多保留 7 份，并向 stderr 输出 JSON。P0 日志只记录固定启动信息，不接收用户 payload；网络和文件业务的脱敏在对应阶段落实。
 
@@ -96,5 +99,8 @@ docs/                        基线、架构决策、任务与验收
 - [领域模型](docs/domain-model.md)
 - [数据库 Schema](docs/database-schema.md)
 - [Phase 1 验收记录](docs/acceptance/phase-1.md)
+- [扫描工作流](docs/library-workflow.md)
+- [界面规范](docs/ui-spec.md)
+- [Phase 2 验收记录](docs/acceptance/phase-2.md)
 
-本轮提交 Phase 1 后停止，等待用户明确指示才开始 Phase 2。
+本轮提交 Phase 2 后停止，等待用户明确指示才开始 Phase 3。

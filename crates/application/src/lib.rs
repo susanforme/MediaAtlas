@@ -1,5 +1,7 @@
 //! Application use cases are independent of the desktop framework and storage.
 
+pub mod library;
+
 use mediaatlas_domain::AppError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

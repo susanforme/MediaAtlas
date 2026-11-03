@@ -1,6 +1,8 @@
 //! Local infrastructure adapters: structured logs and SQLite persistence.
 
+pub mod browse;
 pub mod library;
+pub mod scan_service;
 pub mod tasks;
 
 use std::{io, path::Path};

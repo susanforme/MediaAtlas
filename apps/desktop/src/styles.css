@@ -42,3 +42,215 @@ select {
     transition-duration: 0.01ms;
   }
 }
+
+.app-header {
+  min-height: 72px;
+  border-bottom: 1px solid var(--color-border);
+  background: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 28px;
+}
+.app-header select {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  background: white;
+}
+.app-body {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  min-height: calc(100vh - 72px);
+}
+.app-nav {
+  padding: 24px 14px;
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: white;
+}
+.app-nav a {
+  padding: 11px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--color-muted-foreground);
+}
+.app-nav a:hover,
+.app-nav a.active {
+  background: var(--color-muted);
+  color: var(--color-primary);
+}
+.app-content {
+  padding: 32px;
+  min-width: 0;
+}
+.panel {
+  padding: 24px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: white;
+}
+.section-title {
+  margin-bottom: 16px;
+  font-weight: 600;
+}
+.filter-grid,
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+.filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13px;
+}
+.filter-field input,
+.filter-field select,
+.filter-field textarea {
+  width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: white;
+  min-height: 40px;
+  color: #1d3029;
+}
+.filter-field input:focus-visible,
+.filter-field select:focus-visible,
+.filter-field textarea:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+.action-link {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-primary);
+  padding: 9px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: white;
+}
+.notice {
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: var(--color-muted);
+  font-size: 14px;
+}
+.error-notice {
+  border-color: #d8b9b1;
+  background: #fff4f0;
+}
+.empty-state {
+  padding: 56px 24px;
+  border: 1px dashed var(--color-border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+  background: var(--color-muted);
+  color: var(--color-muted-foreground);
+}
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: white;
+}
+.table-wrap table {
+  width: 100%;
+  text-align: left;
+  border-collapse: collapse;
+}
+.table-wrap th {
+  padding: 14px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-muted-foreground);
+  background: var(--color-muted);
+}
+.table-wrap td {
+  padding: 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 14px;
+  max-width: 400px;
+}
+.poster-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+}
+.poster-card {
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+}
+.poster-card:hover {
+  box-shadow: 0 3px 16px #14292312;
+}
+.poster-image {
+  aspect-ratio: 2 / 3;
+  background: var(--color-muted);
+  overflow: hidden;
+}
+.poster-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.poster-placeholder {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  color: var(--color-muted-foreground);
+  font-size: 12px;
+}
+.detail-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 28px;
+}
+@media (max-width: 760px) {
+  .app-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-nav {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+  .app-nav a {
+    padding: 8px;
+  }
+  .app-content {
+    padding: 20px;
+  }
+  .detail-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detail-layout > div:first-child {
+    max-width: 220px;
+  }
+}
