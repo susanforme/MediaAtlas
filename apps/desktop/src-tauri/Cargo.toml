@@ -1,0 +1,21 @@
+[package]
+name = "mediaatlas-desktop"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "mediaatlas_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+mediaatlas-application.workspace = true
+mediaatlas-desktop-bridge.workspace = true
+mediaatlas-infrastructure.workspace = true
+
+[lints]
+workspace = true

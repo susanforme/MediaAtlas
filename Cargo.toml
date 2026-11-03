@@ -1,0 +1,28 @@
+[workspace]
+members = ["crates/domain", "crates/application", "crates/infrastructure", "crates/desktop-bridge", "apps/desktop/src-tauri"]
+default-members = ["crates/domain", "crates/application", "crates/infrastructure", "crates/desktop-bridge"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+
+[workspace.dependencies]
+mediaatlas-domain = { path = "crates/domain" }
+mediaatlas-application = { path = "crates/application" }
+mediaatlas-infrastructure = { path = "crates/infrastructure" }
+mediaatlas-desktop-bridge = { path = "crates/desktop-bridge" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["json"] }
+tracing-appender = "0.2"
+uuid = { version = "1", features = ["v4"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"

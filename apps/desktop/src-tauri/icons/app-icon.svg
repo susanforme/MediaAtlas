@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>MediaAtlas</title>
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="#142923"/>
+  <path d="M112 366V146h60l84 114 84-114h60v220h-64V254l-80 104-80-104v112z" fill="#99dfbd"/>
+</svg>

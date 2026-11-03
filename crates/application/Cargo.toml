@@ -1,0 +1,11 @@
+[package]
+name = "mediaatlas-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mediaatlas-domain.workspace = true
+
+[lints]
+workspace = true

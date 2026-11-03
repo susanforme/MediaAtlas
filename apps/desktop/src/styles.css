@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-primary: #256b57;
+  --color-border: #e2e6e5;
+  --color-muted: #f3f6f5;
+  --color-muted-foreground: #63736e;
+  --font-sans:
+    "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+:root {
+  font-family: var(--font-sans);
+  color: #1d3029;
+  background: #f7f9f8;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button,
+select {
+  font: inherit;
+}
+button:not(:disabled),
+select {
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms;
+  }
+}
