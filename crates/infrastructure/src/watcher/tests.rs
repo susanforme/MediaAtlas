@@ -33,6 +33,17 @@ async fn fixture() -> (
     let watcher = WatcherService::new(repo.clone(), scans.clone());
     (dir, repo, scans, watcher, root)
 }
+fn injected_signals_only(watcher: &WatcherService) {
+    // Queue/overflow/lifecycle tests provide their own causal event source.
+    // Set this before any watch is installed so native startup batches cannot
+    // race with the injected-generation assertions. Native integration tests
+    // never call this helper and retain real OS callback delivery.
+    assert!(watcher.runtime.live.lock().unwrap().handles.is_empty());
+    watcher
+        .runtime
+        .native_callbacks_enabled
+        .store(false, Ordering::Release);
+}
 async fn task_count(repo: &LibraryRepository) -> i64 {
     sqlx::query_scalar("SELECT count(*) FROM scan_sessions")
         .fetch_one(repo.pool())
@@ -128,6 +139,7 @@ async fn native_events_are_debounced_into_unconfirmed_candidates_and_restart_res
 #[tokio::test]
 async fn overflow_active_scan_merge_and_root_lifecycle_preserve_one_pipeline() {
     let (_dir, repo, scans, watcher, mut root) = fixture().await;
+    injected_signals_only(&watcher);
     std::fs::write(Path::new(&root.path).join("Fixture.2020.mkv"), b"generated").unwrap();
     let manual = scans.start(root.id).await.unwrap();
     settled(&scans, manual.id).await;
@@ -210,10 +222,7 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
     // current-generation event, not evidence that the injected old one ran.
     // Isolate native callback delivery for this test only. The native-event
     // integration tests leave this gate enabled and exercise real OS events.
-    watcher
-        .runtime
-        .native_callbacks_enabled
-        .store(false, Ordering::Release);
+    injected_signals_only(&watcher);
     watcher.configure(root.id, true).await.unwrap();
     let old = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     watcher.configure(root.id, false).await.unwrap();
@@ -334,6 +343,7 @@ fn bounded_queue_overflow_retains_full_rescan_signal_with_bounded_memory() {
 #[tokio::test]
 async fn shutdown_acknowledgement_waits_for_dispatch_and_rejects_queued_events() {
     let (_dir, repo, _scans, watcher, root) = fixture().await;
+    injected_signals_only(&watcher);
     watcher.configure(root.id, true).await.unwrap();
     let signal = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     let barrier = watcher.runtime.dispatch.lock().await;
@@ -396,13 +406,24 @@ async fn restore_catches_up_changes_made_while_process_was_stopped_without_a_nat
 }
 #[tokio::test]
 async fn replaced_or_missing_filesystem_root_retires_native_generation_and_can_recover() {
-    let (dir, repo, _scans, watcher, root) = fixture().await;
+    let (dir, repo, scans, watcher, root) = fixture().await;
+    injected_signals_only(&watcher);
+    std::fs::write(
+        Path::new(&root.path).join("Old.2023.mkv"),
+        b"preserved old root",
+    )
+    .unwrap();
     watcher.configure(root.id, true).await.unwrap();
     let old = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     std::fs::rename(&root.path, dir.path().join("old-root")).unwrap();
     watcher.reconcile().await.unwrap();
     assert!(!watcher.list().await.unwrap()[0].active);
     std::fs::create_dir(&root.path).unwrap();
+    std::fs::write(
+        Path::new(&root.path).join("Recovered.2024.mkv"),
+        b"new root fixture",
+    )
+    .unwrap();
     watcher.reconcile().await.unwrap();
     let new = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     assert_ne!(old, new);
@@ -410,5 +431,26 @@ async fn replaced_or_missing_filesystem_root_retires_native_generation_and_can_r
     record_overflow(&watcher.runtime.overflow, old);
     tokio::time::sleep(Duration::from_millis(650)).await;
     assert_eq!(task_count(&repo).await, 0);
+    // The fresh generation still dispatches through the real read-only scan
+    // pipeline and is bound to the replacement directory, not the old handle.
+    watcher.runtime.sender.send(new).await.unwrap();
+    wait_tasks(&repo, 1).await;
+    let task = scans.list_tasks(false).await.unwrap().remove(0);
+    settled(&scans, task.id).await;
+    let preview = scans
+        .preview(&PreviewInput {
+            task_id: task.id,
+            cursor: None,
+            limit: 100,
+            include_adult: false,
+        })
+        .await
+        .unwrap();
+    assert_eq!(preview.items.len(), 1);
+    assert_eq!(preview.items[0].relative_path, "Recovered.2024.mkv");
+    assert_eq!(
+        std::fs::read(dir.path().join("old-root/Old.2023.mkv")).unwrap(),
+        b"preserved old root"
+    );
     watcher.shutdown().await;
 }
