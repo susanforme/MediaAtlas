@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { libraryApi, type MediaFile } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
 import { Button } from "../../components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ErrorNotice } from "./shared";
 import "./native-open-translations";
 export function playableFiles(files: MediaFile[]) {
@@ -30,6 +31,7 @@ export function NativeOpen({
   className?: string;
 }) {
   const { t } = useTranslation();
+  const trigger = useRef<HTMLButtonElement>(null);
   const [choices, setChoices] = useState<MediaFile[]>();
   const active = useRef(true);
   const context = useMemo(
@@ -68,6 +70,7 @@ export function NativeOpen({
   return (
     <>
       <Button
+        ref={trigger}
         className={className}
         onClick={() => choose.mutate()}
         disabled={choose.isPending || launch.isPending}
@@ -80,34 +83,45 @@ export function NativeOpen({
         {children ?? t("nativeOpen")}
       </Button>
       {choices && (
-        <section
-          role="dialog"
-          aria-label={t("nativeSelect")}
-          className="panel mt-3"
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setChoices(undefined);
+          }}
         >
-          <h3>{t("nativeSelect")}</h3>
-          {choices.length ? (
-            <ul>
-              {choices.map((f) => (
-                <li key={f.id}>
-                  <Button
-                    variant="outline"
-                    disabled={launch.isPending}
-                    onClick={() => launch.mutate(f.id)}
-                  >
-                    {f.relative_path}
-                    {f.part !== null ? ` · ${t("part")} ${f.part}` : ""}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p>{t("nativeNoFiles")}</p>
-          )}
-          <Button variant="outline" onClick={() => setChoices(undefined)}>
-            {t("nativeClose")}
-          </Button>
-        </section>
+          <DialogContent
+            aria-describedby={undefined}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              trigger.current?.focus();
+            }}
+          >
+            <DialogTitle className="mb-4 font-semibold">
+              {t("nativeSelect")}
+            </DialogTitle>
+            {choices.length ? (
+              <ul>
+                {choices.map((f) => (
+                  <li key={f.id}>
+                    <Button
+                      variant="outline"
+                      disabled={launch.isPending}
+                      onClick={() => launch.mutate(f.id)}
+                    >
+                      {f.relative_path}
+                      {f.part !== null ? ` · ${t("part")} ${f.part}` : ""}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p>{t("nativeNoFiles")}</p>
+            )}
+            <Button variant="outline" onClick={() => setChoices(undefined)}>
+              {t("nativeClose")}
+            </Button>
+          </DialogContent>
+        </Dialog>
       )}
       {(choose.error || launch.error) && (
         <ErrorNotice error={choose.error ?? launch.error} />

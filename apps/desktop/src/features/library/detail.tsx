@@ -1,9 +1,12 @@
+import { MediaArtwork } from "./media-artwork";
+import "./library.css";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ImageOff, LockKeyhole } from "lucide-react";
+import { LockKeyhole } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { libraryApi } from "../../api/library";
+import { Button } from "../../components/ui/button";
 import { NativeOpen } from "./native-open";
 import {
   Empty,
@@ -37,29 +40,30 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
     return <Empty title={t("privacyHidden")} />;
   return (
     <>
-      <Link to="/library" className="mb-5 inline-block text-sm text-primary">
-        ← {t("backToLibrary")}
-      </Link>
+      <Button asChild variant="ghost">
+        <Link to="/library" className="mb-5 inline-block text-sm text-primary">
+          ← {t("backToLibrary")}
+        </Link>
+      </Button>
       <PageHeading
         title={data.media.title}
         description={`${t(`kind_${data.media.kind}`)} · ${data.media.year ?? t("unknownYear")}`}
       >
         <NativeOpen files={data.files} />
-        <Link to="/tools" className="action-link">
-          {t("videoTools")}
-        </Link>
+        <Button asChild variant="ghost">
+          <Link to="/tools" className="action-link">
+            {t("videoTools")}
+          </Link>
+        </Button>
       </PageHeading>
       <div className="detail-layout">
         <div>
           <div className="poster-image rounded-2xl border border-border">
-            {data.poster_uri?.startsWith("data:image/") ? (
-              <img alt={data.media.title} src={data.poster_uri} />
-            ) : (
-              <div className="poster-placeholder">
-                <ImageOff size={30} aria-hidden="true" />
-                <span>{t("noPoster")}</span>
-              </div>
-            )}
+            <MediaArtwork
+              uri={data.poster_uri}
+              title={data.media.title}
+              eager
+            />
           </div>
           <div className="mt-4">
             <HealthBadges health={data.health} />
@@ -165,13 +169,15 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
               <ul>
                 {data.relations.map((relation) => (
                   <li key={relation.id} className="py-1">
-                    <Link
-                      to="/media/$mediaId"
-                      params={{ mediaId: relation.id }}
-                      className="text-primary"
-                    >
-                      {relation.title}
-                    </Link>
+                    <Button asChild variant="ghost">
+                      <Link
+                        to="/media/$mediaId"
+                        params={{ mediaId: relation.id }}
+                        className="text-primary"
+                      >
+                        {relation.title}
+                      </Link>
+                    </Button>
                     <span className="ml-2 text-xs text-muted-foreground">
                       {t(`kind_${relation.kind}`)}
                     </span>

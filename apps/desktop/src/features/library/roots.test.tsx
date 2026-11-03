@@ -7,6 +7,11 @@ import i18n from "../../i18n";
 import { PrivacyProvider } from "./context";
 import { RootsPage } from "./pages";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
+    <a href={to}>{children}</a>
+  ),
+}));
 vi.mock("../../api/library", async (original) => {
   const module = await original<typeof import("../../api/library")>();
   return {
@@ -80,4 +85,37 @@ it("uses localized validation instead of submitting empty root fields", async ()
     "Enter a root name, absolute path and media type.",
   );
   expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+});
+
+it("keeps root removal explicit and restores focus when its dialog is dismissed", async () => {
+  vi.mocked(libraryApi.roots).mockResolvedValue([
+    {
+      id: "fixture-root",
+      name: "Synthetic directory",
+      path: "/fixture/media",
+      path_style: "posix",
+      kind: "movie",
+      enabled: true,
+      exclude_patterns: [],
+      created_at: time,
+      updated_at: time,
+      last_scan_at: null,
+    },
+  ]);
+  show();
+  const trigger = await screen.findByRole("button", { name: "Remove" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole("dialog", {
+    name: "Remove root index",
+  });
+  expect(dialog).toHaveTextContent("Source files on disk will be preserved.");
+  await waitFor(() =>
+    expect(dialog).toContainElement(document.activeElement as HTMLElement),
+  );
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(trigger).toHaveFocus();
 });

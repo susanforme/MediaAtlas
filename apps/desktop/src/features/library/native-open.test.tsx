@@ -221,3 +221,22 @@ it("invalidates a pending file selection synchronously when the displayed resour
   expect(nativeOpenApi.open).not.toHaveBeenCalled();
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+
+it("traps keyboard focus in version selection and restores the opening button on Escape", async () => {
+  show(<NativeOpen files={[file("one", "one.mkv"), file("two", "two.mkv")]} />);
+  const trigger = screen.getByRole("button", { name: "Open in system app" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const dialog = await screen.findByRole("dialog", {
+    name: "Choose a version or Part to open",
+  });
+  await waitFor(() =>
+    expect(dialog).toContainElement(document.activeElement as HTMLElement),
+  );
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(trigger).toHaveFocus();
+  expect(nativeOpenApi.open).not.toHaveBeenCalled();
+});

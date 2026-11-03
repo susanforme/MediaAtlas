@@ -1,16 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ImageOff, LayoutGrid, List } from "lucide-react";
-import { useState } from "react";
+import { LayoutGrid, List } from "lucide-react";
+import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import {
-  type BrowseQuery,
-  defaultBrowse,
-  type FacetOption,
-  libraryApi,
-  type MediaKind,
-} from "../../api/library";
+import type { FacetOption, MediaKind } from "../../api/library";
 import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
+import type { LibrarySearch } from "./browse-model";
+import { MediaArtwork } from "./media-artwork";
+import { useLibraryBrowse } from "./use-library-browse";
+import "./library.css";
 import { NativeOpen } from "./native-open";
 import {
   ALL_KINDS,
@@ -24,45 +24,8 @@ import {
   useFormat,
 } from "./shared";
 
-export interface LibrarySearch {
-  root?: string;
-  kind?: MediaKind;
-  q?: string;
-  health?: string;
-  genre?: string;
-  person?: string;
-  studio?: string;
-  year?: number;
-  sort?: string;
-  cursor?: string;
-  page?: number;
-  view?: "wall" | "list";
-}
-export function validateLibrarySearch(
-  value: Record<string, unknown>,
-): LibrarySearch {
-  const out: LibrarySearch = {};
-  for (const key of [
-    "root",
-    "q",
-    "health",
-    "genre",
-    "person",
-    "studio",
-    "sort",
-    "cursor",
-  ] as const)
-    if (typeof value[key] === "string" && value[key])
-      out[key] = value[key] as string;
-  if (ALL_KINDS.includes(value.kind as MediaKind))
-    out.kind = value.kind as MediaKind;
-  const year = Number(value.year);
-  if (value.year && Number.isInteger(year)) out.year = year;
-  const page = Number(value.page);
-  if (Number.isInteger(page) && page > 0) out.page = page;
-  if (value.view === "list" || value.view === "wall") out.view = value.view;
-  return out;
-}
+export { type LibrarySearch, validateLibrarySearch } from "./browse-model";
+
 function FacetSelect({
   label,
   value,
@@ -76,9 +39,9 @@ function FacetSelect({
 }) {
   const { number } = useFormat();
   return (
-    <label className="filter-field">
+    <Label className="filter-field">
       <span>{label}</span>
-      <select
+      <Select
         value={value ?? ""}
         onChange={(event) => change(event.target.value)}
       >
@@ -88,8 +51,8 @@ function FacetSelect({
             {option.value} ({number(option.count)})
           </option>
         ))}
-      </select>
-    </label>
+      </Select>
+    </Label>
   );
 }
 export function LibraryPage({
@@ -102,56 +65,48 @@ export function LibraryPage({
   adult?: boolean;
 }) {
   const { t } = useTranslation();
-  const { number } = useFormat();
-  const [advanced, setAdvanced] = useState(false);
-  const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
-  const access = false;
-  const query: BrowseQuery = {
-    ...defaultBrowse(access),
-    root_id: search.root ?? null,
-    kind: adult
-      ? "adult_video"
-      : search.kind === "adult_video"
-        ? null
-        : (search.kind ?? null),
-    query: search.q ?? null,
-    health: search.health ?? null,
-    genre: search.genre ?? null,
-    person: search.person ?? null,
-    studio: search.studio ?? null,
-    year: search.year ?? null,
-    sort: search.sort ?? "updated_desc",
-    cursor: search.cursor ?? null,
-  };
-  const allowed = !adult;
-  const roots = useQuery({
-    queryKey: ["roots", access],
-    queryFn: () => libraryApi.roots(access),
-    enabled: allowed,
-  });
-  const media = useQuery({
-    queryKey: ["media", query],
-    queryFn: () => libraryApi.media(query),
-    enabled: allowed,
-  });
-  const facets = useQuery({
-    queryKey: ["facets", { ...query, cursor: null }],
-    queryFn: () => libraryApi.facets({ ...query, cursor: null }),
-    enabled: allowed,
-  });
-  function filter(patch: LibrarySearch) {
-    setHistory([undefined]);
-    onSearch({ ...search, ...patch, cursor: undefined, page: 1 });
-  }
+  const {
+    advanced,
+    setAdvanced,
+    history,
+    setHistory,
+    media,
+    roots,
+    facets,
+    filter,
+    allowed,
+  } = useLibraryBrowse(search, onSearch, adult);
+  const toolbarSearch =
+    typeof document === "undefined"
+      ? null
+      : document.getElementById("library-toolbar-search");
+  const searchInput = (
+    <Label className="filter-field">
+      <span className={toolbarSearch ? "sr-only" : undefined}>
+        {t("search")}
+      </span>
+      <Input
+        type="search"
+        placeholder={t("search")}
+        value={search.q ?? ""}
+        onChange={(event) => filter({ q: event.target.value || undefined })}
+      />
+    </Label>
+  );
+  const searchField = toolbarSearch
+    ? createPortal(searchInput, toolbarSearch)
+    : searchInput;
   const page = search.page ?? 1;
   if (!allowed) return <Empty title={t("privacyHidden")} />;
   return (
     <>
       <PageHeading title={adult ? t("adultLibrary") : t("library")}>
         <div className="flex gap-2">
-          <Link to="/tools" className="action-link">
-            {t("videoTools")}
-          </Link>
+          <Button asChild variant="ghost">
+            <Link to="/tools" className="action-link">
+              {t("videoTools")}
+            </Link>
+          </Button>
           <Button
             variant={search.view !== "list" ? "default" : "outline"}
             aria-label={t("wall")}
@@ -170,19 +125,10 @@ export function LibraryPage({
       </PageHeading>
       <div className="panel mb-6">
         <div className="filter-grid">
-          <label className="filter-field">
-            <span>{t("search")}</span>
-            <input
-              type="search"
-              value={search.q ?? ""}
-              onChange={(event) =>
-                filter({ q: event.target.value || undefined })
-              }
-            />
-          </label>
-          <label className="filter-field">
+          {searchField}
+          <Label className="filter-field">
             <span>{t("root")}</span>
-            <select
+            <Select
               value={search.root ?? ""}
               onChange={(event) =>
                 filter({ root: event.target.value || undefined })
@@ -200,12 +146,12 @@ export function LibraryPage({
                     {r.name}
                   </option>
                 ))}
-            </select>
-          </label>
+            </Select>
+          </Label>
           {!adult && (
-            <label className="filter-field">
+            <Label className="filter-field">
               <span>{t("type")}</span>
-              <select
+              <Select
                 value={search.kind ?? ""}
                 onChange={(event) =>
                   filter({
@@ -221,12 +167,12 @@ export function LibraryPage({
                     {t(`kind_${kind}`)}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Label>
           )}
-          <label className="filter-field">
+          <Label className="filter-field">
             <span>{t("health")}</span>
-            <select
+            <Select
               value={search.health ?? ""}
               onChange={(event) =>
                 filter({ health: event.target.value || undefined })
@@ -238,11 +184,11 @@ export function LibraryPage({
                   {t(`health_${health}`)}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="filter-field">
+            </Select>
+          </Label>
+          <Label className="filter-field">
             <span>{t("sort")}</span>
-            <select
+            <Select
               value={search.sort ?? "updated_desc"}
               onChange={(event) => filter({ sort: event.target.value })}
             >
@@ -253,8 +199,8 @@ export function LibraryPage({
                   </option>
                 ),
               )}
-            </select>
-          </label>
+            </Select>
+          </Label>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
           <Button
@@ -340,18 +286,18 @@ export function LibraryPage({
                     <NativeOpen mediaId={card.media.id}>
                       {card.media.title}
                     </NativeOpen>
-                    <Link
-                      to="/media/$mediaId"
-                      params={{ mediaId: card.media.id }}
-                      className="font-medium text-primary"
-                    >
-                      {t("detailsAction")}
-                    </Link>
+                    <Button asChild variant="ghost">
+                      <Link
+                        to="/media/$mediaId"
+                        params={{ mediaId: card.media.id }}
+                        className="font-medium text-primary"
+                      >
+                        {t("detailsAction")}
+                      </Link>
+                    </Button>
                   </td>
                   <td>{t(`kind_${card.media.kind}`)}</td>
-                  <td>
-                    {card.media.year ? number(card.media.year) : t("none")}
-                  </td>
+                  <td>{card.media.year ? card.media.year : t("none")}</td>
                   <td>
                     <HealthBadges health={card.health} />
                   </td>
@@ -370,18 +316,10 @@ export function LibraryPage({
                 className="h-auto w-full flex-col items-stretch overflow-hidden rounded-none bg-transparent p-0 text-left text-foreground hover:bg-muted"
               >
                 <div className="poster-image">
-                  {card.poster_uri?.startsWith("data:image/") ? (
-                    <img
-                      src={card.poster_uri}
-                      alt={card.media.title}
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="poster-placeholder">
-                      <ImageOff size={28} aria-hidden="true" />
-                      <span>{t("noPoster")}</span>
-                    </div>
-                  )}
+                  <MediaArtwork
+                    uri={card.poster_uri}
+                    title={card.media.title}
+                  />
                 </div>
                 <span
                   className="block truncate p-4 font-semibold"
@@ -391,16 +329,18 @@ export function LibraryPage({
                 </span>
               </NativeOpen>
               <div className="p-4">
-                <Link
-                  to="/media/$mediaId"
-                  params={{ mediaId: card.media.id }}
-                  className="action-link"
-                >
-                  {t("detailsAction")}
-                </Link>
+                <Button asChild variant="ghost">
+                  <Link
+                    to="/media/$mediaId"
+                    params={{ mediaId: card.media.id }}
+                    className="action-link"
+                  >
+                    {t("detailsAction")}
+                  </Link>
+                </Button>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {card.media.year ? number(card.media.year) : t("unknownYear")}{" "}
-                  · {t(`kind_${card.media.kind}`)}
+                  {card.media.year ? card.media.year : t("unknownYear")} ·{" "}
+                  {t(`kind_${card.media.kind}`)}
                 </p>
                 <div className="mt-3">
                   <HealthBadges health={card.health} />
