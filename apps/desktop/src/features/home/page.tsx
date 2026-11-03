@@ -76,14 +76,49 @@ export function DashboardPage() {
             </>
           ) : (
             <>
-              <h1>{t("homeWelcome")}</h1>
-              <p className="home-synopsis">{t("homeNewLibrary")}</p>
-              <Button className="mt-7" asChild>
-                <Link to="/roots">
-                  <Plus size={18} aria-hidden="true" />
-                  {t("addRoot")}
-                </Link>
-              </Button>
+              <h1>
+                {t(
+                  summary.data?.total_roots ? "homeReadyToScan" : "homeWelcome",
+                )}
+              </h1>
+              <p className="home-synopsis">
+                {t(
+                  summary.data?.total_roots
+                    ? "homeScanBeforeBrowse"
+                    : "homeNewLibrary",
+                )}
+              </p>
+              <div className="home-actions">
+                {summary.data?.total_roots ? (
+                  <>
+                    <Button asChild>
+                      <Link
+                        to={
+                          summary.data.pending_tasks > 0 ? "/tasks" : "/scanner"
+                        }
+                      >
+                        {t(
+                          summary.data.pending_tasks > 0
+                            ? "homeReviewTasks"
+                            : "startScan",
+                        )}
+                      </Link>
+                    </Button>
+                    {summary.data.pending_tasks > 0 && (
+                      <Button asChild variant="outline">
+                        <Link to="/scanner">{t("scanner")}</Link>
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button asChild>
+                    <Link to="/roots">
+                      <Plus size={18} aria-hidden="true" />
+                      {t("addRoot")}
+                    </Link>
+                  </Button>
+                )}
+              </div>
             </>
           )}
         </div>

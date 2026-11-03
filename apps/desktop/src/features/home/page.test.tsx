@@ -137,14 +137,14 @@ it("does not promote adult media or request its detail if the ordinary channel r
   show();
   expect(
     await screen.findByRole("heading", {
-      name: "Your media. A world to explore.",
+      name: "Your directories are ready.",
     }),
   ).toBeInTheDocument();
   expect(screen.queryByText("Synthetic private title")).not.toBeInTheDocument();
   expect(libraryApi.detail).not.toHaveBeenCalled();
-  expect(screen.getByRole("link", { name: "Add root" })).toHaveAttribute(
+  expect(screen.getByRole("link", { name: "Start scan" })).toHaveAttribute(
     "href",
-    "/roots",
+    "/scanner",
   );
 });
 it("offers a clear empty entry and shows the library request error without sample posters", async () => {
@@ -160,7 +160,7 @@ it("offers a clear empty entry and shows the library request error without sampl
   });
   fireEvent.click(screen.getByRole("button", { name: "Check again" }));
   expect(
-    await screen.findByRole("link", { name: "Add root" }),
+    await screen.findByRole("link", { name: "Start scan" }),
   ).toBeInTheDocument();
 });
 it("keeps a loading state until media arrives", async () => {
@@ -176,4 +176,50 @@ it("keeps a loading state until media arrives", async () => {
   await waitFor(() =>
     expect(screen.queryByRole("status")).not.toBeInTheDocument(),
   );
+});
+
+it("offers directory selection when no roots exist", async () => {
+  vi.mocked(libraryApi.media).mockResolvedValue({
+    items: [],
+    next_cursor: null,
+  });
+  vi.mocked(libraryApi.summary).mockResolvedValue({
+    total_media: 0,
+    total_roots: 0,
+    pending_tasks: 0,
+    failed_tasks: 0,
+    missing_poster: 0,
+    missing_nfo: 0,
+    incomplete_metadata: 0,
+  });
+  show();
+  expect(await screen.findByRole("link", { name: "Add root" })).toHaveAttribute(
+    "href",
+    "/roots",
+  );
+  expect(
+    screen.queryByRole("link", { name: "Start scan" }),
+  ).not.toBeInTheDocument();
+});
+it("directs an empty library with pending work to its existing tasks", async () => {
+  vi.mocked(libraryApi.media).mockResolvedValue({
+    items: [],
+    next_cursor: null,
+  });
+  vi.mocked(libraryApi.summary).mockResolvedValue({
+    total_media: 0,
+    total_roots: 1,
+    pending_tasks: 1,
+    failed_tasks: 0,
+    missing_poster: 0,
+    missing_nfo: 0,
+    incomplete_metadata: 0,
+  });
+  show();
+  expect(
+    await screen.findByRole("link", { name: "Review scan tasks" }),
+  ).toHaveAttribute("href", "/tasks");
+  expect(
+    screen.queryByRole("link", { name: "Add root" }),
+  ).not.toBeInTheDocument();
 });
