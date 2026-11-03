@@ -1,16 +1,20 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type MusicAlbumView,
   type MusicCoverPreview,
   type MusicReleaseGraph,
   musicApi,
-  type TagPreview,
-  type TagResult,
 } from "../../api/music";
-import { Button } from "../../components/ui/button";
+import { Anchor, Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
 import { Empty, ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { tagFields } from "./tag-model";
+import { useTagEditor } from "./use-tag-editor";
 import "./translations";
 
 function Albums({ albums }: { albums: MusicAlbumView[] }) {
@@ -19,7 +23,7 @@ function Albums({ albums }: { albums: MusicAlbumView[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {albums.map((album) => (
-        <a
+        <Anchor
           className="panel block"
           key={album.release_id}
           href={`/music/album/${encodeURIComponent(album.release_id)}`}
@@ -31,7 +35,7 @@ function Albums({ albums }: { albums: MusicAlbumView[] }) {
             {album.date ?? t("musicUnknown")} · {t("musicDiscs")}:{" "}
             {album.medium_count} · {t("musicTracks")}: {album.track_count}
           </p>
-        </a>
+        </Anchor>
       ))}
     </div>
   );
@@ -45,9 +49,9 @@ export function MusicPage() {
   return (
     <div className="space-y-6">
       <PageHeading title={t("music")}>
-        <a href="/music/tools" className="underline">
+        <Anchor href="/music/tools" className="underline">
           {t("musicTools")}
-        </a>
+        </Anchor>
       </PageHeading>
       {albums.isPending ? (
         <Loading />
@@ -107,7 +111,7 @@ export function MusicToolsPage() {
             }
           }}
         >
-          <input
+          <Input
             aria-label={t("musicSearchHint")}
             placeholder={t("musicSearchHint")}
             value={query}
@@ -188,9 +192,9 @@ export function MusicToolsPage() {
         <ErrorNotice error={albums.error} retry={() => void albums.refetch()} />
       ) : (
         <section className="panel space-y-4">
-          <label className="block">
+          <Label className="block">
             {t("musicSelectAlbum")}
-            <select
+            <Select
               className="ml-3"
               aria-label={t("musicSelectAlbum")}
               value={albumId}
@@ -203,8 +207,8 @@ export function MusicToolsPage() {
                   {album.date ?? "—"}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Label>
           {albumId && <MusicAlbumTools key={albumId} releaseId={albumId} />}
         </section>
       )}
@@ -228,20 +232,25 @@ function ReleaseContents({ graph }: { graph: MusicReleaseGraph }) {
       <p>
         {t("musicArtist")}:{" "}
         {graph.artists.map((a) => (
-          <a
+          <Anchor
             className="mr-2 underline"
             key={a.media_item_id}
             href={`/music/artist/${encodeURIComponent(a.media_item_id)}`}
           >
             {a.name}
-          </a>
+          </Anchor>
         ))}
       </p>
       <p className="text-sm">
         {t("musicSource")}:{" "}
-        <a className="underline" href={source} rel="noreferrer" target="_blank">
+        <Anchor
+          className="underline"
+          href={source}
+          rel="noreferrer"
+          target="_blank"
+        >
           MusicBrainz
-        </a>{" "}
+        </Anchor>{" "}
         · {t("musicLanguage")}: {graph.locale ?? t("musicUnknown")} ·{" "}
         {t("musicFetched")}:{" "}
         {new Intl.DateTimeFormat(i18n.resolvedLanguage, {
@@ -330,9 +339,9 @@ export function MusicArtistPage({ artistId }: { artistId: string }) {
   if (!query.data) return null;
   return (
     <div className="space-y-5">
-      <a className="underline" href="/music">
+      <Anchor className="underline" href="/music">
         {t("musicBack")}
-      </a>
+      </Anchor>
       <PageHeading
         title={query.data.artist.name}
         description={query.data.artist.sort_name ?? undefined}
@@ -360,9 +369,9 @@ export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
   const graph = album.data;
   return (
     <div className="space-y-6">
-      <a className="underline" href="/music">
+      <Anchor className="underline" href="/music">
         {t("musicBack")}
-      </a>
+      </Anchor>
       <section className="panel">
         <ReleaseContents graph={graph} />
       </section>
@@ -424,14 +433,14 @@ export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
                     <td>
                       {field.provider_id ?? t("musicManual")}
                       {field.source_url && (
-                        <a
+                        <Anchor
                           href={field.source_url}
                           className="ml-2 underline"
                           target="_blank"
                           rel="noreferrer"
                         >
                           {t("musicSource")}
-                        </a>
+                        </Anchor>
                       )}
                     </td>
                     <td>
@@ -456,9 +465,9 @@ export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
         <h2 className="font-semibold">{t("musicLocalFile")}</h2>
         <LocalAudioFiles graph={graph} />
       </section>
-      <a className="underline" href="/music/tools">
+      <Anchor className="underline" href="/music/tools">
         {t("musicTools")}
-      </a>
+      </Anchor>
     </div>
   );
 }
@@ -509,9 +518,9 @@ export function MusicAlbumTools({ releaseId }: { releaseId: string }) {
       <section className="panel space-y-4">
         <h2 className="text-lg font-semibold">{t("musicTags")}</h2>
         {graph.files.length ? (
-          <label className="block">
+          <Label className="block">
             {t("musicLocalFile")}
-            <select
+            <Select
               className="ml-3"
               value={file}
               onChange={(e) => setFile(e.target.value)}
@@ -522,8 +531,8 @@ export function MusicAlbumTools({ releaseId }: { releaseId: string }) {
                   {f.relative_path}
                 </option>
               ))}
-            </select>
-          </label>
+            </Select>
+          </Label>
         ) : (
           <p>{t("musicNoFiles")}</p>
         )}
@@ -610,7 +619,7 @@ function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
     <section className="panel space-y-3">
       <p>{t("musicLinkHelp")}</p>
       <div className="flex flex-wrap gap-3">
-        <select
+        <Select
           aria-label={t("musicChooseTrack")}
           value={track}
           onChange={(e) => setTrack(e.target.value)}
@@ -623,8 +632,8 @@ function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
               {tr.number} {tr.title}
             </option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
           aria-label={t("musicChooseFile")}
           value={file}
           onChange={(e) => setFile(e.target.value)}
@@ -636,7 +645,7 @@ function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
               {f.relative_path}
             </option>
           ))}
-        </select>
+        </Select>
         <Button
           disabled={!track || !file || link.isPending}
           onClick={() => link.mutate()}
@@ -650,23 +659,6 @@ function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
     </section>
   );
 }
-const tagFields = [
-  "title",
-  "artist",
-  "album",
-  "album_artist",
-  "track_number",
-  "disc_number",
-  "date",
-  "musicbrainz_release_id",
-  "musicbrainz_release_group_id",
-  "musicbrainz_track_id",
-  "musicbrainz_recording_id",
-  "musicbrainz_artist_id",
-  "isrc",
-  "barcode",
-  "catalog_number",
-] as const;
 export function TagEditor({
   fileId,
   graph,
@@ -675,107 +667,26 @@ export function TagEditor({
   graph: MusicReleaseGraph;
 }) {
   const { t } = useTranslation();
-  const tags = useQuery({
-    queryKey: ["music-tags", fileId],
-    queryFn: () => musicApi.read(fileId),
-  });
-  const history = useQuery({
-    queryKey: ["music-tag-history", fileId],
-    queryFn: () => musicApi.history(fileId),
-  });
-  const linked = graph.files.find((f) => f.file_id === fileId);
-  const track = graph.tracks.find(
-    (tr) => tr.media_item_id === linked?.track_id,
-  );
-  const medium = graph.media.find((m) => m.id === track?.medium_id);
-  const identifier = (mediaId: string | undefined, kind: string) =>
-    graph.identifiers.find(
-      (id) => id.media_item_id === mediaId && id.kind === kind,
-    )?.value ?? "";
-  const defaults: Record<string, string> = {
-    title: track?.title ?? "",
-    artist:
-      track?.artist_credits
-        .map((c) => `${c.credited_name}${c.join_phrase}`)
-        .join("") ?? "",
-    album: graph.release.title,
-    album_artist: graph.release.artist_credits
-      .map((c) => `${c.credited_name}${c.join_phrase}`)
-      .join(""),
-    track_number: String(track?.position ?? ""),
-    disc_number: String(medium?.position ?? ""),
-    date: graph.release_date_text ?? graph.release.release_date ?? "",
-    musicbrainz_release_id: identifier(
-      graph.release.media_item_id,
-      "music_brainz",
-    ),
-    musicbrainz_release_group_id: identifier(
-      graph.release_group.media_item_id,
-      "music_brainz",
-    ),
-    musicbrainz_track_id: identifier(track?.media_item_id, "music_brainz"),
-    musicbrainz_recording_id: identifier(track?.recording_id, "music_brainz"),
-    musicbrainz_artist_id: identifier(
-      track?.artist_credits[0]?.artist_id ??
-        graph.release.artist_credits[0]?.artist_id,
-      "music_brainz",
-    ),
-    isrc: identifier(track?.recording_id, "isrc"),
-    barcode:
-      identifier(graph.release.media_item_id, "upc") ||
-      identifier(graph.release.media_item_id, "ean"),
-    catalog_number: identifier(graph.release.media_item_id, "catalog_number"),
-  };
-  const [values, setValues] = useState(defaults);
-  const [selected, setSelected] = useState<string[]>([]);
-  const [preview, setPreview] = useState<TagPreview>();
-  const [restore, setRestore] = useState(false);
-  const [confirmed, setConfirmed] = useState(false);
-  const [operation, setOperation] = useState<TagResult>();
-  useEffect(() => {
-    const id = preview?.id;
-    if (!id) return;
-    return () => {
-      void musicApi.discard(id).catch(() => {});
-    };
-  }, [preview?.id]);
-  const plan = useMutation({
-    mutationFn: () =>
-      musicApi.preview(
-        fileId,
-        Object.fromEntries(selected.map((f) => [f, values[f]])),
-      ),
-    onSuccess: (p) => {
-      setPreview(p);
-      setRestore(false);
-      setConfirmed(false);
-    },
-  });
-  const write = useMutation({
-    mutationFn: () =>
-      restore
-        ? musicApi.restoreExecute(preview?.id ?? "")
-        : musicApi.execute(preview?.id ?? ""),
-    onSuccess: (r) => {
-      setOperation(r);
-      setPreview(undefined);
-      setConfirmed(false);
-      void tags.refetch();
-      void history.refetch();
-    },
-  });
-  const restorePlan = useMutation({
-    mutationFn: musicApi.restorePreview,
-    onSuccess: (p) => {
-      setPreview(p);
-      setRestore(true);
-      setConfirmed(false);
-    },
-  });
-  const busy = plan.isPending || write.isPending || restorePlan.isPending;
+  const {
+    tags,
+    history,
+    values,
+    setValues,
+    selected,
+    setSelected,
+    preview,
+    setPreview,
+    restore,
+    confirmed,
+    setConfirmed,
+    operation,
+    plan,
+    write,
+    restorePlan,
+    busy,
+  } = useTagEditor(fileId, graph);
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">{t("musicFieldsHelp")}</p>
       {tags.data && (
         <p>
           {t("musicFormat")}: {tags.data.format} ·{" "}
@@ -800,9 +711,8 @@ export function TagEditor({
                 {tagFields.map((f) => (
                   <tr key={f}>
                     <td>
-                      <label>
-                        <input
-                          type="checkbox"
+                      <Label>
+                        <Checkbox
                           aria-label={t("musicSelectField", {
                             field: t(`musicField_${f}`),
                           })}
@@ -817,11 +727,11 @@ export function TagEditor({
                           }
                         />
                         {t(`musicField_${f}`)}
-                      </label>
+                      </Label>
                     </td>
                     <td className="p-2">{tags.data.tags[f] ?? "—"}</td>
                     <td>
-                      <input
+                      <Input
                         aria-label={t(`musicField_${f}`)}
                         value={values[f]}
                         disabled={busy || Boolean(preview)}
@@ -877,15 +787,14 @@ export function TagEditor({
               ))}
             </tbody>
           </table>
-          <label className="block">
-            <input
-              type="checkbox"
+          <Label className="block">
+            <Checkbox
               checked={confirmed}
               disabled={busy}
               onChange={(e) => setConfirmed(e.target.checked)}
             />
             {t(restore ? "musicRestoreConfirm" : "musicWriteConfirm")}
-          </label>
+          </Label>
           <div className="flex gap-3">
             <Button
               disabled={!confirmed || busy}

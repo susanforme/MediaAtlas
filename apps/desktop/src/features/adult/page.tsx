@@ -20,6 +20,10 @@ import {
 import { defaultBrowse } from "../../api/library";
 import { providerApi } from "../../api/providers";
 import { Button } from "../../components/ui/button";
+import { Checkbox } from "../../components/ui/checkbox";
+import { Input } from "../../components/ui/input";
+import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
 import { usePrivacy } from "../library/context";
 import { NativeOpen } from "../library/native-open";
 import { RootsPage } from "../library/pages";
@@ -72,9 +76,11 @@ function AdultConsumption() {
   return (
     <>
       <PageHeading title={t("adultLibrary")}>
-        <Link to="/adult/tools" className="action-link">
-          {t("videoTools")}
-        </Link>
+        <Button asChild variant="outline">
+          <Link to="/adult/tools" className="action-link">
+            {t("videoTools")}
+          </Link>
+        </Button>
         <Button variant="outline" onClick={() => void lock()}>
           {t("adultLock")}
         </Button>
@@ -363,9 +369,9 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
   return (
     <div className="space-y-5">
       {!tools && <AdultRecent />}
-      <label className="filter-field">
+      <Label className="filter-field">
         <span>{t("adultLocalSearch")}</span>
-        <input
+        <Input
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
@@ -373,7 +379,7 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
             setCursors([null]);
           }}
         />
-      </label>
+      </Label>
       {media.isPending ? (
         <Loading />
       ) : media.error ? (
@@ -388,9 +394,8 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
               key={item.id}
             >
               {tools && (
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
+                <Label className="flex items-center gap-2">
+                  <Checkbox
                     aria-label={`${t("adultBatchSelect")}: ${item.title}`}
                     checked={selected.includes(item.id)}
                     disabled={!!batch || execute.isPending}
@@ -403,7 +408,7 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
                     }
                   />
                   {t("adultBatchSelect")}
-                </label>
+                </Label>
               )}
               {!tools && (
                 <NativeOpen mediaId={item.id} adult>
@@ -414,13 +419,15 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
                 poster_uri?.startsWith("data:image/") && (
                   <img src={poster_uri} alt="" className="max-h-24 max-w-16" />
                 )}
-              <Link
-                className="text-primary"
-                to="/adult/media/$mediaId"
-                params={{ mediaId: item.id }}
-              >
-                {tools ? item.title : t("detailsAction")}
-              </Link>
+              <Button asChild variant="outline">
+                <Link
+                  className="text-primary"
+                  to="/adult/media/$mediaId"
+                  params={{ mediaId: item.id }}
+                >
+                  {tools ? item.title : t("detailsAction")}
+                </Link>
+              </Button>
             </li>
           ))}
         </ul>
@@ -606,9 +613,11 @@ export function AdultScraper() {
     <div className="space-y-5">
       <section className="panel">
         <h2 className="section-title">{t("adultProviders")}</h2>
-        <Link className="action-link mb-4 inline-block" to="/settings">
-          {t("providerAuthOpenSettings")}
-        </Link>
+        <Button asChild variant="outline">
+          <Link className="action-link mb-4 inline-block" to="/settings">
+            {t("providerAuthOpenSettings")}
+          </Link>
+        </Button>
         {providers.isPending ? (
           <Loading />
         ) : providers.error ? (
@@ -617,9 +626,8 @@ export function AdultScraper() {
           providers.data.providers.map((p) => (
             <div key={p.descriptor.id} className="mb-4">
               <div className="flex flex-wrap items-center gap-3">
-                <label className="flex gap-2">
-                  <input
-                    type="checkbox"
+                <Label className="flex gap-2">
+                  <Checkbox
                     checked={selectedProviders.includes(p.descriptor.id)}
                     disabled={!p.config.enabled}
                     onChange={(event) =>
@@ -631,7 +639,7 @@ export function AdultScraper() {
                     }
                   />
                   {p.descriptor.name}
-                </label>
+                </Label>
                 <span className="badge">
                   {t(`providerHealth_${p.health}`, { defaultValue: p.health })}
                 </span>
@@ -662,32 +670,32 @@ export function AdultScraper() {
         {enable.error && <ErrorNotice error={enable.error} />}
       </section>
       <form className="panel space-y-4" onSubmit={submit}>
-        <label className="filter-field">
+        <Label className="filter-field">
           <span>{t("adultCatalog")}</span>
-          <input
+          <Input
             required
             value={catalog}
             onChange={(event) => setCatalog(event.target.value)}
             maxLength={128}
           />
-        </label>
-        <label className="filter-field">
+        </Label>
+        <Label className="filter-field">
           <span>{t("adultNamespace")}</span>
-          <input
+          <Input
             required
             value={namespace}
             onChange={(event) => setNamespace(event.target.value)}
             maxLength={64}
           />
-        </label>
-        <label className="filter-field">
+        </Label>
+        <Label className="filter-field">
           <span>{t("adultStudio")}</span>
-          <input
+          <Input
             value={studio}
             onChange={(event) => setStudio(event.target.value)}
             maxLength={256}
           />
-        </label>
+        </Label>
         <Button
           type="submit"
           disabled={
@@ -756,9 +764,9 @@ export function AdultScraper() {
         <>
           <AdultMetadata detail={detail} />
           <section className="panel space-y-4">
-            <label className="filter-field">
+            <Label className="filter-field">
               <span>{t("adultTarget")}</span>
-              <select
+              <Select
                 value={target}
                 onChange={(event) => {
                   setTarget(event.target.value);
@@ -771,8 +779,8 @@ export function AdultScraper() {
                     {item.media.title}
                   </option>
                 ))}
-              </select>
-            </label>
+              </Select>
+            </Label>
             {local.error && <ErrorNotice error={local.error} />}
             <fieldset>
               <legend className="mb-3 font-medium">{t("adultFields")}</legend>
@@ -788,9 +796,8 @@ export function AdultScraper() {
                   "performers",
                   "directors",
                 ].map((key) => (
-                  <label className="flex gap-2" key={key}>
-                    <input
-                      type="checkbox"
+                  <Label className="flex gap-2" key={key}>
+                    <Checkbox
                       checked={fields.includes(key)}
                       onChange={(event) => {
                         setMerge(undefined);
@@ -802,7 +809,7 @@ export function AdultScraper() {
                       }}
                     />
                     {fieldLabel(key, t)}
-                  </label>
+                  </Label>
                 ))}
               </div>
             </fieldset>
@@ -816,9 +823,8 @@ export function AdultScraper() {
                     key={`${art.kind}:${art.url}`}
                     className="mt-3 flex gap-3"
                   >
-                    <label className="flex gap-2">
-                      <input
-                        type="checkbox"
+                    <Label className="flex gap-2">
+                      <Checkbox
                         checked={images.includes(index)}
                         onChange={(event) => {
                           setMerge(undefined);
@@ -833,7 +839,7 @@ export function AdultScraper() {
                         defaultValue: t("artworks"),
                       })}{" "}
                       {index + 1}
-                    </label>
+                    </Label>
                     <Button
                       size="sm"
                       variant="outline"
@@ -948,16 +954,20 @@ function AdultMediaDetail({ mediaId }: { mediaId: string }) {
   if (local.error) return <ErrorNotice error={local.error} />;
   return (
     <div className="space-y-5">
-      <Link to="/adult" className="action-link">
-        ← {t("adultBack")}
-      </Link>
+      <Button asChild variant="outline">
+        <Link to="/adult" className="action-link">
+          ← {t("adultBack")}
+        </Link>
+      </Button>
       {
         <>
           <PageHeading title={local.data.media.title}>
             <NativeOpen files={local.data.files} adult />
-            <Link to="/adult/tools" className="action-link">
-              {t("videoTools")}
-            </Link>
+            <Button asChild variant="outline">
+              <Link to="/adult/tools" className="action-link">
+                {t("videoTools")}
+              </Link>
+            </Button>
           </PageHeading>
           {settings.covers_visible &&
             local.data.poster_uri?.startsWith("data:image/") && (
@@ -1020,13 +1030,15 @@ function AdultRecent() {
         <ul>
           {visits.data?.map((visit) => (
             <li key={visit.media_id} className="py-1">
-              <Link
-                to="/adult/media/$mediaId"
-                params={{ mediaId: visit.media_id }}
-                className="text-primary"
-              >
-                {visit.title}
-              </Link>
+              <Button asChild variant="outline">
+                <Link
+                  to="/adult/media/$mediaId"
+                  params={{ mediaId: visit.media_id }}
+                  className="text-primary"
+                >
+                  {visit.title}
+                </Link>
+              </Button>
               <span className="ml-3 text-xs text-muted-foreground">
                 {date(visit.visited_at)}
               </span>
