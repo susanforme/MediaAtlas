@@ -8,8 +8,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false
+  group: release-${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   PYTHONUTF8: "1"
@@ -26,9 +26,17 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Reject a replaced tag before scheduling native builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: python scripts/release/publish.py check-current --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --repository "$RELEASE_REPOSITORY"
       - run: python -m unittest discover -s scripts/release -p 'test_*.py' -v
       - run: python -m unittest discover -s scripts/ci -p 'test_*.py' -v
       - run: python -m unittest discover -s scripts/licenses -p 'test_*.py' -v
@@ -60,6 +68,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -117,6 +126,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
+          ref: ${{ github.sha }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -140,10 +150,7 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
           retention-days: 30
-      - name: Create draft, upload all assets, then publish prerelease
+      - name: Publish complete verified assets only while the tag still names this commit
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --verify-tag --draft --prerelease --latest=false --title "MediaAtlas $RELEASE_TAG" --notes-file release-assets/RELEASE_NOTES.md
-          gh release upload "$RELEASE_TAG" release-assets/* --repo "$RELEASE_REPOSITORY"
-          gh release edit "$RELEASE_TAG" --repo "$RELEASE_REPOSITORY" --draft=false --prerelease --latest=false
+        run: python scripts/release/publish.py publish --tag "$RELEASE_TAG" --commit "$RELEASE_COMMIT" --repository "$RELEASE_REPOSITORY" --input verified-packages --assets release-assets
