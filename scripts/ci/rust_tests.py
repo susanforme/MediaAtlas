@@ -73,7 +73,9 @@ def parse_failures(text, root=ROOT):
             row, column = int(panic.group(3)), int(panic.group(4))
             if file and 0 < row <= 10000000 and 0 < column <= 100000:
                 failures[current].update(file=file, line=row, col=column)
-        if current:
+        # assert_eq's expected/actual debug lines can contain error enum names;
+        # they must not replace the already identified assertion failure class.
+        if current and failures[current]["category"] != "assertion":
             for pattern, category in CATEGORIES:
                 if re.search(pattern, line):
                     failures[current]["category"] = category

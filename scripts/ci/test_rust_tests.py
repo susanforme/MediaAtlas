@@ -56,6 +56,8 @@ class SafeSummaryTests(unittest.TestCase):
         self.assertIn("unclassified_failure [test_failure]", output.getvalue())
 
     def test_categories_and_annotation_limits(self):
+        mismatch = helper.parse_failures("---- safe::case stdout ----\nassertion `left == right` failed\n  left: Ok(())\n right: Err(Conflict)\n", self.root)
+        self.assertEqual(mismatch[0]["category"], "assertion")
         for message, category in (("Conflict", "Conflict"), ("operation timed out", "timeout")):
             failures = helper.parse_failures("---- safe::case stdout ----\n" + message, self.root)
             self.assertEqual(failures[0]["category"], category)

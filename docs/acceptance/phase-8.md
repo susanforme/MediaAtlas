@@ -57,3 +57,5 @@ LF/CRLF 专项兼容仅允许官方精确 SHA384、完整成功前缀及官方�
 `v0.1.0-beta.1` 正式构建中 Windows 许可验证器将本机 Path 字符串误作 POSIX 前缀，导致校验提前失败；该 tag 保留，不发布不完整矩阵。beta.2 只修复跨平台清单路径校验并同步版本，原版权材料不变。截图继续准确保留 A/beta.1 候选及其二进制哈希，界面源码没有变化，不把原图标成 beta.2 新构建。正式发布结果以新 tag 的实际完整 native CI 为准。
 
 beta.2 最小修复本地门槛：许可路径 14 项（含 PureWindowsPath、真实祖先 symlink/Windows reparse/junction 分支及 byte/hash/lock 反例）与真实 971 项材料验证通过；release verifier 24、CI helper 7、版本预检通过。同步版本后的 pnpm 156、完整 Rust 303、fmt 与全 workspace/all-target Clippy 0 warnings 均通过，原许可/源码归档 bytes 没有改变。主 CI 使用明确 Python 3.12 并执行该回归；不在普通 main 打包。
+
+beta.2 主 CI 又暴露原 Repository 文件身份写入的真实争用：deferred read→write 与异步 Drop rollback 可能产生 Database，现仅该方法改为 BEGIN IMMEDIATE 并等待拒绝路径 rollback，身份 WHERE/错误映射不变。两个有真实 writer/24 并发的回归在修复前失败、修复后通过；Repository 13 项及最终完整 Rust 305、fmt/全 Clippy 0 warnings。前端和依赖锁未变，不重复无关检查；详情见 [争用修复证据](../hotfix-windows-ci.md)。CI helper 同时保留 assertion 分类，避免 expected 的 Conflict 文本覆盖真实断言类型。

@@ -295,25 +295,40 @@ impl LibraryRepository {
     }
 
     pub async fn save_file(&self, file: &MediaFile) -> Result<(), RepositoryError> {
-        let mut tx = self.pool.begin().await?;
-        let root = sqlx::query("SELECT * FROM library_roots WHERE id=?")
-            .bind(file.root_id.to_string())
-            .fetch_optional(&mut *tx)
-            .await?
-            .as_ref()
-            .map(root_from_row)
-            .transpose()?
-            .ok_or(RepositoryError::NotFound)?;
-        let normalized = normalize_relative_path(&file.relative_path, root.path_style)
-            .map_err(|_| RepositoryError::InvalidInput)?;
-        let size = i64::try_from(file.size_bytes).map_err(|_| RepositoryError::InvalidInput)?;
-        let result = sqlx::query("INSERT INTO media_files (id,media_item_id,root_id,relative_path,normalized_relative_path,size_bytes,modified_at,part) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET relative_path=excluded.relative_path,normalized_relative_path=excluded.normalized_relative_path,size_bytes=excluded.size_bytes,modified_at=excluded.modified_at,part=excluded.part WHERE media_files.media_item_id=excluded.media_item_id AND media_files.root_id=excluded.root_id")
-            .bind(file.id.to_string()).bind(file.media_item_id.to_string()).bind(file.root_id.to_string())
-            .bind(&file.relative_path).bind(normalized).bind(size).bind(file.modified_at.map(|t|t.timestamp_millis()))
-            .bind(file.part.map(i64::from)).execute(&mut *tx).await?;
-        changed(result.rows_affected())?;
-        tx.commit().await?;
-        Ok(())
+        // Reserve the writer before reading the Root. A deferred read snapshot
+        // cannot wait safely when another connection already owns the writer.
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let saved = async {
+            let root = sqlx::query("SELECT * FROM library_roots WHERE id=?")
+                .bind(file.root_id.to_string())
+                .fetch_optional(&mut *tx)
+                .await?
+                .as_ref()
+                .map(root_from_row)
+                .transpose()?
+                .ok_or(RepositoryError::NotFound)?;
+            let normalized = normalize_relative_path(&file.relative_path, root.path_style)
+                .map_err(|_| RepositoryError::InvalidInput)?;
+            let size = i64::try_from(file.size_bytes).map_err(|_| RepositoryError::InvalidInput)?;
+            let result = sqlx::query("INSERT INTO media_files (id,media_item_id,root_id,relative_path,normalized_relative_path,size_bytes,modified_at,part) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET relative_path=excluded.relative_path,normalized_relative_path=excluded.normalized_relative_path,size_bytes=excluded.size_bytes,modified_at=excluded.modified_at,part=excluded.part WHERE media_files.media_item_id=excluded.media_item_id AND media_files.root_id=excluded.root_id")
+                .bind(file.id.to_string()).bind(file.media_item_id.to_string()).bind(file.root_id.to_string())
+                .bind(&file.relative_path).bind(normalized).bind(size).bind(file.modified_at.map(|t|t.timestamp_millis()))
+                .bind(file.part.map(i64::from)).execute(&mut *tx).await?;
+            changed(result.rows_affected())
+        }
+        .await;
+        match saved {
+            Ok(()) => {
+                tx.commit().await?;
+                Ok(())
+            }
+            Err(error) => {
+                // A rejected identity or invalid input must release its writer
+                // before the next request starts; Drop only queues rollback.
+                tx.rollback().await?;
+                Err(error)
+            }
+        }
     }
 
     pub async fn list_files(&self, media_id: Uuid) -> Result<Vec<MediaFile>, RepositoryError> {

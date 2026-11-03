@@ -643,3 +643,101 @@ async fn competing_normalized_root_writes_return_conflicts_without_stale_snapsho
     assert_eq!((saved, conflicts), (1, 23));
     assert_eq!(repo.list_roots().await.unwrap().len(), 1);
 }
+
+#[tokio::test]
+async fn file_identity_conflict_waits_for_writer_without_upgrading_a_read_snapshot() {
+    let (_dir, repo) = database().await;
+    let source = root("/source", PathStyle::Posix);
+    let destination = root("/destination", PathStyle::Posix);
+    repo.save_root(&source).await.unwrap();
+    repo.save_root(&destination).await.unwrap();
+    let item = media(1, MediaKind::Movie);
+    repo.save_media(&item).await.unwrap();
+    let original = file(&item, &source, "original.mkv");
+    repo.save_file(&original).await.unwrap();
+
+    let mut writer = repo.pool().begin().await.unwrap();
+    sqlx::query("UPDATE media_files SET size_bytes=size_bytes WHERE id=?")
+        .bind(original.id.to_string())
+        .execute(&mut *writer)
+        .await
+        .unwrap();
+    let mut reassigned = original.clone();
+    reassigned.root_id = destination.id;
+    let mut pending = Box::pin(repo.save_file(&reassigned));
+    // This bounded pending assertion holds a real SQLite writer reservation.
+    // A read-then-write upgrade returns SQLITE_BUSY immediately instead of
+    // respecting the configured busy timeout and waiting for this writer.
+    let early = tokio::time::timeout(std::time::Duration::from_millis(100), &mut pending).await;
+    assert!(
+        early.is_err(),
+        "File write completed while writer held: {early:?}"
+    );
+    writer.rollback().await.unwrap();
+    assert_eq!(pending.await, Err(RepositoryError::Conflict));
+    assert_eq!(repo.list_files(item.id).await.unwrap(), vec![original]);
+}
+
+#[tokio::test]
+async fn concurrent_file_identity_and_unique_path_conflicts_preserve_the_original() {
+    let (_dir, repo) = database().await;
+    let source = root("/source", PathStyle::Posix);
+    let destination = root("/destination", PathStyle::Posix);
+    repo.save_root(&source).await.unwrap();
+    repo.save_root(&destination).await.unwrap();
+    let item = media(1, MediaKind::Movie);
+    let other = media(2, MediaKind::Movie);
+    repo.save_media(&item).await.unwrap();
+    repo.save_media(&other).await.unwrap();
+    let original = file(&item, &source, "original.mkv");
+    repo.save_file(&original).await.unwrap();
+    let mut writes = tokio::task::JoinSet::new();
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(25));
+    for index in 0..24 {
+        let repo = repo.clone();
+        let barrier = barrier.clone();
+        let mut reassigned = original.clone();
+        if index % 2 == 0 {
+            reassigned.root_id = destination.id;
+        } else {
+            reassigned.media_item_id = other.id;
+        }
+        writes.spawn(async move {
+            barrier.wait().await;
+            repo.save_file(&reassigned).await
+        });
+    }
+    barrier.wait().await;
+    while let Some(result) = writes.join_next().await {
+        assert_eq!(result.unwrap(), Err(RepositoryError::Conflict));
+    }
+    assert_eq!(
+        repo.list_files(item.id).await.unwrap(),
+        vec![original.clone()]
+    );
+
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(25));
+    for _ in 0..24 {
+        let repo = repo.clone();
+        let barrier = barrier.clone();
+        let candidate = file(&item, &source, "competing.mkv");
+        writes.spawn(async move {
+            barrier.wait().await;
+            repo.save_file(&candidate).await
+        });
+    }
+    barrier.wait().await;
+    let mut saved = 0;
+    let mut conflicts = 0;
+    while let Some(result) = writes.join_next().await {
+        match result.unwrap() {
+            Ok(()) => saved += 1,
+            Err(RepositoryError::Conflict) => conflicts += 1,
+            unexpected => panic!("Unexpected file write result: {unexpected:?}"),
+        }
+    }
+    assert_eq!((saved, conflicts), (1, 23));
+    let files = repo.list_files(item.id).await.unwrap();
+    assert_eq!(files.len(), 2);
+    assert_eq!(files.iter().find(|f| f.id == original.id), Some(&original));
+}
