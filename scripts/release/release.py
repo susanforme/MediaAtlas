@@ -10,6 +10,7 @@ import re
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import tomllib
 import zipfile
@@ -24,7 +25,14 @@ def require(condition, message):
 
 
 def run(*args, **kwargs):
-    return subprocess.check_output([str(arg) for arg in args], text=True, **kwargs).strip()
+    try:
+        return subprocess.check_output([str(arg) for arg in args], text=True, **kwargs).strip()
+    except subprocess.CalledProcessError as error:
+        # Tool versions and format diagnostics are normally on stdout. Keep
+        # them in CI logs on failure instead of showing only a Python traceback.
+        if error.output:
+            print(error.output, file=sys.stderr)
+        raise
 
 
 def sha256(path):

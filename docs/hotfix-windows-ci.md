@@ -1,5 +1,17 @@
 # Windows CI hotfix after Phase 7
 
+## NSIS package extraction (2026-11-03)
+
+Run [41644340353](https://github.com/susanforme/MediaAtlas/actions/runs/41644340353), Windows job [125945685669](https://github.com/susanforme/MediaAtlas/actions/runs/41644340353/job/125945685669), successfully builds the tagged Rust application and a 13.75 MiB NSIS installer. The subsequent `release.py stage` fails when 7-Zip opens that installer as NSIS. This is package inspection, not a compiler failure. The failed job did not upload its installer, so the exact CI archive was unavailable for local byte-level inspection.
+
+The compatibility issue was reproduced locally with the exact upstream [NSIS v3.13 source](https://github.com/NSIS-Dev/nsis/tree/a4ba28e60bd9e7c271cd2bfc1558889ce3355653), its [Tauri-distributed 3.13 stubs](https://github.com/tauri-apps/binary-releases/releases/tag/nsis-3.13), and 7-Zip 25.01. A file-only fixture includes the repository's complete license resource tree and a sentinel payload. With solid zlib compression it produces the same `Cannot open the file as [Nsis] archive` failure; with the same files and solid BZip2 or LZMA it extracts all 559 files successfully. The extracted archive header is 109,452 bytes. A small zlib fixture does extract, so a tiny probe alone would miss this resource-layout-sensitive failure. The [7-Zip NSIS reader](https://github.com/ip7z/7zip/blob/main/CPP/7zip/Archive/Nsis/NsisIn.cpp) selects its legacy NSIS Deflate decoder and notes missing NSIS3 detection; this is consistent with the reproduction, rather than proof that the unavailable CI bytes are corrupt.
+
+The release config now uses BZip2, whose full terms are already included in `NSIS-COPYING.txt`. Native inventory scope text is synchronized; no dependency or bundled license text is replaced. The actual installer extraction, PE architecture, CRT imports, version and complete notice verification remain mandatory. Failed subprocess stdout is preserved so future logs include extractor version and format diagnostics. There is no installer-execution fallback or verification bypass.
+
+The new real-resource roundtrip regression uses the configured codec, compares the sentinel bytes, checks the exact extracted file set, and runs the existing complete license verifier. It is exercised locally with explicitly supplied native tools; environments without those tools report that optional integration test as unavailable. Native Windows package acceptance still requires a new release workflow built from the fix. Re-running a job pinned to the old tag commit would not use this change; no tag is moved by this repair.
+
+Local validation passes 48 release tests (including the actual NSIS roundtrip, not skipped), 18 license tests and 7 CI tooling tests. The license verifier confirms 1,001 locked dependencies and 1,625 notice references; beta version preflight and diff whitespace checks pass. Build/extraction reproduction logs and tooling remain in ignored `work/nsis-investigation/`, with no generated installer committed or executed.
+
 The failing run is [41607055843](https://github.com/susanforme/MediaAtlas/actions/runs/41607055843), commit `8d55797e7df353b6afac958d3b28e8534f96c2cc`. The supplied Windows log identifies the Rust core/database step, [job 125819678457, step 9](https://github.com/susanforme/MediaAtlas/actions/runs/41607055843/job/125819678457#step:9:520). The frontend step passed.
 
 ## Confirmed causes

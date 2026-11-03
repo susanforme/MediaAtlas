@@ -10,7 +10,7 @@
     },
     "windows": {
       "nsis": {
-        "compression": "zlib"
+        "compression": "bzip2"
       },
       "webviewInstallMode": {
         "type": "downloadBootstrapper",

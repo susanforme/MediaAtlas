@@ -57,7 +57,7 @@
     "name": "NSIS installer stub and bundled standard plugins",
     "version": "3.13",
     "license": "Zlib",
-    "scope": "Windows NSIS installer selects zlib compression; COPYING also preserves terms for unselected archive compression modules",
+    "scope": "Windows NSIS installer selects bzip2 compression; COPYING also preserves terms for unselected archive compression modules",
     "notices": [
       {
         "path": "docs/third-party-licenses/native/NSIS-COPYING.txt",

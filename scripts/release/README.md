@@ -16,3 +16,7 @@ python scripts/release/publish.py check-current --tag "$RELEASE_TAG" --commit "$
 ```
 
 The workflow alone invokes the mutating `publish` command after its complete native build matrix and artifact checks. Development verification does not execute that command against GitHub.
+
+Windows NSIS packages use solid BZip2 compression. Modern NSIS solid zlib archives with the complete notice tree can fail 7-Zip's NSIS Deflate decoder even though the installer builds successfully. The release gate still extracts the actual installer and checks its executable architecture, CRT imports, product version and every license byte. It never treats an extraction failure as a successful verification or executes the installer as a fallback.
+
+`test_nsis.py` compiles a file-only installer containing the actual notice tree and verifies a complete extraction when `makensis` and `7z`/`7zz` are available. Explicit tool paths can be supplied with `MEDIAATLAS_TEST_MAKENSIS` and `MEDIAATLAS_TEST_7Z`; an extracted NSIS toolset may also need its documented `NSISDIR` variable. The installer is not executed. See [Windows hotfix evidence](../../docs/hotfix-windows-ci.md#nsis-package-extraction-2026-11-03).
