@@ -90,6 +90,8 @@ struct Runtime {
     overflow: Arc<Mutex<HashSet<Signal>>>,
     dispatch: tokio::sync::Mutex<()>,
     stopped: AtomicBool,
+    #[cfg(test)]
+    native_callbacks_enabled: Arc<AtomicBool>,
 }
 #[derive(Clone)]
 pub struct WatcherService {
@@ -108,6 +110,8 @@ impl WatcherService {
             overflow: Arc::new(Mutex::new(HashSet::new())),
             dispatch: tokio::sync::Mutex::new(()),
             stopped: AtomicBool::new(false),
+            #[cfg(test)]
+            native_callbacks_enabled: Arc::new(AtomicBool::new(true)),
         });
         let service = Self {
             repo,
@@ -276,8 +280,14 @@ async fn reconcile_unlocked(
         let active = Arc::new(AtomicBool::new(true));
         let callback_active = active.clone();
         let callback_overflow = overflow.clone();
+        #[cfg(test)]
+        let native_callbacks_enabled = runtime.native_callbacks_enabled.clone();
         let created = RecommendedWatcher::new(
             move |result: notify::Result<Event>| {
+                #[cfg(test)]
+                if !native_callbacks_enabled.load(Ordering::Acquire) {
+                    return;
+                }
                 if !callback_active.load(Ordering::Acquire) {
                     return;
                 }

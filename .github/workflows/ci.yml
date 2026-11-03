@@ -35,4 +35,4 @@ jobs:
       - name: Frontend unit tests
         run: pnpm test
       - name: Rust core and database tests
-        run: cargo test --locked
+        run: python scripts/ci/rust_tests.py -- cargo test --locked

@@ -205,6 +205,15 @@ fn access_events_and_only_private_paths_do_not_enqueue() {
 #[tokio::test]
 async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfigured_root() {
     let (dir, repo, scans, watcher, mut root) = fixture().await;
+    // This test injects queue/overflow generations deliberately. A new native
+    // stream may also report creation of new-media on macOS; that is a valid
+    // current-generation event, not evidence that the injected old one ran.
+    // Isolate native callback delivery for this test only. The native-event
+    // integration tests leave this gate enabled and exercise real OS events.
+    watcher
+        .runtime
+        .native_callbacks_enabled
+        .store(false, Ordering::Release);
     watcher.configure(root.id, true).await.unwrap();
     let old = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     watcher.configure(root.id, false).await.unwrap();
@@ -221,6 +230,7 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
     root.path = next.to_str().unwrap().into();
     root.updated_at = Utc::now();
     repo.save_root(&root).await.unwrap();
+    root = repo.get_root(root.id).await.unwrap().unwrap();
     watcher.reconcile().await.unwrap();
     watcher.runtime.sender.send(current).await.unwrap();
     record_overflow(&watcher.runtime.overflow, current);
@@ -230,6 +240,19 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
         scans.start_watched(&previous).await.unwrap_err(),
         RepositoryError::Conflict
     );
+    // A positive control proves the real queue/debounce/dispatch worker still
+    // accepts the new generation; disabling native delivery did not disable it.
+    let fresh = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
+    assert_ne!(current, fresh);
+    watcher.runtime.sender.send(fresh).await.unwrap();
+    wait_tasks(&repo, 1).await;
+    let snapshot: String =
+        sqlx::query_scalar("SELECT root_snapshot_json FROM scan_sessions LIMIT 1")
+            .fetch_one(repo.pool())
+            .await
+            .unwrap();
+    let snapshot: serde_json::Value = serde_json::from_str(&snapshot).unwrap();
+    assert_eq!(snapshot["root"]["path"], root.path);
     watcher.configure(root.id, false).await.unwrap();
     assert_eq!(
         scans.start_watched(&root).await.unwrap_err(),

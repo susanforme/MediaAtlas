@@ -840,7 +840,7 @@ mod tests {
     #[tokio::test]
     async fn mock_real_search_details_aliases_rate_floor_saved_config_and_request_records() {
         let (base, requests, task) = server().await;
-        let directory = tempfile::tempdir().unwrap();
+        let directory = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&directory.path().join("library.sqlite"))
             .await
             .unwrap();
@@ -911,7 +911,7 @@ mod tests {
         assert_eq!(covers.len(), 1);
         assert_eq!(covers[0].url, format!("{base}/release/{RELEASE}/12345.jpg"));
         assert!(covers[0].license.contains("copyright"));
-        let directory = tempfile::tempdir().unwrap();
+        let directory = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&directory.path().join("library.sqlite"))
             .await
             .unwrap();
