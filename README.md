@@ -64,6 +64,7 @@ cargo test --workspace --locked
 - `.github/workflows/ci.yml`：`main` push、PR 和手动运行仅在 Windows/macOS/Linux 执行 `pnpm test` 与 `cargo test --locked`；Rust 默认成员包含 SQLite 测试，不构建 Tauri 桌面、不安装 GTK、不打包或发布。
 - `.github/workflows/release.yml`：只由 beta tag push 触发，Windows x64、Linux x64、macOS x64/ARM64 四个原生 runner 并行构建。验证安装器实际 payload 架构/版本/许可后，汇总 SHA-256 与 manifest，完整上传 draft 后才公开 beta。Windows/Linux ARM 本次明确不构建。普通分支 push/PR 不发布。
 - `.github/tauri.release.conf.json` 只在 tag 构建时启用打包；本地 `pnpm build:desktop` 仍只生成可执行文件。
+- main 的 Windows 便携 ZIP 只包含 `MediaAtlas.exe`，运行依赖系统已安装的 WebView2。第三方许可全文嵌入 EXE，可用 `MediaAtlas.exe --export-licenses <新目录>` 导出；Release 仍单独提供 `license-materials.zip`。此包装调整未纳入既有 beta.3 tag。
 - tag 名称不会自动修改应用版本，发布前需同步 Cargo workspace、Tauri 和前端包的版本。本 beta 未接入发行签名、Apple 公证或自动更新，请按手动更新说明操作；CI 包验证不替代交互式安装/卸载、实机播放、OS keyring 或实时 Provider 验收。
 
 工作流配置及静态检查不等于远端 CI/安装包已验证；Phase 0 平台启动待验收项仍保留在记录中。

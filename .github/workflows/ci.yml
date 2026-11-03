@@ -38,6 +38,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libdbus-1-dev
       - name: Install pinned Rust toolchain
         run: rustup show active-toolchain
+      - name: Single-executable license export and portable verifier regressions
+        run: python -m unittest discover -s scripts/release -p 'test_portable_notices.py' -v
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
       - name: Frontend unit tests

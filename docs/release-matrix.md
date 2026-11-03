@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持原有前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 仍使用 `--no-bundle`。当前候选版本是 `0.1.0-beta.2`。`v0.1.0-beta.1` 保留不移动：首次正式构建在 Windows 许可路径检查中暴露跨平台分隔符错误，未发布。beta.2 修复验证器并同步版本；正式产物仍须该新 tag 的实际构建与下载验证。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持原有前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 仍使用 `--no-bundle`。当前发布 tag 为 `v0.1.0-beta.3`，固定在 `67782a25b6594050dc57014199bc7eaec7f3def3`，仅包含此前 Windows NSIS 提取修复及版本递增；[对应发布构建](https://github.com/susanforme/MediaAtlas/actions/runs/41650428810)的实际结果决定其产物状态。beta.1、beta.2 保留不移动。下述单 EXE 便携 ZIP 改动属于后续 main，等待下一次发布，不属于已有 beta.3 产物。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |
@@ -19,7 +19,7 @@
 
 每个目标独立 job，`fail-fast: false`、`max-parallel: 4`。每 job 限制 `CARGO_BUILD_JOBS=2` 以降低内存峰值；缓存额外 key 包含 runner label、Rust target、Cargo.lock 和 rust-toolchain.toml 哈希，rust-cache 自身也隔离平台/toolchain。工具链固定为仓库 `rust-toolchain.toml`，显式安装目标 Rust 标准库；Node 24、pnpm 使用项目 `packageManager` 固定版本。
 
-每目标均运行 frontend tests、`cargo test --locked --target <native-target>` 和真实 `tauri build --ci --target ... -- --locked`。Linux 安装 WebKitGTK 4.1 等系统开发依赖；实际 Ubuntu 22.04 容器 apt-cache 已确认官方 jammy-updates 提供 libwebkit2gtk-4.1-dev 2.50.4，选择较早发行版以降低 glibc 基线；Windows 使用 MSVC/NSIS，release overlay 显式固定 build.windows.staticVCRuntime=true、bundleVCRuntime=false；实际应用 PE normal/delay imports 必须不依赖 VCRUNTIME/MSVCP 等额外 VC redistributable，便携 ZIP 不以 runner 已装开发工具当运行前提，压缩显式采用成熟 zlib（不采用 NSIS 的额外 LZMA/CPL 压缩组件），macOS 使用原生 Apple 工具链。`tauri build` 负责前端生产编译。未采用插件自动发布，因为需要先验证完整矩阵再集中发布。
+每目标均运行 frontend tests、`cargo test --locked --target <native-target>` 和真实 `tauri build --ci --target ... -- --locked`。Linux 安装 WebKitGTK 4.1 等系统开发依赖；实际 Ubuntu 22.04 容器 apt-cache 已确认官方 jammy-updates 提供 libwebkit2gtk-4.1-dev 2.50.4，选择较早发行版以降低 glibc 基线；Windows 使用 MSVC/NSIS，release overlay 显式固定 build.windows.staticVCRuntime=true、bundleVCRuntime=false；实际应用 PE normal/delay imports 必须不依赖 VCRUNTIME/MSVCP 等额外 VC redistributable，便携 ZIP 不以 runner 已装开发工具当运行前提，NSIS 压缩显式采用 BZip2（其完整许可已随 NSIS 材料提供）；这修复完整许可树下 NSIS 3.13 solid zlib 无法被 7-Zip 提取的问题，复现证据见 [Windows hotfix](hotfix-windows-ci.md#nsis-package-extraction-2026-11-03)，macOS 使用原生 Apple 工具链。`tauri build` 负责前端生产编译。未采用插件自动发布，因为需要先验证完整矩阵再集中发布。
 
 上述 label 文档、工作流静态校验以及 Linux 本地 Rust 通过，都不能替代 Windows/macOS 真实编译、启动或安装验收。首次远程 workflow 的 job/产物结果才是各目标构建证据。交互式安装、升级、卸载、用户数据保留、系统 keyring、真实 Provider 访问继续按 P8 平台验收记录；manifest 明确 `installation_tested: false`。
 
@@ -30,7 +30,7 @@
 `release.py stage` 首先解析原生可执行文件头（PE/ELF/Mach-O），检查真正的 CPU 架构与非空文件；然后逐包验收：
 
 - NSIS：7-Zip 解开安装器，读取内含应用 exe 的 PE 架构与 Windows ProductVersion。NSIS 启动器自身可能为 x86，因此不以安装器启动器架构误判应用目标。
-- 便携 ZIP：包含实际应用 exe 与许可材料，验证 ZIP CRC、解压后 exe 架构和原始 exe SHA-256 一致。
+- 便携 ZIP：成员必须恰好为 `MediaAtlas.exe`，不附带目录或零散文件。验证 ZIP CRC、实际 PE 架构、normal/delay CRT imports 和原始 exe SHA-256；然后运行解出的 EXE 导出内嵌许可，逐文件验证完整集合与 SHA-256。NSIS 安装器保持独立资产。
 - Debian：`dpkg-deb` 检查包内完整 version/Architecture，再解开检查实际应用 ELF；拒绝额外 ELF、`.so`/DLL/dylib，确保不夹带 GTK/WebKit helpers/shared libraries，依赖系统 runtime。
 - AppImage：本次明确 `not_built`。Tauri AppImage 会带入 GTK/WebKit 等原生库；实际归属、逐项版权及同处对应源码分发 gate 尚未完成，不能以 Rust/npm notices 冒称覆盖。preflight/stage 显式禁止重新启用此格式。保留底层提取/架构检查工具供未来开发使用，不代表可分发。
 - DMG：`hdiutil` 只读挂载，检查 app 的 Info.plist 版本及实际 Mach-O；无论检查结果如何都卸载。
@@ -42,6 +42,23 @@
 每目标上传经过检查的包及 manifest，记录 tag、commit、版本、OS、CPU、runner、format、大小、SHA-256、签名状态与实际测试边界。聚合 job 再核对所有必需目标、完整格式集合、路径、重复名、commit/version/target 元数据、实际大小、SHA-256；多余文件、空包、被改动的包或缺少必需格式会阻止 Release。
 
 聚合产物包括所有可用安装包、许可状态/说明/清单、保留全部许可材料目录结构的 license-materials.zip、RELEASE_NOTES.md、release-manifest.json、SHA256SUMS。SHA256SUMS 覆盖除自身以外的每个 Release 资产。GitHub 自动提供的源代码档案链接可由 tag 获取，源码 commit 链接也写入说明。校验和验证字节完整性，不代表签名身份。
+
+## 单 EXE 与许可导出（main，待下次发布）
+
+Windows 便携 ZIP 解压后仅有 `MediaAtlas.exe`，直接运行仍要求系统已有 WebView2。完整许可材料在编译时通过 `include_bytes!` 嵌入 EXE，不依赖开发目录，也不修改已编译的 PE。正常启动不导出任何材料。安装包仍保留原有许可资源；Release 仍单独提供 `license-materials.zip`，无需启动程序也可阅读。
+
+需要本地阅读时，在 PowerShell 显式导出到尚不存在的目录：
+
+```powershell
+$p = Start-Process -FilePath .\MediaAtlas.exe -ArgumentList '--export-licenses', 'licenses' -Wait -PassThru
+$p.ExitCode
+```
+
+父目录须已存在；目标目录或文件已存在时拒绝覆盖。成功返回 0，参数或写入错误返回 2，导出路径不启动 GUI、数据库或网络；写入中断可能留下部分新目录，应检查后换一个新目录重试。使用 `Start-Process -Wait -PassThru` 可可靠等待 Windows GUI 子系统 EXE 并读取退出码。此 flag 同样支持 macOS/Linux 原生可执行文件。
+
+`test_portable_notices.py` 在三平台 main CI 编译实际 std-only 嵌入生成器和导出模块，删除所有 fixture 许可源文件后执行导出，确认字节与文件集合完全一致。它也检查非法参数、已有目录不覆盖及 ZIP 拒绝路径。此检查不等同完整 Tauri 宿主构建；正式 Windows `stage` 仍须运行真实打包 EXE 的导出并检查真实 PE/CRT/哈希。
+
+本轮本地验证：52 项发布工具测试全部通过（包含真实 NSIS 提取回归和新导出测试）；导出模块内部 3 项 Rust 测试执行通过。另有 7 项 CI 工具测试、Rust 格式检查、前端 lint、1001 依赖 / 1625 引用的许可校验与 beta.3 preflight 通过。未构建新的完整 Windows Tauri EXE，正式包验证由下一次发布运行完成。
 
 ## 发布权限与恢复
 
@@ -56,7 +73,7 @@
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 actionlint .github/workflows/release.yml
-python3 scripts/release/release.py preflight --tag v0.1.0-beta.2
+python3 scripts/release/release.py preflight --tag v0.1.0-beta.3
 ```
 
 首次准备时 24 个 verifier 测试与 actionlint 1.7.12 已在本地通过，合并 Tauri release 配置通过官方 JSON schema 验证；preflight 需 P8 的版本统一及真实许可文件齐全。模拟 fixture 测试验证发布校验器的拒绝路径和完整汇总，不把 fixture 当作 MediaAtlas 安装包通过证据。

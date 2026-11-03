@@ -235,6 +235,28 @@ def licenses():
     return paths
 
 
+def inspect_portable_zip(path, executable, spec):
+    """Verify the sole shipped EXE, including the notices it exports offline."""
+    with zipfile.ZipFile(path) as archive:
+        require(archive.namelist() == ["MediaAtlas.exe"], "portable ZIP must contain only MediaAtlas.exe")
+        require(archive.testzip() is None, "corrupt portable zip")
+        with tempfile.TemporaryDirectory(prefix="mediaatlas-portable-") as temporary:
+            directory = Path(temporary)
+            archive.extract("MediaAtlas.exe", directory)
+            extracted = directory / "MediaAtlas.exe"
+            check_binary(extracted, spec)
+            check_windows_crt(extracted)
+            require(sha256(extracted) == sha256(executable), "portable binary mismatch")
+            # The native CI runner executes only the explicit export command;
+            # it returns before initializing Tauri, the database or networking.
+            notices = directory / "notices"
+            run(extracted, "--export-licenses", notices, timeout=30)
+            expected = {source.relative_to(ROOT).as_posix() for source in licenses()}
+            actual = {item.relative_to(notices).as_posix() for item in notices.rglob("*") if item.is_file()}
+            require(actual == expected, "embedded portable license file set mismatch")
+            check_licenses(notices)
+
+
 def stage(args):
     expected = version(args.tag)
     spec = next(item for item in TARGETS if item["target"] == args.target)
@@ -260,7 +282,6 @@ def stage(args):
     output.mkdir(parents=True)
     assets = []
     patterns = {"exe": "nsis/*.exe", "dmg": "dmg/*.dmg", "deb": "deb/*.deb", "AppImage": "appimage/*.AppImage"}
-    license_paths = licenses()
     for format_name in spec["formats"]:
         filename = f"MediaAtlas_{expected}_{args.target}.{format_name}"
         destination = output / filename
@@ -268,17 +289,9 @@ def stage(args):
         if format_name == "zip":
             with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
                 archive.write(executable, "MediaAtlas.exe")
-                for license_path in license_paths:
-                    archive.write(license_path, license_path.relative_to(ROOT).as_posix())
-            with zipfile.ZipFile(destination) as archive:
-                require(archive.testzip() is None, "corrupt portable zip")
-                for source in license_paths:
-                    require(hashlib.sha256(archive.read(source.relative_to(ROOT).as_posix())).hexdigest() == sha256(source), "portable license material mismatch")
-                with tempfile.TemporaryDirectory() as temporary:
-                    archive.extract("MediaAtlas.exe", temporary)
-                    extracted = Path(temporary) / "MediaAtlas.exe"
-                    check_binary(extracted, spec)
-                    require(sha256(extracted) == sha256(executable), "portable binary mismatch")
+            inspect_portable_zip(destination, executable, spec)
+            inspection["portable_single_executable"] = True
+            inspection["license_materials"] = "embedded; explicit export verified byte for byte"
         else:
             package = one((profile / "bundle").glob(patterns[format_name]), format_name)
             require(package.stat().st_size > 0, f"empty package: {package}")
@@ -331,7 +344,7 @@ def aggregate(args):
     summary = {"schema": 1, "tag": args.tag, "version": expected, "commit": args.commit, "platforms": manifests, "unavailable_optional_targets": unavailable, "license_materials": [{"path": path.relative_to(ROOT).as_posix(), "bytes": path.stat().st_size, "sha256": sha256(path)} for path in license_paths]}
     (args.output / "release-manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
     source = f"https://github.com/{args.repository}/tree/{args.commit}"
-    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Beta packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this beta because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE-STATUS.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); no project open-source license has been specified. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
+    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Beta packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP contains only MediaAtlas.exe, with complete license materials embedded at build time; use MediaAtlas.exe --export-licenses <new-directory> to export them explicitly. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this beta because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE-STATUS.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); no project open-source license has been specified. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
     for manifest in manifests:
         lines.append(f"| `{manifest['target']}` | {', '.join(asset['format'] for asset in manifest['assets'])} |")
     for item in unavailable:
