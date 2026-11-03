@@ -1,0 +1,134 @@
+{
+  "checked_at": "2026-11-03T21:26:20.185882+08:00",
+  "repository": "susanforme/MediaAtlas",
+  "branch": "main",
+  "baseline": "23f61bda06cdccedcb710a7f9b9ea6c6f3abb97d",
+  "source_commit": "52f25f272b9a7a9f9d9300edfc6229a31073b70e",
+  "checks": {
+    "pnpm_check": "passed",
+    "lint": "passed",
+    "typecheck": "passed",
+    "vitest_files": 36,
+    "vitest_tests": 250,
+    "frontend_build": "passed",
+    "release_python_tests": 46,
+    "license_python_tests": 18,
+    "ci_python_tests": 7,
+    "license_verify": "passed",
+    "license_dependencies": 1001,
+    "license_notice_references": 1625,
+    "release_preflight": "passed for v0.1.0-beta.2",
+    "desktop_packaging": "not awaited as requested",
+    "build_note": "Main Vite chunk 550.21 kB / gzip 177.74 kB; nonblocking 500 kB warning."
+  },
+  "browser_qa": {
+    "command": "python scripts/desktop-queue-qa.py",
+    "result": "passed",
+    "previous_visual_regression": "passed; captures in work/community-regression",
+    "previous_usability_regression": "passed; captures in work/usability-regression",
+    "viewports": ["1648x928", "390x844"],
+    "timezone": "Asia/Shanghai",
+    "transport": "Real Chromium screenshots with explicitly synthetic IPC; no real user media, provider network, credentials or native file writes.",
+    "assertions": [
+      "server-side health and sort change real request parameters and reset cursor/page/selection",
+      "cross-page ordered multi-selection survives viewing one detail",
+      "ordinary list excludes injected adult response",
+      "manual queue carries selected order and actual i/n position",
+      "skip does not search, confirm or write automatically",
+      "credential setup returns to same queue item and ordered queue",
+      "field presets use current real fixture metadata and do not execute writes",
+      "narrow layout has no horizontal page overflow; table owns horizontal scrolling"
+    ],
+    "limitations": [
+      "Native hosts, real provider responses and OS keyrings not exercised in browser fixtures",
+      "Cross-platform native builds and release assets remain CI work, not a completed local verification"
+    ]
+  },
+  "release": {
+    "tag": "v0.1.0-beta.2",
+    "initial_tag_object": "b88a5d27f1ff0029f83b7127030bc35f2ec7eaca",
+    "initial_peeled_commit": "a740101da0b9f5ee0135ebdb541db6eb645c3e56",
+    "first_move_tag_object": "f1aadf3305f3fc7dcca31e7aadac44fda9b53be0",
+    "first_move_commit": "23f61bda06cdccedcb710a7f9b9ea6c6f3abb97d",
+    "first_move_confirmed": true,
+    "first_release_run": 41641983158,
+    "first_release_run_result": "failure; previous source had stale license inventory",
+    "final_move_policy": "After this evidence commit, move the same tag to final main using the observed tag object as force-with-lease. Final SHA is verified from remote Git refs.",
+    "publication_changes": [
+      "fresh locked-dependency notices with complete upstream terms, not SPDX declarations alone",
+      "event-commit checkout and live annotated/lightweight tag verification",
+      "resume existing draft by release ID; published-only tag lookup has draft fallback",
+      "verified complete assets uploaded while release is draft; remote exact names/size/digest checked before publication",
+      "unknown assets and stale tag fail closed; no manual remote release/asset mutation in this task"
+    ],
+    "older_tag": "v0.1.0-beta.1 left unchanged"
+  },
+  "sources": [
+    {
+      "name": "MediaElch multi-movie scraper",
+      "url": "https://github.com/Komet/MediaElch/blob/master/src/ui/movies/MovieMultiScrapeDialog.cpp"
+    },
+    {
+      "name": "MediaElch movie workflow",
+      "url": "https://github.com/mediaelch/mediaelch-doc/blob/master/docs/source/movie/index.rst"
+    },
+    {
+      "name": "tinyMediaManager feature overview",
+      "url": "https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/README.md"
+    },
+    {
+      "name": "tinyMediaManager missing metadata filter",
+      "url": "https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/src/main/java/org/tinymediamanager/ui/movies/filters/MovieMissingMetadataFilter.java"
+    },
+    {
+      "name": "tinyMediaManager scrape task",
+      "url": "https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/src/main/java/org/tinymediamanager/core/movie/tasks/MovieScrapeTask.java"
+    }
+  ],
+  "source_research_note": "Adopted workflow ideas; no third-party implementation code copied. tinyMediaManager devel HEAD observed e813864038d8f2bbed1428a714b81e3b317f5ac1.",
+  "screenshots": [
+    {
+      "file": "screenshots/community-fixture-cross-page-selection-1648.png",
+      "sha256": "2e4d9b62d247da15ad7cc63bed78c3c7eb1684b3babfc13e18a5b43ac9bc530d",
+      "capture": "viewport",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    },
+    {
+      "file": "screenshots/community-fixture-field-presets-1648.png",
+      "sha256": "65c53eb4ef023567da0dc4eeb5f320b377357688936bd24de7f12f444d1a7b9f",
+      "capture": "viewport",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    },
+    {
+      "file": "screenshots/community-fixture-queue-narrow.png",
+      "sha256": "337dfcc327e2614191f289625abd2b74b204b826aa41f830979ec1d39a5136cc",
+      "capture": "full_page",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    },
+    {
+      "file": "screenshots/community-fixture-queue-settings-return-1648.png",
+      "sha256": "3a94d1f99546b0d5691819f79d9d79e633fb0daa37c3e115eaccc9ff8b620e4f",
+      "capture": "viewport",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    },
+    {
+      "file": "screenshots/community-fixture-review-queue-1648.png",
+      "sha256": "078d1326df75819519235d9be888aa9c7a37723fdf6d25a478c687a4f32393da",
+      "capture": "viewport",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    },
+    {
+      "file": "screenshots/community-fixture-server-filters-1648.png",
+      "sha256": "c43fda8fe671e8de766df1c00ebd34bed882f403362314735b1bbd4b4faf62df",
+      "capture": "viewport",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    },
+    {
+      "file": "screenshots/community-fixture-tools-narrow.png",
+      "sha256": "08fe418b3293f2507443d591363ebf9c1da9713ada21628d93f9f62b40346888",
+      "capture": "full_page",
+      "mode": "synthetic_ipc_fixture_real_browser"
+    }
+  ],
+  "test_log_sha256": "b3d23cdf33f2b650a67d9c61d7b74473c5b1002c84b41b949dde0441a1a3468c"
+}

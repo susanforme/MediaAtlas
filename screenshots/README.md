@@ -1,3 +1,28 @@
+# 社区实践优化与二次移动 tag（2026-11-03）
+
+本轮从 `23f61bd` 增量开发，功能源码为 `52f25f2`。重新运行 `pnpm check`：**36 文件 / 250 项测试**、lint、typecheck、前端 build 全部通过；另有 **46 项发布、18 项许可证、7 项 CI 测试**通过，1001 个锁定依赖、1625 条许可引用通过完整验证。发布 preflight 通过。Vite 主 chunk 550.21kB（gzip 177.74kB），构建成功并保留默认体积提示。
+
+依据 [MediaElch 多影片刮削](https://github.com/Komet/MediaElch/blob/master/src/ui/movies/MovieMultiScrapeDialog.cpp)和 [tinyMediaManager 的开源筛选/任务实现](https://gitlab.com/tinyMediaManager/tinyMediaManager/-/blob/devel/src/main/java/org/tinymediamanager/core/movie/tasks/MovieScrapeTask.java)，落实了普通媒体列表的服务器筛选排序、24 项分页、跨页有序多选，以及最多 32 项的逐项核对队列。选择单个详情不丢失批选；筛选/排序变化会清掉失效游标和选择。队列保留配置往返上下文，跳过不会自动确认或写入；字段预设“全选未保护字段 / 全不选 / 仅补空缺”继续保护手改、锁定和已有值。研究来源与取舍见 [工作流文档](../docs/library-workflow.md#2026-11-03-社区实践与逐项核对)。
+
+本轮用户已明确授权移动 `v0.1.0-beta.2` 两次：第一次已从 `a740101` 移至上一轮成果 `23f61bd`；第二次在本次证据提交后移到最终 main，以远端 tag 解引用为准。`v0.1.0-beta.1` 不变。第一次 tag 构建失败暴露了旧的锁依赖许可清单问题，本轮已修复；发布脚本也支持复用已有 Release，并对过期 tag、草稿恢复、混合资产和远端哈希作检查。**移动 tag 不等于安装包已经更新；本次不等待跨平台打包，实际产物状态以 GitHub Actions 为准。**
+
+本轮以下 **7 张图片均为真实 Chromium 截图**，1648×928 与 390×844，Asia/Shanghai。窄屏为完整页面截图，其余为视口截图。测试 IPC、媒体、路径和凭据均明确为合成 fixture，不属于产品库；无真实 Provider、keyring、原生窗口或文件写入验收，没有生成、拼接或修补图片。
+
+| 场景 | 本轮截图 |
+| --- | --- |
+| 跨页选择后保留顺序 | [批量选择](community-fixture-cross-page-selection-1648.png) |
+| 服务端健康筛选、排序与游标复位 | [筛选](community-fixture-server-filters-1648.png) |
+| 真实队列位置与手动核对 | [队列](community-fixture-review-queue-1648.png) |
+| 凭据设置后回到同一队列项 | [配置返回](community-fixture-queue-settings-return-1648.png) |
+| 字段预设（不执行写入） | [字段选择](community-fixture-field-presets-1648.png) |
+| 窄屏媒体清单 / 队列 | [窄屏清单](community-fixture-tools-narrow.png) / [窄屏队列](community-fixture-queue-narrow.png) |
+
+复现：启动 `pnpm dev:web`，运行 `python scripts/desktop-queue-qa.py`。前两阶段浏览器回归也已重跑通过，输出使用 `MEDIAATLAS_QA_OUTPUT_DIR` 保存到 work 临时目录，保持历史截图原始来源不被改写。完整结果、来源、哈希与边界见 [community-report.json](community-report.json)。
+
+---
+
+## 前一阶段记录（不代替本轮验证）
+
 # 功能流程优化验收（2026-11-03）
 
 本次从 `main / e928fd3` 继续开发，功能源码为 `7ec38a9`。重新运行 `pnpm check`：lint、typecheck、**32 个测试文件 / 219 项测试**、前端构建通过。原生目录选择的适配器契约测试、Rust 格式检查与 `cargo metadata --locked` 通过。Vite 主 chunk 547.92kB（gzip 176.89kB），构建成功，保留默认体积提示。
