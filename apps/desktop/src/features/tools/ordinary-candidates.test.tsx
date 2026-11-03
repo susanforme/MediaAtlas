@@ -1,0 +1,489 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import { useState } from "react";
+import { I18nextProvider } from "react-i18next";
+import { beforeEach, expect, it, vi } from "vitest";
+import { adultApi } from "../../api/adult";
+import { DesktopError } from "../../api/desktop";
+import {
+  libraryApi,
+  type MediaCard,
+  type MediaKind,
+  type RootView,
+} from "../../api/library";
+import { Button } from "../../components/ui/button";
+import i18n from "../../i18n";
+import { MAX_SCRAPE_QUEUE } from "../scraper/search";
+import { OrdinaryCandidates } from "./ordinary-candidates";
+import { LocalCandidates } from "./page";
+import { TOOLS_PAGE_SIZE, type ToolsSearch } from "./search";
+import "./translations";
+
+vi.mock("@tanstack/react-router", async (original) => {
+  const router = await original<typeof import("@tanstack/react-router")>();
+  return {
+    ...router,
+    Link: ({
+      to,
+      search,
+      ...props
+    }: {
+      to: string;
+      search?: Record<string, unknown>;
+      children: React.ReactNode;
+    }) => (
+      <a
+        href={`${to}${router.defaultStringifySearch(search ?? {})}`}
+        {...props}
+      />
+    ),
+  };
+});
+vi.mock("../../api/library", async (original) => {
+  const module = await original<typeof import("../../api/library")>();
+  return {
+    ...module,
+    libraryApi: { ...module.libraryApi, roots: vi.fn(), toolsMedia: vi.fn() },
+  };
+});
+vi.mock("../../api/adult", async (original) => {
+  const module = await original<typeof import("../../api/adult")>();
+  return { ...module, adultApi: { ...module.adultApi, toolsMedia: vi.fn() } };
+});
+const time = "2026-01-01";
+const root: RootView = {
+  id: "root-a",
+  name: "Fixture directory",
+  path: "/fixture",
+  path_style: "posix",
+  kind: "movie",
+  enabled: true,
+  exclude_patterns: [],
+  created_at: time,
+  updated_at: time,
+  last_scan_at: null,
+};
+function card(
+  id: string,
+  kind: MediaKind = "movie",
+  title = `Fixture ${id}`,
+): MediaCard {
+  return {
+    media: {
+      id,
+      kind,
+      title,
+      original_title: null,
+      year: 2020,
+      created_at: time,
+      updated_at: time,
+    },
+    poster_uri: null,
+    health: ["missing_nfo"],
+  };
+}
+const first = card("first");
+const second = card("second", "tv_series");
+const third = card("third", "anime");
+const episode = card("episode", "tv_episode");
+const privateCard = card("private", "adult_video", "Synthetic private title");
+function Controlled({ initialSearch = {} }: { initialSearch?: ToolsSearch }) {
+  const [search, setSearch] = useState(initialSearch);
+  return (
+    <OrdinaryCandidates
+      search={search}
+      onSearch={setSearch}
+      renderDetail={(id, close) => (
+        <section>
+          <h2>Detailed resource: {id}</h2>
+          <Button onClick={close}>Close fixture detail</Button>
+        </section>
+      )}
+    />
+  );
+}
+function show(initialSearch: ToolsSearch = {}) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <Controlled initialSearch={initialSearch} />
+      </QueryClientProvider>
+    </I18nextProvider>,
+  );
+}
+function selectedQueue(): string[] {
+  const link = screen.getByRole("link", { name: "Scrape selected" });
+  return JSON.parse(
+    new URL(
+      link.getAttribute("href") ?? "",
+      "https://fixture.invalid",
+    ).searchParams.get("queue") ?? "[]",
+  );
+}
+beforeEach(async () => {
+  vi.resetAllMocks();
+  await i18n.changeLanguage("en-US");
+  vi.mocked(libraryApi.roots).mockResolvedValue([
+    root,
+    {
+      ...root,
+      id: "private-root",
+      name: "Synthetic private root",
+      kind: "adult_video",
+    },
+  ]);
+  vi.mocked(libraryApi.toolsMedia).mockResolvedValue({
+    items: [first, second, third, episode, privateCard, first],
+    next_cursor: null,
+  });
+});
+
+it("renders ordinary candidate metadata in a table with independent view and selection actions", async () => {
+  show();
+  expect(await screen.findByRole("table")).toBeInTheDocument();
+  expect(screen.getAllByText(first.media.title)).toHaveLength(1);
+  expect(screen.getAllByText("2020")).toHaveLength(4);
+  expect(screen.queryByText("Synthetic private title")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: "Synthetic private root" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("Choose a local resource"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${episode.media.title}`,
+    }),
+  ).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole("button", { name: `View resource: ${first.media.title}` }),
+  );
+  expect(
+    screen.getByRole("heading", { name: "Detailed resource: first" }),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Scrape selected" }),
+  ).toBeDisabled();
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${second.media.title}`,
+    }),
+  );
+  expect(selectedQueue()).toEqual([second.media.id]);
+  fireEvent.click(screen.getByRole("button", { name: "Close fixture detail" }));
+  expect(
+    screen.queryByRole("heading", { name: "Detailed resource: first" }),
+  ).not.toBeInTheDocument();
+  expect(selectedQueue()).toEqual([second.media.id]);
+});
+
+it("sends every filter and sort to the backend instead of filtering only the visible page", async () => {
+  vi.mocked(libraryApi.toolsMedia).mockImplementation(async (query) => ({
+    items:
+      query.query === "Server result"
+        ? [card("server", "movie", "Server result")]
+        : [first],
+    next_cursor: null,
+  }));
+  show({
+    root: root.id,
+    kind: "movie",
+    health: "missing_nfo",
+    sort: "title_asc",
+    cursor: "deep-page",
+    page: 4,
+  });
+  await screen.findByText(first.media.title);
+  expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      root_id: root.id,
+      kind: "movie",
+      health: "missing_nfo",
+      sort: "title_asc",
+      cursor: "deep-page",
+      include_adult: false,
+      limit: TOOLS_PAGE_SIZE,
+    }),
+  );
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${first.media.title}`,
+    }),
+  );
+  fireEvent.change(screen.getByLabelText("Search local candidates"), {
+    target: { value: "Server result" },
+  });
+  expect(await screen.findByText("Server result")).toBeInTheDocument();
+  expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      query: "Server result",
+      root_id: root.id,
+      kind: "movie",
+      health: "missing_nfo",
+      sort: "title_asc",
+      cursor: null,
+      include_adult: false,
+    }),
+  );
+  expect(screen.getByText("Page 1")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Scrape selected" }),
+  ).toBeDisabled();
+});
+
+it("retains selection across cursor pages and sends ordered, deduplicated backend IDs in the scraper link", async () => {
+  vi.mocked(libraryApi.toolsMedia).mockImplementation(async (query) =>
+    query.cursor
+      ? { items: [third], next_cursor: null }
+      : { items: [first, second, first], next_cursor: "page-two" },
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: `Select for scraping: ${second.media.title}`,
+    }),
+  );
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${first.media.title}`,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "More candidates" }));
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: `Select for scraping: ${third.media.title}`,
+    }),
+  );
+  expect(selectedQueue()).toEqual([
+    second.media.id,
+    first.media.id,
+    third.media.id,
+  ]);
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Select supported media on this page",
+    }),
+  );
+  expect(selectedQueue()).toEqual([second.media.id, first.media.id]);
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Select supported media on this page",
+    }),
+  );
+  expect(selectedQueue()).toEqual([
+    second.media.id,
+    first.media.id,
+    third.media.id,
+  ]);
+
+  const href =
+    screen
+      .getByRole("link", { name: "Scrape selected" })
+      .getAttribute("href") ?? "";
+  expect(
+    new URL(href, "https://fixture.invalid").searchParams.get("media"),
+  ).toBe(second.media.id);
+  expect(href).toMatch(/^\/scraper\?/);
+  fireEvent.click(screen.getByRole("button", { name: "Previous candidates" }));
+  expect(
+    await screen.findByRole("checkbox", {
+      name: `Select for scraping: ${first.media.title}`,
+    }),
+  ).toBeChecked();
+  expect(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${second.media.title}`,
+    }),
+  ).toBeChecked();
+  expect(selectedQueue()).toHaveLength(3);
+});
+
+it("selects only supported ordinary media on the current page and can remove an off-page selection", async () => {
+  show();
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: "Select supported media on this page",
+    }),
+  );
+  expect(selectedQueue()).toEqual([
+    first.media.id,
+    second.media.id,
+    third.media.id,
+  ]);
+  expect(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${episode.media.title}`,
+    }),
+  ).not.toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "3 selected" }));
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: `Remove from scrape selection: ${second.media.title}`,
+    }),
+  );
+  expect(selectedQueue()).toEqual([first.media.id, third.media.id]);
+  expect(
+    screen.getByRole("checkbox", {
+      name: "Select supported media on this page",
+    }),
+  ).toHaveProperty("indeterminate", true);
+  fireEvent.click(screen.getByRole("button", { name: "Clear selection" }));
+  expect(
+    screen.queryByRole("link", { name: "Scrape selected" }),
+  ).not.toBeInTheDocument();
+});
+
+it("rejects a whole-page addition above the limit without silently truncating the queue", async () => {
+  const pageOne = Array.from({ length: 24 }, (_, index) =>
+    card(`one-${index}`),
+  );
+  const pageTwo = Array.from({ length: 12 }, (_, index) =>
+    card(`two-${index}`),
+  );
+  vi.mocked(libraryApi.toolsMedia).mockImplementation(async (query) =>
+    query.cursor
+      ? { items: pageTwo, next_cursor: null }
+      : { items: pageOne, next_cursor: "page-two" },
+  );
+  show();
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: "Select supported media on this page",
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "More candidates" }));
+  await screen.findByText(pageTwo[0].media.title);
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Select supported media on this page",
+    }),
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    `exceed ${MAX_SCRAPE_QUEUE} items`,
+  );
+  expect(selectedQueue()).toEqual(pageOne.map((item) => item.media.id));
+  for (const item of pageTwo.slice(0, 8))
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: `Select for scraping: ${item.media.title}`,
+      }),
+    );
+  expect(selectedQueue()).toHaveLength(MAX_SCRAPE_QUEUE);
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: `Select for scraping: ${pageTwo[8].media.title}`,
+    }),
+  );
+  expect(screen.getByRole("alert")).toHaveTextContent("Nothing was added");
+  expect(selectedQueue()).toEqual(
+    [...pageOne, ...pageTwo.slice(0, 8)].map((item) => item.media.id),
+  );
+});
+
+it.each([
+  ["Library root", root.id, "root_id"],
+  ["Media type", "anime", "kind"],
+  ["Health", "missing_poster", "health"],
+  ["Sort", "added_desc", "sort"],
+])(
+  "clears stale page and batch selection when the %s filter changes",
+  async (label, value, field) => {
+    vi.mocked(libraryApi.toolsMedia).mockResolvedValue({
+      items: [first],
+      next_cursor: "page-two",
+    });
+    show({ cursor: "old-page", page: 3 });
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: `Select for scraping: ${first.media.title}`,
+      }),
+    );
+    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    await waitFor(() =>
+      expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
+        expect.objectContaining({ [field]: value, cursor: null }),
+      ),
+    );
+    expect(screen.getByText("Page 1")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Scrape selected" }),
+    ).toBeDisabled();
+  },
+);
+
+it("keeps adult candidates on their independent endpoint without ordinary multi-select or queue links", async () => {
+  vi.mocked(adultApi.toolsMedia).mockResolvedValue({
+    items: [privateCard],
+    next_cursor: null,
+  });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <LocalCandidates adult />
+      </QueryClientProvider>
+    </I18nextProvider>,
+  );
+  expect(
+    await screen.findByRole("option", { name: privateCard.media.title }),
+  ).toBeInTheDocument();
+  expect(adultApi.toolsMedia).toHaveBeenCalledWith(
+    expect.objectContaining({ include_adult: true }),
+  );
+  expect(libraryApi.toolsMedia).not.toHaveBeenCalled();
+  expect(libraryApi.roots).not.toHaveBeenCalled();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Scrape selected" }),
+  ).not.toBeInTheDocument();
+});
+
+it("provides retry feedback for backend candidate errors without adding fabricated results", async () => {
+  vi.mocked(libraryApi.toolsMedia).mockRejectedValueOnce(
+    new DesktopError("request_failed"),
+  );
+  show();
+  const error = await screen.findByRole("alert");
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  fireEvent.click(within(error).getByRole("button", { name: "Check again" }));
+  expect(await screen.findByRole("table")).toBeInTheDocument();
+});
+
+it("does not overwrite a pending router reset with the previous filter state", async () => {
+  const onSearch = vi.fn();
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <I18nextProvider i18n={i18n}>
+      <QueryClientProvider client={client}>
+        <OrdinaryCandidates
+          search={{ q: "Old query", cursor: "old-page", page: 3 }}
+          onSearch={onSearch}
+          renderDetail={() => null}
+        />
+      </QueryClientProvider>
+    </I18nextProvider>,
+  );
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: `Select for scraping: ${first.media.title}`,
+    }),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  expect(
+    screen.getByRole("button", { name: "Scrape selected" }),
+  ).toBeDisabled();
+  expect(onSearch).toHaveBeenCalledExactlyOnceWith({}, false);
+});

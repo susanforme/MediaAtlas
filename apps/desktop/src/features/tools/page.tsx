@@ -15,6 +15,8 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { OrdinaryCandidates } from "./ordinary-candidates";
+import { type ToolsSearch, validateToolsSearch } from "./search";
 import { useOrganization } from "./use-organization";
 import "./translations";
 import "../scraper/translations";
@@ -288,8 +290,46 @@ export function LocalCandidates({
   adult = false,
   renderExtra,
   initialMediaId,
+  search,
+  onSearch,
 }: {
   adult?: boolean;
+  initialMediaId?: string;
+  search?: ToolsSearch;
+  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
+  renderExtra?: (id: string) => React.ReactNode;
+}) {
+  if (adult)
+    return (
+      <AdultLocalCandidates
+        initialMediaId={initialMediaId}
+        renderExtra={renderExtra}
+      />
+    );
+  const context = validateToolsSearch(
+    search ? { ...search } : { media: initialMediaId },
+  );
+  return (
+    <OrdinaryCandidates
+      search={context}
+      onSearch={onSearch}
+      renderDetail={(mediaId, close) => (
+        <LocalCandidateDetail
+          key={mediaId}
+          mediaId={mediaId}
+          onClose={close}
+          renderExtra={renderExtra}
+        />
+      )}
+    />
+  );
+}
+
+/** Adult candidates retain their independent endpoint, cache keys and single-resource workflow. */
+function AdultLocalCandidates({
+  initialMediaId,
+  renderExtra,
+}: {
   initialMediaId?: string;
   renderExtra?: (id: string) => React.ReactNode;
 }) {
@@ -299,25 +339,13 @@ export function LocalCandidates({
   const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(initialMediaId ?? "");
   const media = useQuery({
-    queryKey: adult
-      ? ["adult", "tools", query, cursors[page]]
-      : ["tools-media", query, cursors[page]],
-    queryFn: () => {
-      const q = {
-        ...defaultBrowse(adult),
+    queryKey: ["adult", "tools", query, cursors[page]],
+    queryFn: () =>
+      adultApi.toolsMedia({
+        ...defaultBrowse(true),
         query: query || null,
         cursor: cursors[page] ?? null,
-      };
-      return adult ? adultApi.toolsMedia(q) : libraryApi.toolsMedia(q);
-    },
-  });
-  const detail = useQuery({
-    queryKey: adult
-      ? ["adult", "tools-detail", selected]
-      : ["tools-detail", selected],
-    queryFn: () =>
-      adult ? adultApi.toolsDetail(selected) : libraryApi.toolsDetail(selected),
-    enabled: !!selected,
+      }),
   });
   return (
     <section className="space-y-5">
@@ -326,8 +354,8 @@ export function LocalCandidates({
         <Input
           type="search"
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
+          onChange={(event) => {
+            setQuery(event.target.value);
             setPage(0);
             setCursors([null]);
           }}
@@ -335,7 +363,7 @@ export function LocalCandidates({
       </Label>
       {media.isPending ? (
         <Loading />
-      ) : media.error ? (
+      ) : media.isError ? (
         <ErrorNotice error={media.error} />
       ) : (
         <>
@@ -343,23 +371,21 @@ export function LocalCandidates({
             <span>{t("toolsSelect")}</span>
             <Select
               value={selected}
-              onChange={(e) => setSelected(e.target.value)}
+              onChange={(event) => setSelected(event.target.value)}
             >
               <option value="">{t("toolsSelect")}</option>
-              {media.data.items
-                .filter((c) => adult || c.media.kind !== "adult_video")
-                .map((c) => (
-                  <option key={c.media.id} value={c.media.id}>
-                    {c.media.title}
-                  </option>
-                ))}
+              {media.data.items.map((card) => (
+                <option key={card.media.id} value={card.media.id}>
+                  {card.media.title}
+                </option>
+              ))}
             </Select>
           </Label>
           <div className="flex gap-3">
             <Button
               variant="outline"
               disabled={page === 0}
-              onClick={() => setPage((p) => p - 1)}
+              onClick={() => setPage((value) => value - 1)}
             >
               {t("toolsBack")}
             </Button>
@@ -369,8 +395,8 @@ export function LocalCandidates({
               onClick={() => {
                 const next = media.data.next_cursor;
                 if (next) {
-                  setCursors((v) => [...v.slice(0, page + 1), next]);
-                  setPage((p) => p + 1);
+                  setCursors((old) => [...old.slice(0, page + 1), next]);
+                  setPage((value) => value + 1);
                 }
               }}
             >
@@ -380,51 +406,80 @@ export function LocalCandidates({
         </>
       )}
       {selected && (
-        <>
-          {detail.isPending ? (
-            <Loading />
-          ) : detail.error ? (
-            <ErrorNotice error={detail.error} />
-          ) : !adult && detail.data.media.kind === "adult_video" ? (
-            <ErrorNotice error={new DesktopError("invalid_response")} />
-          ) : (
-            <section className="panel">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-semibold">{detail.data.media.title}</h2>
-                {!adult &&
-                  ["movie", "tv_series", "anime"].includes(
-                    detail.data.media.kind,
-                  ) && (
-                    <Button asChild>
-                      <Link to="/scraper" search={{ media: selected }}>
-                        {t("scraperThisMedia")}
-                      </Link>
-                    </Button>
-                  )}
-              </div>
-              <ul>
-                {detail.data.files.map((f) => (
-                  <li className="break-all" key={f.id}>
-                    {f.relative_path}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-          {detail.data &&
-            (adult || detail.data.media.kind !== "adult_video") && (
-              <>
-                <OrganizationPanel
-                  key={selected}
-                  mediaId={selected}
-                  adult={adult}
-                />
-                {renderExtra?.(selected)}
-              </>
-            )}
-        </>
+        <LocalCandidateDetail
+          key={selected}
+          mediaId={selected}
+          adult
+          renderExtra={renderExtra}
+        />
       )}
     </section>
+  );
+}
+
+function LocalCandidateDetail({
+  mediaId,
+  adult = false,
+  renderExtra,
+  onClose,
+}: {
+  mediaId: string;
+  adult?: boolean;
+  renderExtra?: (id: string) => React.ReactNode;
+  onClose?: () => void;
+}) {
+  const { t } = useTranslation();
+  const detail = useQuery({
+    queryKey: adult
+      ? ["adult", "tools-detail", mediaId]
+      : ["tools-detail", mediaId],
+    queryFn: () =>
+      adult ? adultApi.toolsDetail(mediaId) : libraryApi.toolsDetail(mediaId),
+  });
+  if (detail.isPending) return <Loading />;
+  if (detail.isError)
+    return (
+      <ErrorNotice error={detail.error} retry={() => void detail.refetch()} />
+    );
+  if (
+    detail.data.media.id !== mediaId ||
+    (!adult && detail.data.media.kind === "adult_video")
+  )
+    return <ErrorNotice error={new DesktopError("invalid_response")} />;
+  return (
+    <>
+      <section className="panel">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">{detail.data.media.title}</h2>
+          <div className="flex flex-wrap gap-2">
+            {!adult &&
+              ["movie", "tv_series", "anime"].includes(
+                detail.data.media.kind,
+              ) && (
+                <Button asChild>
+                  <Link to="/scraper" search={{ media: mediaId }}>
+                    {t("scraperThisMedia")}
+                  </Link>
+                </Button>
+              )}
+            {onClose && (
+              <Button variant="ghost" onClick={onClose}>
+                {t("toolsCloseDetail")}
+              </Button>
+            )}
+          </div>
+        </div>
+        <ul>
+          {detail.data.files.map((file) => (
+            <li className="break-all" key={file.id}>
+              {file.relative_path}
+            </li>
+          ))}
+        </ul>
+      </section>
+      <OrganizationPanel key={mediaId} mediaId={mediaId} adult={adult} />
+      {renderExtra?.(mediaId)}
+    </>
   );
 }
 function Maintenance() {
@@ -520,11 +575,34 @@ function Maintenance() {
     </>
   );
 }
-export function MediaToolsPage({ mediaId }: { mediaId?: string } = {}) {
-  return <MediaToolsWorkspace key={mediaId ?? "tools"} mediaId={mediaId} />;
+export function MediaToolsPage({
+  mediaId,
+  search,
+  onSearch,
+}: {
+  mediaId?: string;
+  search?: ToolsSearch;
+  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
+} = {}) {
+  return (
+    <MediaToolsWorkspace
+      key={onSearch ? undefined : (mediaId ?? "tools")}
+      mediaId={mediaId}
+      search={search}
+      onSearch={onSearch}
+    />
+  );
 }
 
-function MediaToolsWorkspace({ mediaId }: { mediaId?: string }) {
+function MediaToolsWorkspace({
+  mediaId,
+  search,
+  onSearch,
+}: {
+  mediaId?: string;
+  search?: ToolsSearch;
+  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
+}) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"local" | "scraper" | "health">("local");
   return (
@@ -556,10 +634,14 @@ function MediaToolsWorkspace({ mediaId }: { mediaId?: string }) {
         ))}
       </fieldset>
       {tab === "local" ? (
-        <LocalCandidates initialMediaId={mediaId} />
+        <LocalCandidates
+          initialMediaId={mediaId}
+          search={search}
+          onSearch={onSearch}
+        />
       ) : tab === "scraper" ? (
         <Suspense fallback={<Loading />}>
-          <ScraperPage />
+          <ScraperPage mediaId={search?.media ?? mediaId} />
         </Suspense>
       ) : (
         <Maintenance />
