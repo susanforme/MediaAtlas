@@ -8,6 +8,7 @@ import {
   libraryApi,
   type MediaCard,
   type MediaDetail,
+  type ScanTask,
 } from "../../api/library";
 import i18n from "../../i18n";
 import { DashboardPage } from "./page";
@@ -28,7 +29,12 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 vi.mock("../../api/library", async (original) => ({
   ...(await original<typeof import("../../api/library")>()),
-  libraryApi: { media: vi.fn(), summary: vi.fn(), detail: vi.fn() },
+  libraryApi: {
+    media: vi.fn(),
+    summary: vi.fn(),
+    detail: vi.fn(),
+    tasks: vi.fn(),
+  },
 }));
 const media: MediaCard = {
   media: {
@@ -77,6 +83,7 @@ function show() {
 }
 beforeEach(async () => {
   vi.clearAllMocks();
+  vi.mocked(libraryApi.tasks).mockResolvedValue([]);
   await i18n.changeLanguage("en-US");
   vi.mocked(libraryApi.summary).mockResolvedValue({
     total_media: 1,
@@ -137,15 +144,14 @@ it("does not promote adult media or request its detail if the ordinary channel r
   show();
   expect(
     await screen.findByRole("heading", {
-      name: "Your directories are ready.",
+      name: "Your media belongs here.",
     }),
   ).toBeInTheDocument();
   expect(screen.queryByText("Synthetic private title")).not.toBeInTheDocument();
   expect(libraryApi.detail).not.toHaveBeenCalled();
-  expect(screen.getByRole("link", { name: "Start scan" })).toHaveAttribute(
-    "href",
-    "/scanner",
-  );
+  expect(
+    screen.getByRole("link", { name: "Manage media folders" }),
+  ).toHaveAttribute("href", "/roots");
 });
 it("offers a clear empty entry and shows the library request error without sample posters", async () => {
   vi.mocked(libraryApi.media).mockRejectedValue(
@@ -160,7 +166,7 @@ it("offers a clear empty entry and shows the library request error without sampl
   });
   fireEvent.click(screen.getByRole("button", { name: "Check again" }));
   expect(
-    await screen.findByRole("link", { name: "Start scan" }),
+    await screen.findByRole("link", { name: "Manage media folders" }),
   ).toBeInTheDocument();
 });
 it("keeps a loading state until media arrives", async () => {
@@ -201,7 +207,7 @@ it("offers directory selection when no roots exist", async () => {
     screen.queryByRole("link", { name: "Start scan" }),
   ).not.toBeInTheDocument();
 });
-it("directs an empty library with pending work to its existing tasks", async () => {
+it("shows actual automatic processing without asking the user to import candidates", async () => {
   vi.mocked(libraryApi.media).mockResolvedValue({
     items: [],
     next_cursor: null,
@@ -215,10 +221,37 @@ it("directs an empty library with pending work to its existing tasks", async () 
     missing_nfo: 0,
     incomplete_metadata: 0,
   });
+  vi.mocked(libraryApi.tasks).mockResolvedValue([
+    {
+      id: "automatic-refresh",
+      root_id: "ordinary-folder",
+      state: "running",
+      mode: "automatic",
+      phase: "metadata",
+      visited_files: 4,
+      skipped_files: 0,
+      candidate_count: 4,
+      imported_count: 4,
+      matched_count: 2,
+      review_count: 1,
+      metadata_failed_count: 0,
+      warnings: 0,
+      error_code: null,
+      created_at: "2026-11-03T10:00:00Z",
+      updated_at: "2026-11-03T10:00:01Z",
+    } satisfies ScanTask,
+  ]);
   show();
   expect(
-    await screen.findByRole("link", { name: "Review scan tasks" }),
-  ).toHaveAttribute("href", "/tasks");
+    await screen.findByRole("link", { name: "View processing status" }),
+  ).toHaveAttribute("href", "/scanner");
+  expect(screen.getByText("Fetching media details")).toBeInTheDocument();
+  expect(screen.getByText("4 items added")).toBeInTheDocument();
+  expect(screen.getByText("2 items identified")).toBeInTheDocument();
+  expect(screen.getByText("1 items to review")).toBeInTheDocument();
+  expect(
+    screen.queryByText(/confirm candidates|confirm.*import/i),
+  ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("link", { name: "Add root" }),
   ).not.toBeInTheDocument();

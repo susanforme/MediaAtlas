@@ -4,7 +4,7 @@ import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
 import { DesktopError } from "../../api/desktop";
-import { defaultBrowse, libraryApi } from "../../api/library";
+import { libraryApi } from "../../api/library";
 import {
   maintenanceApi,
   type OrganizationStrategy,
@@ -16,11 +16,17 @@ import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { OrdinaryCandidates } from "./ordinary-candidates";
-import { type ToolsSearch, validateToolsSearch } from "./search";
+import { type ToolsRouteSearch, validateToolsRouteSearch } from "./search";
 import { useOrganization } from "./use-organization";
 import "./translations";
 import "../scraper/translations";
 
+const AdultScraper = lazy(() =>
+  import("../adult/page").then((m) => ({ default: m.AdultScraper })),
+);
+const AdultOutput = lazy(() =>
+  import("../adult/page").then((m) => ({ default: m.AdultOutput })),
+);
 const ScraperPage = lazy(() =>
   import("../scraper/page").then((m) => ({ default: m.ScraperPage })),
 );
@@ -295,125 +301,29 @@ export function LocalCandidates({
 }: {
   adult?: boolean;
   initialMediaId?: string;
-  search?: ToolsSearch;
-  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
+  search?: ToolsRouteSearch;
+  onSearch?: (search: ToolsRouteSearch, replace?: boolean) => void;
   renderExtra?: (id: string) => React.ReactNode;
 }) {
-  if (adult)
-    return (
-      <AdultLocalCandidates
-        initialMediaId={initialMediaId}
-        renderExtra={renderExtra}
-      />
-    );
-  const context = validateToolsSearch(
-    search ? { ...search } : { media: initialMediaId },
+  const context = validateToolsRouteSearch(
+    search
+      ? { ...search, ...(adult ? { kind: "adult_video" } : {}) }
+      : { media: initialMediaId, ...(adult ? { kind: "adult_video" } : {}) },
   );
   return (
     <OrdinaryCandidates
       search={context}
       onSearch={onSearch}
-      renderDetail={(mediaId, close) => (
+      renderDetail={(mediaId, close, adult) => (
         <LocalCandidateDetail
           key={mediaId}
           mediaId={mediaId}
+          adult={adult}
           onClose={close}
           renderExtra={renderExtra}
         />
       )}
     />
-  );
-}
-
-/** Adult candidates retain their independent endpoint, cache keys and single-resource workflow. */
-function AdultLocalCandidates({
-  initialMediaId,
-  renderExtra,
-}: {
-  initialMediaId?: string;
-  renderExtra?: (id: string) => React.ReactNode;
-}) {
-  const { t } = useTranslation();
-  const [query, setQuery] = useState("");
-  const [cursors, setCursors] = useState<(string | null)[]>([null]);
-  const [page, setPage] = useState(0);
-  const [selected, setSelected] = useState(initialMediaId ?? "");
-  const media = useQuery({
-    queryKey: ["adult", "tools", query, cursors[page]],
-    queryFn: () =>
-      adultApi.toolsMedia({
-        ...defaultBrowse(true),
-        query: query || null,
-        cursor: cursors[page] ?? null,
-      }),
-  });
-  return (
-    <section className="space-y-5">
-      <Label className="filter-field">
-        <span>{t("toolsSearch")}</span>
-        <Input
-          type="search"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setPage(0);
-            setCursors([null]);
-          }}
-        />
-      </Label>
-      {media.isPending ? (
-        <Loading />
-      ) : media.isError ? (
-        <ErrorNotice error={media.error} />
-      ) : (
-        <>
-          <Label className="filter-field">
-            <span>{t("toolsSelect")}</span>
-            <Select
-              value={selected}
-              onChange={(event) => setSelected(event.target.value)}
-            >
-              <option value="">{t("toolsSelect")}</option>
-              {media.data.items.map((card) => (
-                <option key={card.media.id} value={card.media.id}>
-                  {card.media.title}
-                </option>
-              ))}
-            </Select>
-          </Label>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              disabled={page === 0}
-              onClick={() => setPage((value) => value - 1)}
-            >
-              {t("toolsBack")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!media.data.next_cursor}
-              onClick={() => {
-                const next = media.data.next_cursor;
-                if (next) {
-                  setCursors((old) => [...old.slice(0, page + 1), next]);
-                  setPage((value) => value + 1);
-                }
-              }}
-            >
-              {t("toolsMore")}
-            </Button>
-          </div>
-        </>
-      )}
-      {selected && (
-        <LocalCandidateDetail
-          key={selected}
-          mediaId={selected}
-          adult
-          renderExtra={renderExtra}
-        />
-      )}
-    </section>
   );
 }
 
@@ -443,7 +353,9 @@ function LocalCandidateDetail({
     );
   if (
     detail.data.media.id !== mediaId ||
-    (!adult && detail.data.media.kind === "adult_video")
+    (adult
+      ? detail.data.media.kind !== "adult_video"
+      : detail.data.media.kind === "adult_video")
   )
     return <ErrorNotice error={new DesktopError("invalid_response")} />;
   return (
@@ -478,6 +390,12 @@ function LocalCandidateDetail({
         </ul>
       </section>
       <OrganizationPanel key={mediaId} mediaId={mediaId} adult={adult} />
+      {adult && (
+        <Suspense fallback={<Loading />}>
+          <AdultScraper key={mediaId} mediaId={mediaId} />
+          <AdultOutput mediaId={mediaId} />
+        </Suspense>
+      )}
       {renderExtra?.(mediaId)}
     </>
   );
@@ -581,8 +499,8 @@ export function MediaToolsPage({
   onSearch,
 }: {
   mediaId?: string;
-  search?: ToolsSearch;
-  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
+  search?: ToolsRouteSearch;
+  onSearch?: (search: ToolsRouteSearch, replace?: boolean) => void;
 } = {}) {
   return (
     <MediaToolsWorkspace
@@ -600,40 +518,46 @@ function MediaToolsWorkspace({
   onSearch,
 }: {
   mediaId?: string;
-  search?: ToolsSearch;
-  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
+  search?: ToolsRouteSearch;
+  onSearch?: (search: ToolsRouteSearch, replace?: boolean) => void;
 }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"local" | "scraper" | "health">("local");
+  const adult = search?.kind === "adult_video";
+
   return (
     <>
       <PageHeading title={t("videoTools")}>
         <Button asChild variant="outline">
-          <Link to="/library">{t("library")}</Link>
+          <Link to="/library" search={{ kind: search?.kind }}>
+            {t("library")}
+          </Link>
         </Button>
       </PageHeading>
-      <fieldset
-        className="mb-7 flex flex-wrap gap-2"
-        aria-label={t("videoTools")}
-      >
-        {(["local", "scraper", "health"] as const).map((v) => (
-          <Button
-            key={v}
-            variant={v === tab ? "secondary" : "ghost"}
-            aria-pressed={v === tab}
-            onClick={() => setTab(v)}
-          >
-            {t(
-              v === "local"
-                ? "toolsSelect"
-                : v === "scraper"
-                  ? "scraper"
-                  : "healthIssues",
-            )}
-          </Button>
-        ))}
-      </fieldset>
-      {tab === "local" ? (
+      {!adult && (
+        <fieldset
+          className="mb-7 flex flex-wrap gap-2"
+          aria-label={t("videoTools")}
+        >
+          {(["local", "scraper", "health"] as const).map((v) => (
+            <Button
+              key={v}
+              variant={v === tab ? "secondary" : "ghost"}
+              aria-pressed={v === tab}
+              onClick={() => setTab(v)}
+            >
+              {t(
+                v === "local"
+                  ? "toolsSelect"
+                  : v === "scraper"
+                    ? "scraper"
+                    : "healthIssues",
+              )}
+            </Button>
+          ))}
+        </fieldset>
+      )}
+      {adult || tab === "local" ? (
         <LocalCandidates
           initialMediaId={mediaId}
           search={search}

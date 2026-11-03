@@ -2,6 +2,36 @@ import i18n from "../../i18n";
 
 const values = {
   "zh-CN": {
+    autoRootAdd: "添加到媒体库",
+    autoRootSave: "保存并更新媒体库",
+    autoRootRetry: "重试更新",
+    autoRootSavedFailed: "目录已保存，媒体库更新未能启动。",
+    autoRootStarted: "正在后台扫描并获取媒体资料。",
+    autoBrowseLibrary: "查看媒体库",
+    autoRefreshLibrary: "更新媒体库",
+    autoRefreshReady: "更新目录后，媒体会自动出现在媒体库。",
+    autoRefreshRunning: "正在后台更新，已发现的媒体可直接浏览。",
+    autoRefreshComplete: "媒体库已更新",
+    autoRefreshReview: "媒体已可浏览，部分资料需要处理。",
+    autoPhase_scan: "正在发现媒体",
+    autoPhase_index: "正在添加媒体",
+    autoPhase_metadata: "正在获取媒体资料",
+    autoPhase_complete: "更新完成",
+    autoIndexed: "已添加媒体",
+    autoMatched: "已匹配资料",
+    autoNeedsReview: "待处理资料",
+    autoMetadataFailed: "资料获取失败",
+    autoReviewItems: "处理未匹配媒体",
+    autoFailedItems: "查看获取失败的媒体",
+    autoUnconfiguredItems: "查看未配置来源的媒体",
+    autoConfigureSources: "配置资料来源",
+    autoConfigureToken: "配置访问凭据",
+    autoConfigurationHint:
+      "缺少资料时，可配置来源和凭据后重新更新，或手动识别对应媒体。",
+    autoScanDetails: "查看更新详情",
+    autoLegacyScanRunning:
+      "目录扫描正在进行，完成后可更新媒体库，自动处理扫描结果。",
+    autoLegacyScanReady: "更新媒体库即可自动处理此目录，无需逐项确认入库。",
     rootChooseDirectory: "选择文件夹",
     rootChangeDirectory: "更换文件夹",
     rootChoosingDirectory: "正在选择…",
@@ -26,6 +56,41 @@ const values = {
     scanNothingToReview: "本次扫描没有待确认的候选。",
   },
   "en-US": {
+    autoRootAdd: "Add to library",
+    autoRootSave: "Save and update library",
+    autoRootRetry: "Retry update",
+    autoRootSavedFailed:
+      "The directory is saved, but the library update could not start.",
+    autoRootStarted: "Scanning and fetching metadata in the background.",
+    autoBrowseLibrary: "View library",
+    autoRefreshLibrary: "Update library",
+    autoRefreshReady:
+      "Updating a directory adds its media to the library automatically.",
+    autoRefreshRunning:
+      "Updating in the background. Discovered media is available to browse.",
+    autoRefreshComplete: "Library updated",
+    autoRefreshReview:
+      "Media is available to browse. Some metadata needs attention.",
+    autoPhase_scan: "Discovering media",
+    autoPhase_index: "Adding media",
+    autoPhase_metadata: "Fetching metadata",
+    autoPhase_complete: "Update complete",
+    autoIndexed: "Media added",
+    autoMatched: "Metadata matched",
+    autoNeedsReview: "Metadata to review",
+    autoMetadataFailed: "Metadata requests failed",
+    autoReviewItems: "Review unmatched media",
+    autoFailedItems: "View failed metadata requests",
+    autoUnconfiguredItems: "View media without configured sources",
+    autoConfigureSources: "Configure metadata sources",
+    autoConfigureToken: "Configure credentials",
+    autoConfigurationHint:
+      "For missing metadata, configure sources and credentials then update again, or identify the media manually.",
+    autoScanDetails: "View update details",
+    autoLegacyScanRunning:
+      "This directory scan is running. Update the library after it finishes to process its results automatically.",
+    autoLegacyScanReady:
+      "Update the library to process this directory automatically, without confirming individual imports.",
     rootChooseDirectory: "Choose folder",
     rootChangeDirectory: "Change folder",
     rootChoosingDirectory: "Choosing…",

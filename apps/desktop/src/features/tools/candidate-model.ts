@@ -35,6 +35,20 @@ export function ordinaryCandidates(cards: MediaCard[]): MediaCard[] {
     return true;
   });
 }
+/** The shared table never trusts a response to cross its selected resource type. */
+export function adultCandidates(cards: MediaCard[]): MediaCard[] {
+  const seen = new Set<string>();
+  return cards.filter((card) => {
+    if (
+      card.media.kind !== "adult_video" ||
+      !hasCandidateId(card) ||
+      seen.has(card.media.id)
+    )
+      return false;
+    seen.add(card.media.id);
+    return true;
+  });
+}
 export type CandidateSelectionResult = {
   cards: MediaCard[];
   limitReached: boolean;

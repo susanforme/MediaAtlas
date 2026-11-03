@@ -33,6 +33,7 @@ export function RootsPage({
   adult?: boolean;
   onScan?: (rootId: string, taskId?: string) => void;
   onNavigateScan?: (search: ScannerSearch) => void;
+  onTypeChange?: (adult: boolean) => void;
 }) {
   const { t } = useTranslation();
   const { date } = useFormat();
@@ -48,11 +49,12 @@ export function RootsPage({
     setRemove,
     validation,
     roots,
+    adultAvailable,
+    adultVisible,
     save,
     deletion,
     edit,
     submit,
-    persist,
     closeEditor,
     changeName,
     changePath,
@@ -66,9 +68,14 @@ export function RootsPage({
     savedRoot,
     savedVersion,
     completed,
-  } = useRootEditor(adult, (root, task) => {
-    if (adult) onScan?.(root, task);
-    else onNavigateScan?.({ root, task });
+  } = useRootEditor(adult, (root, task, kind) => {
+    if (onNavigateScan)
+      onNavigateScan({
+        root,
+        task,
+        ...(kind === "adult_video" ? { kind: "adult_video" as const } : {}),
+      });
+    else onScan?.(root, task);
   });
   const working = operation !== null;
   return (
@@ -84,7 +91,11 @@ export function RootsPage({
           <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="outline"
-              disabled={working || picking}
+              disabled={
+                working ||
+                picking ||
+                (form.kind === "adult_video" && !adultAvailable)
+              }
               onClick={() => void chooseDirectory()}
             >
               <FolderOpen size={18} aria-hidden="true" />
@@ -128,14 +139,14 @@ export function RootsPage({
                 })
               }
             >
-              {ROOT_KINDS.filter((kind) =>
-                adult ? kind === "adult_video" : kind !== "adult_video",
+              {ROOT_KINDS.filter(
+                (kind) => adultVisible || kind !== "adult_video",
               ).map((kind) => (
                 <option value={kind} key={kind}>
                   {t(`kind_${kind}`)}
                 </option>
               ))}
-              {!adult && <option value="mixed">{t("mixed")}</option>}
+              <option value="mixed">{t("mixed")}</option>
             </Select>
           </Label>
           <Button
@@ -190,30 +201,32 @@ export function RootsPage({
           {scan.isError && savedRoot && (
             <div className="space-y-3">
               <p role="status" className="text-sm">
-                {t("rootSavedScanFailed")}
+                {t("autoRootSavedFailed")}
               </p>
               <ErrorNotice error={scan.error} />
             </div>
           )}
           <div className="flex flex-wrap gap-3">
             <Button
-              disabled={working || picking || !form.enabled}
-              onClick={() => void persist(true)}
+              type="submit"
+              variant="default"
+              disabled={
+                working ||
+                picking ||
+                (form.kind === "adult_video" && !adultAvailable)
+              }
             >
               {t(
-                operation === "scan"
-                  ? "rootSavingAndScanning"
-                  : scan.isError && savedVersion
-                    ? "rootRetryScan"
-                    : "rootSaveAndScan",
+                working
+                  ? "saving"
+                  : form.enabled
+                    ? scan.isError && savedVersion
+                      ? "autoRootRetry"
+                      : form.id
+                        ? "autoRootSave"
+                        : "autoRootAdd"
+                    : "save",
               )}
-            </Button>
-            <Button
-              type="submit"
-              variant="outline"
-              disabled={working || picking}
-            >
-              {t(operation === "save" ? "saving" : "save")}
             </Button>
             <Button variant="ghost" disabled={working} onClick={closeEditor}>
               {t("cancel")}
@@ -226,23 +239,20 @@ export function RootsPage({
           className="notice mb-6 flex flex-wrap items-center justify-between gap-3"
           role="status"
         >
-          <p>{t(completed.task ? "scanStarted" : "rootSaved")}</p>
-          {completed.task && !adult && (
+          <p>{t(completed.task ? "autoRootStarted" : "rootSaved")}</p>
+          {completed.task && (
             <Button variant="outline" asChild>
               <Link
-                to="/scanner"
-                search={{ root: completed.root.id, task: completed.task.id }}
+                to="/library"
+                search={{
+                  root: completed.root.id,
+                  ...(completed.root.kind === "adult_video"
+                    ? { kind: "adult_video" as const }
+                    : {}),
+                }}
               >
-                {t("rootOpenScan")}
+                {t("autoBrowseLibrary")}
               </Link>
-            </Button>
-          )}
-          {completed.task && adult && onScan && (
-            <Button
-              variant="outline"
-              onClick={() => onScan(completed.root.id, completed.task?.id)}
-            >
-              {t("rootOpenScan")}
             </Button>
           )}
         </div>
@@ -330,26 +340,22 @@ export function RootsPage({
                   >
                     {t("remove")}
                   </Button>
-                  {adult && onScan ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!root.enabled || working}
-                      onClick={() => onScan(root.id)}
-                    >
-                      {t("scanRoot")}
-                    </Button>
-                  ) : !adult && root.enabled ? (
+                  {root.enabled && (
                     <Button asChild variant="ghost">
                       <Link
                         className="action-link"
                         to="/scanner"
-                        search={{ root: root.id }}
+                        search={{
+                          root: root.id,
+                          ...(root.kind === "adult_video"
+                            ? { kind: "adult_video" as const }
+                            : {}),
+                        }}
                       >
-                        {t("scanRoot")}
+                        {t("autoRefreshLibrary")}
                       </Link>
                     </Button>
-                  ) : null}
+                  )}
                 </div>
               </div>
             </article>

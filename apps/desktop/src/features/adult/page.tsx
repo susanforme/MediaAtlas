@@ -1,12 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import {
-  type FormEvent,
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   type AdultBatchPreview,
@@ -24,138 +18,27 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
-import { usePrivacy } from "../library/context";
-import { NativeOpen } from "../library/native-open";
-import { RootsPage } from "../library/pages";
-import { ScannerPage, type ScannerSearch } from "../library/scanner";
-import {
-  Empty,
-  ErrorNotice,
-  Loading,
-  PageHeading,
-  Pager,
-  useFormat,
-} from "../library/shared";
-import { LocalCandidates } from "../tools/page";
+import "../library/library.css";
+import { MediaDetailPage } from "../library/detail";
+import { ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { MediaToolsPage } from "../tools/page";
 import "./translations";
 import "../scraper/navigation";
+import type { LibrarySearch } from "../library/browse-model";
+import { AdultGate } from "./gate";
+import { AdultLibraryPage } from "./library-page";
 
-export function AdultGate({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
-  const { settings, includeAdult, loading, error, unlock } = usePrivacy();
-  if (loading) return <Loading />;
-  if (!settings.entry_visible) return <Empty title={t("privacyHidden")} />;
-  if (!includeAdult)
-    return (
-      <section className="panel">
-        <h1 className="section-title">{t("adultLocked")}</h1>
-        <p className="mb-4">{t("adultGateHelp")}</p>
-        <Button onClick={() => void unlock()}>{t("adultUnlock")}</Button>
-        {error !== undefined && <ErrorNotice error={error} />}
-      </section>
-    );
-  return children;
-}
+export { AdultGate } from "./gate";
+
 export function AdultPage() {
+  const [search, setSearch] = useState<LibrarySearch>({ kind: "adult_video" });
+  return <AdultLibraryPage search={search} onSearch={setSearch} />;
+}
+export function AdultToolsPage({ mediaId }: { mediaId?: string } = {}) {
   return (
     <AdultGate>
-      <AdultConsumption />
+      <MediaToolsPage search={{ kind: "adult_video", media: mediaId }} />
     </AdultGate>
-  );
-}
-export function AdultToolsPage() {
-  return (
-    <AdultGate>
-      <AdultWorkspace />
-    </AdultGate>
-  );
-}
-function AdultConsumption() {
-  const { t } = useTranslation();
-  const { lock } = usePrivacy();
-  return (
-    <>
-      <PageHeading title={t("adultLibrary")}>
-        <Button asChild variant="outline">
-          <Link to="/adult/tools" className="action-link">
-            {t("videoTools")}
-          </Link>
-        </Button>
-        <Button variant="outline" onClick={() => void lock()}>
-          {t("adultLock")}
-        </Button>
-      </PageHeading>
-      <AdultLibrary />
-    </>
-  );
-}
-function AdultWorkspace() {
-  const { t } = useTranslation();
-  const { lock } = usePrivacy();
-  const [tab, setTab] = useState<
-    "library" | "scraper" | "roots" | "scanner" | "tasks"
-  >("library");
-  const [scanSearch, setScanSearch] = useState<ScannerSearch>({});
-  return (
-    <>
-      <PageHeading title={t("adultWorkspace")}>
-        <Button variant="outline" onClick={() => void lock()}>
-          {t("adultLock")}
-        </Button>
-      </PageHeading>
-      <div className="mb-6 flex flex-wrap gap-3">
-        {(["library", "scraper", "roots", "scanner", "tasks"] as const).map(
-          (value) => (
-            <Button
-              key={value}
-              variant={tab === value ? "default" : "outline"}
-              onClick={() => setTab(value)}
-            >
-              {t(
-                value === "library"
-                  ? "adultLibrary"
-                  : value === "scraper"
-                    ? "scraper"
-                    : value === "roots"
-                      ? "roots"
-                      : value === "scanner"
-                        ? "scanner"
-                        : "tasks",
-              )}
-            </Button>
-          ),
-        )}
-      </div>
-      {tab === "library" ? (
-        <>
-          <LocalCandidates
-            adult
-            renderExtra={(id) => <AdultOutput mediaId={id} />}
-          />
-          <AdultLibrary tools />
-        </>
-      ) : tab === "scraper" ? (
-        <AdultScraper />
-      ) : tab === "roots" ? (
-        <RootsPage
-          adult
-          onScan={(rootId, taskId) => {
-            setScanSearch({ root: rootId, task: taskId });
-            setTab("scanner");
-          }}
-        />
-      ) : tab === "scanner" ? (
-        <ScannerPage
-          adult
-          search={scanSearch}
-          onSearch={setScanSearch}
-          onAddRoot={() => setTab("roots")}
-          onBrowse={() => setTab("library")}
-        />
-      ) : (
-        <AdultTasks />
-      )}
-    </>
   );
 }
 export function AdultMetadata({ detail }: { detail: AdultDetail }) {
@@ -306,13 +189,9 @@ export function AdultOutput({ mediaId }: { mediaId: string }) {
     </div>
   );
 }
-function AdultLibrary({ tools = false }: { tools?: boolean }) {
+export function AdultBatchOutput({ mediaIds }: { mediaIds: string[] }) {
   const { t } = useTranslation();
-  const { settings } = usePrivacy();
-  const [query, setQuery] = useState("");
-  const [cursors, setCursors] = useState<(string | null)[]>([null]);
-  const [page, setPage] = useState(0);
-  const [selected, setSelected] = useState<string[]>([]);
+  const selected = [...new Set(mediaIds)];
   const [batch, setBatch] = useState<AdultBatchPreview>();
   const [result, setResult] = useState<AdultBatchResult>();
   const batchRef = useRef<AdultBatchPreview | undefined>(undefined);
@@ -328,22 +207,6 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
         void adultApi.batchCancel(batchRef.current.batch_id).catch(() => {});
     };
   }, []);
-  const media = useQuery({
-    queryKey: [
-      "adult",
-      tools ? "tools-library" : "library",
-      query,
-      cursors[page],
-      settings.covers_visible,
-    ],
-    queryFn: () =>
-      (tools ? adultApi.toolsMedia : adultApi.media)({
-        ...defaultBrowse(true),
-        kind: "adult_video",
-        query: query || null,
-        cursor: cursors[page] ?? null,
-      }),
-  });
   const plan = useMutation({
     mutationFn: () => adultApi.batchPreview(selected),
     onSuccess: (value) => {
@@ -373,148 +236,71 @@ function AdultLibrary({ tools = false }: { tools?: boolean }) {
     },
   });
   return (
-    <div className="space-y-5">
-      {!tools && <AdultRecent />}
-      <Label className="filter-field">
-        <span>{t("adultLocalSearch")}</span>
-        <Input
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setPage(0);
-            setCursors([null]);
-          }}
-        />
-      </Label>
-      {media.isPending ? (
-        <Loading />
-      ) : media.error ? (
-        <ErrorNotice error={media.error} />
-      ) : !media.data.items.length ? (
-        <Empty title={t("emptyLibrary")} />
-      ) : (
-        <ul className="space-y-3">
-          {media.data.items.map(({ media: item, poster_uri }) => (
-            <li
-              className="panel flex flex-wrap items-center gap-4"
-              key={item.id}
-            >
-              {tools && (
-                <Label className="flex items-center gap-2">
-                  <Checkbox
-                    aria-label={`${t("adultBatchSelect")}: ${item.title}`}
-                    checked={selected.includes(item.id)}
-                    disabled={!!batch || execute.isPending}
-                    onChange={(event) =>
-                      setSelected((values) =>
-                        event.target.checked
-                          ? [...values, item.id].slice(0, 32)
-                          : values.filter((v) => v !== item.id),
-                      )
-                    }
-                  />
-                  {t("adultBatchSelect")}
-                </Label>
-              )}
-              {!tools && (
-                <NativeOpen mediaId={item.id} adult>
-                  {item.title}
-                </NativeOpen>
-              )}
-              {settings.covers_visible &&
-                poster_uri?.startsWith("data:image/") && (
-                  <img src={poster_uri} alt="" className="max-h-24 max-w-16" />
-                )}
-              <Button asChild variant="outline">
-                <Link
-                  className="text-ring"
-                  to="/adult/media/$mediaId"
-                  params={{ mediaId: item.id }}
-                >
-                  {tools ? item.title : t("detailsAction")}
-                </Link>
-              </Button>
-            </li>
+    <section className="space-y-4">
+      <Button
+        disabled={
+          !selected.length ||
+          selected.length > 32 ||
+          plan.isPending ||
+          execute.isPending ||
+          !!batch
+        }
+        onClick={() => plan.mutate()}
+      >
+        {t("adultBatchPreview")}
+      </Button>
+      {plan.error && <ErrorNotice error={plan.error} />}{" "}
+      {batch && (
+        <section className="space-y-4">
+          {batch.items.map((item) => (
+            <OutputDiff key={item.preview_id} preview={item} />
           ))}
-        </ul>
+          <div className="flex gap-3">
+            <Button
+              onClick={() => execute.mutate()}
+              disabled={execute.isPending || cancel.isPending}
+            >
+              {t("adultBatchConfirm")}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => cancel.mutate()}
+              disabled={cancel.isPending}
+            >
+              {t("adultBatchCancel")}
+            </Button>
+          </div>
+        </section>
       )}
-      {media.data && (
-        <Pager
-          page={page + 1}
-          hasNext={Boolean(media.data.next_cursor)}
-          previous={() => setPage((v) => Math.max(0, v - 1))}
-          next={() => {
-            const next = media.data.next_cursor;
-            if (next) {
-              setCursors((v) => [...v.slice(0, page + 1), next]);
-              setPage((v) => v + 1);
-            }
-          }}
-        />
-      )}
-      {tools && (
-        <>
-          {" "}
-          <Button
-            disabled={
-              !selected.length || plan.isPending || execute.isPending || !!batch
-            }
-            onClick={() => plan.mutate()}
-          >
-            {t("adultBatchPreview")}
-          </Button>
-          {plan.error && <ErrorNotice error={plan.error} />}{" "}
-          {batch && (
-            <section className="space-y-4">
-              {batch.items.map((item) => (
-                <OutputDiff key={item.preview_id} preview={item} />
-              ))}
-              <div className="flex gap-3">
-                <Button
-                  onClick={() => execute.mutate()}
-                  disabled={execute.isPending || cancel.isPending}
-                >
-                  {t("adultBatchConfirm")}
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => cancel.mutate()}
-                  disabled={cancel.isPending}
-                >
-                  {t("adultBatchCancel")}
-                </Button>
-              </div>
-            </section>
-          )}
-          {execute.error && <ErrorNotice error={execute.error} />}{" "}
-          {cancel.error && <ErrorNotice error={cancel.error} />}{" "}
-          {result && (
-            <section className="panel" role="status">
-              <h2>
-                {t("adultBatchResult")}:{" "}
-                {t(`state_${result.state}`, { defaultValue: result.state })}
-              </h2>
-              <ul>
-                {result.items.map((item) => (
-                  <li key={item.preview_id}>
-                    {item.media_item_id}:{" "}
-                    {t(`state_${item.state}`, { defaultValue: item.state })}
-                    {item.error_code &&
-                      ` · ${t(`providerFailure_${item.error_code}`, { defaultValue: item.error_code })}`}
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}{" "}
-        </>
-      )}
-    </div>
+      {execute.error && <ErrorNotice error={execute.error} />}{" "}
+      {cancel.error && <ErrorNotice error={cancel.error} />}{" "}
+      {result && (
+        <section className="panel" role="status">
+          <h2>
+            {t("adultBatchResult")}:{" "}
+            {t(`state_${result.state}`, { defaultValue: result.state })}
+          </h2>
+          <ul>
+            {result.items.map((item) => (
+              <li key={item.preview_id}>
+                {item.media_item_id}:{" "}
+                {t(`state_${item.state}`, { defaultValue: item.state })}
+                {item.error_code &&
+                  ` · ${t(`providerFailure_${item.error_code}`, { defaultValue: item.error_code })}`}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}{" "}
+    </section>
   );
 }
-export function AdultScraper() {
+export function AdultScraper({ mediaId }: { mediaId?: string } = {}) {
+  return <CatalogScraper key={mediaId ?? "search"} mediaId={mediaId} />;
+}
+function CatalogScraper({ mediaId }: { mediaId?: string }) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
-  const { settings } = usePrivacy();
   const [catalog, setCatalog] = useState("");
   const [namespace, setNamespace] = useState("dmm");
   const [studio, setStudio] = useState("");
@@ -522,7 +308,8 @@ export function AdultScraper() {
   const [search, setSearch] = useState<AdultSearchPreview>();
   const [detail, setDetail] = useState<AdultDetail>();
   const [candidateIndex, setCandidateIndex] = useState<number>();
-  const [target, setTarget] = useState("");
+  const [selectedTarget, setTarget] = useState("");
+  const target = mediaId ?? selectedTarget;
   const [fields, setFields] = useState<string[]>([
     "title",
     "catalog_numbers",
@@ -543,9 +330,25 @@ export function AdultScraper() {
   });
   const local = useQuery({
     queryKey: ["adult", "targets"],
+    enabled: !mediaId,
     queryFn: () =>
       adultApi.toolsMedia({ ...defaultBrowse(true), kind: "adult_video" }),
   });
+  const localTarget = useQuery({
+    queryKey: ["adult", "tools-detail", mediaId],
+    queryFn: () => adultApi.toolsDetail(mediaId ?? ""),
+    enabled: Boolean(mediaId),
+  });
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (!localTarget.data || seeded.current) return;
+    seeded.current = true;
+    const parsedCatalog = localTarget.data.metadata_values.find(
+      (field) =>
+        field.field_key === "catalog_number" && typeof field.value === "string",
+    );
+    if (parsedCatalog) setCatalog(String(parsedCatalog.value));
+  }, [localTarget.data]);
   const enabled =
     providers.data?.providers
       .filter((p) => p.config.enabled)
@@ -770,24 +573,37 @@ export function AdultScraper() {
         <>
           <AdultMetadata detail={detail} />
           <section className="panel space-y-4">
-            <Label className="filter-field">
-              <span>{t("adultTarget")}</span>
-              <Select
-                value={target}
-                onChange={(event) => {
-                  setTarget(event.target.value);
-                  setMerge(undefined);
-                }}
-              >
-                <option value="">{t("adultTarget")}</option>
-                {local.data?.items.map((item) => (
-                  <option key={item.media.id} value={item.media.id}>
-                    {item.media.title}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-            {local.error && <ErrorNotice error={local.error} />}
+            {mediaId ? (
+              localTarget.isPending ? (
+                <Loading />
+              ) : localTarget.error ? (
+                <ErrorNotice error={localTarget.error} />
+              ) : (
+                <h3 className="font-medium">{localTarget.data?.media.title}</h3>
+              )
+            ) : (
+              <>
+                {" "}
+                <Label className="filter-field">
+                  <span>{t("adultTarget")}</span>
+                  <Select
+                    value={target}
+                    onChange={(event) => {
+                      setTarget(event.target.value);
+                      setMerge(undefined);
+                    }}
+                  >
+                    <option value="">{t("adultTarget")}</option>
+                    {local.data?.items.map((item) => (
+                      <option key={item.media.id} value={item.media.id}>
+                        {item.media.title}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
+                {local.error && <ErrorNotice error={local.error} />}
+              </>
+            )}
             <fieldset>
               <legend className="mb-3 font-medium">{t("adultFields")}</legend>
               <div className="flex flex-wrap gap-4">
@@ -821,43 +637,36 @@ export function AdultScraper() {
             </fieldset>
             <fieldset>
               <legend className="font-medium">{t("adultImages")}</legend>
-              {!settings.covers_visible ? (
-                <p>{t("adultHiddenImages")}</p>
-              ) : (
-                detail.artwork.map((art, index) => (
-                  <div
-                    key={`${art.kind}:${art.url}`}
-                    className="mt-3 flex gap-3"
+              {detail.artwork.map((art, index) => (
+                <div key={`${art.kind}:${art.url}`} className="mt-3 flex gap-3">
+                  <Label className="flex gap-2">
+                    <Checkbox
+                      checked={images.includes(index)}
+                      onChange={(event) => {
+                        setMerge(undefined);
+                        setImages((values) =>
+                          event.target.checked
+                            ? [...values, index]
+                            : values.filter((v) => v !== index),
+                        );
+                      }}
+                    />
+                    {t(`adultArtwork_${art.kind}`, {
+                      defaultValue: t("artworks"),
+                    })}{" "}
+                    {index + 1}
+                  </Label>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={image.isPending}
+                    onClick={() => image.mutate(index)}
                   >
-                    <Label className="flex gap-2">
-                      <Checkbox
-                        checked={images.includes(index)}
-                        onChange={(event) => {
-                          setMerge(undefined);
-                          setImages((values) =>
-                            event.target.checked
-                              ? [...values, index]
-                              : values.filter((v) => v !== index),
-                          );
-                        }}
-                      />
-                      {t(`adultArtwork_${art.kind}`, {
-                        defaultValue: t("artworks"),
-                      })}{" "}
-                      {index + 1}
-                    </Label>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={image.isPending}
-                      onClick={() => image.mutate(index)}
-                    >
-                      {t("adultImagePreview")}
-                    </Button>
-                  </div>
-                ))
-              )}
-              {settings.covers_visible && thumbnail && (
+                    {t("adultImagePreview")}
+                  </Button>
+                </div>
+              ))}
+              {thumbnail && (
                 <img
                   src={thumbnail}
                   alt={t("adultImages")}
@@ -917,7 +726,6 @@ export function AdultScraper() {
           )}
           {confirm.error && <ErrorNotice error={confirm.error} />}{" "}
           {confirm.isSuccess && <p role="status">{t("adultMerged")}</p>}
-          {target && <AdultOutput key={target} mediaId={target} />}
         </>
       )}
     </div>
@@ -940,119 +748,34 @@ function fieldLabel(key: string, t: (key: string) => string) {
 export function AdultMediaPage({ mediaId }: { mediaId: string }) {
   return (
     <AdultGate>
-      <AdultMediaDetail mediaId={mediaId} />
+      <MediaDetailPage
+        mediaId={mediaId}
+        adult
+        sourceDetail={<AdultSourceDetail mediaId={mediaId} />}
+      />
     </AdultGate>
   );
 }
-function AdultMediaDetail({ mediaId }: { mediaId: string }) {
-  const { t } = useTranslation();
-  const { settings } = usePrivacy();
-  const local = useQuery({
-    queryKey: ["adult", "media", mediaId],
-    queryFn: () => adultApi.getMedia(mediaId),
-  });
+export function AdultSourceDetail({ mediaId }: { mediaId: string }) {
   const source = useQuery({
     queryKey: ["adult", "source", mediaId],
     queryFn: () => adultApi.mediaDetail(mediaId),
-    enabled: local.isSuccess,
   });
-  if (local.isPending) return <Loading />;
-  if (local.error) return <ErrorNotice error={local.error} />;
-  return (
-    <div className="space-y-5">
-      <Button asChild variant="outline">
-        <Link to="/adult" className="action-link">
-          ← {t("adultBack")}
-        </Link>
-      </Button>
-      {
-        <>
-          <PageHeading title={local.data.media.title}>
-            <NativeOpen files={local.data.files} adult />
-            <Button asChild variant="outline">
-              <Link to="/adult/tools" className="action-link">
-                {t("videoTools")}
-              </Link>
-            </Button>
-          </PageHeading>
-          {settings.covers_visible &&
-            local.data.poster_uri?.startsWith("data:image/") && (
-              <img src={local.data.poster_uri} alt="" className="max-h-64" />
-            )}
-          <section className="panel">
-            <h2 className="section-title">{t("files")}</h2>
-            <ul>
-              {local.data.files.map((file) => (
-                <li key={file.id} className="break-all">
-                  {file.relative_path}
-                </li>
-              ))}
-            </ul>
-          </section>
-        </>
-      }
-      {source.isPending ? (
-        <Loading />
-      ) : source.error ? (
-        <ErrorNotice error={source.error} />
-      ) : source.data ? (
-        <AdultMetadata detail={source.data} />
-      ) : (
-        <Empty title={t("adultNoMetadata")} />
-      )}
-
-      <p className="text-xs text-muted-foreground">
-        {t(
-          settings.remember_recent
-            ? "adultRecentEnabled"
-            : "adultRecentDisabled",
-        )}
-      </p>
-    </div>
-  );
+  if (source.isPending) return <Loading />;
+  if (source.error)
+    return (
+      <ErrorNotice error={source.error} retry={() => void source.refetch()} />
+    );
+  return source.data ? <AdultMetadata detail={source.data} /> : null;
 }
 
-function AdultRecent() {
+export function AdultTasksPage() {
   const { t } = useTranslation();
-  const { settings } = usePrivacy();
-  const { date } = useFormat();
-  const visits = useQuery({
-    queryKey: ["adult", "recent"],
-    queryFn: adultApi.recent,
-    enabled: settings.remember_recent,
-  });
-  if (!settings.remember_recent)
-    return (
-      <p className="text-xs text-muted-foreground">
-        {t("adultRecentDisabled")}
-      </p>
-    );
   return (
-    <section className="panel">
-      <h2 className="section-title">{t("adultRecentTitle")}</h2>
-      {visits.error ? (
-        <ErrorNotice error={visits.error} />
-      ) : (
-        <ul>
-          {visits.data?.map((visit) => (
-            <li key={visit.media_id} className="py-1">
-              <Button asChild variant="outline">
-                <Link
-                  to="/adult/media/$mediaId"
-                  params={{ mediaId: visit.media_id }}
-                  className="text-ring"
-                >
-                  {visit.title}
-                </Link>
-              </Button>
-              <span className="ml-3 text-xs text-muted-foreground">
-                {date(visit.visited_at)}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <AdultGate>
+      <PageHeading title={t("tasks")} />
+      <AdultTasks />
+    </AdultGate>
   );
 }
 

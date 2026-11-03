@@ -28,25 +28,26 @@ const closed: AdultSettings = {
   remember_recent: false,
   unlocked: false,
 };
+const enabled: AdultSettings = {
+  ...closed,
+  entry_visible: true,
+  covers_visible: true,
+  unlocked: true,
+};
 function Controls() {
-  const { includeAdult, settings, loading, setIncludeAdult, unlock, lock } =
+  const { includeAdult, settings, loading, setIncludeAdult, error } =
     usePrivacy();
   return (
     <>
       <p>{loading ? "Fixture loading" : "Fixture ready"}</p>
-      {settings.entry_visible && <a href="/adult">Fixture adult entry</a>}
-      <p>{includeAdult ? "Fixture adult content" : "Fixture content hidden"}</p>
+      {settings.entry_visible && <span>Fixture category</span>}
+      <p>{includeAdult ? "Fixture content" : "Fixture hidden"}</p>
+      {error !== undefined && <p>Fixture unavailable</p>}
       <button type="button" onClick={() => setIncludeAdult(true)}>
-        Fixture show entry
+        Fixture enable
       </button>
       <button type="button" onClick={() => setIncludeAdult(false)}>
-        Fixture hide entry
-      </button>
-      <button type="button" onClick={() => void unlock()}>
-        Fixture unlock
-      </button>
-      <button type="button" onClick={() => void lock()}>
-        Fixture lock
+        Fixture disable
       </button>
     </>
   );
@@ -65,8 +66,8 @@ function show(client = new QueryClient()) {
 }
 function deferred<T>() {
   let resolve!: (value: T) => void;
-  const promise = new Promise<T>((r) => {
-    resolve = r;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
   });
   return { promise, resolve };
 }
@@ -78,58 +79,42 @@ beforeEach(() => {
     ...value,
     unlocked: false,
   }));
-  vi.mocked(adultApi.unlock).mockResolvedValue({
-    ...closed,
-    entry_visible: true,
-    unlocked: true,
-  });
-  vi.mocked(adultApi.lock).mockResolvedValue({
-    ...closed,
-    entry_visible: true,
-  });
+  vi.mocked(adultApi.unlock).mockResolvedValue(enabled);
+  vi.mocked(adultApi.lock).mockResolvedValue(closed);
 });
-it("requires a backend session unlock and does not trust the legacy visible preference", async () => {
+
+it("uses the saved content setting and grants the backend session without a second UI step", async () => {
   localStorage.setItem(ADULT_STORAGE_KEY, "true");
   show();
   await screen.findByText("Fixture ready");
-  expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  expect(screen.getByText("Fixture content hidden")).toBeInTheDocument();
-  fireEvent.click(screen.getByText("Fixture show entry"));
-  await screen.findByRole("link", { name: "Fixture adult entry" });
-  expect(screen.queryByText("Fixture adult content")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByText("Fixture unlock"));
-  await screen.findByText("Fixture adult content");
-});
-it("keeps an enabled entry through lock and restart while clearing private cached data", async () => {
-  vi.mocked(adultApi.settings).mockResolvedValue({
-    ...closed,
+  expect(screen.queryByText("Fixture category")).not.toBeInTheDocument();
+  expect(adultApi.unlock).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Fixture enable"));
+  await screen.findByText("Fixture content");
+  expect(adultApi.saveSettings).toHaveBeenCalledWith({
     entry_visible: true,
+    covers_visible: true,
+    remember_recent: false,
+  });
+  expect(adultApi.unlock).toHaveBeenCalledTimes(1);
+});
+
+it("restores an enabled type automatically and clears private caches immediately when disabled", async () => {
+  vi.mocked(adultApi.settings).mockResolvedValue({
+    ...enabled,
+    unlocked: false,
   });
   const view = show();
-  await screen.findByText("Fixture ready");
-  fireEvent.click(screen.getByText("Fixture unlock"));
-  await screen.findByText("Fixture adult content");
-  view.client.setQueryData(["adult", "source", "synthetic"], {
-    title: "Synthetic private title",
+  await screen.findByText("Fixture content");
+  view.client.setQueryData(["adult", "source", "fixture"], {
+    title: "Fixture private metadata",
   });
-  fireEvent.click(screen.getByText("Fixture lock"));
-  expect(screen.getByText("Fixture content hidden")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Fixture disable"));
+  expect(screen.getByText("Fixture hidden")).toBeInTheDocument();
+  expect(screen.queryByText("Fixture category")).not.toBeInTheDocument();
   expect(
-    view.client.getQueryData(["adult", "source", "synthetic"]),
+    view.client.getQueryData(["adult", "source", "fixture"]),
   ).toBeUndefined();
-  expect(
-    screen.getByRole("link", { name: "Fixture adult entry" }),
-  ).toBeInTheDocument();
-  await waitFor(() => expect(adultApi.lock).toHaveBeenCalled());
-  view.unmount();
-  show();
-  await screen.findByText("Fixture ready");
-  expect(
-    screen.getByRole("link", { name: "Fixture adult entry" }),
-  ).toBeInTheDocument();
-  expect(screen.queryByText("Fixture adult content")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByText("Fixture hide entry"));
-  expect(screen.queryByRole("link")).not.toBeInTheDocument();
   await waitFor(() =>
     expect(adultApi.saveSettings).toHaveBeenCalledWith({
       entry_visible: false,
@@ -138,38 +123,79 @@ it("keeps an enabled entry through lock and restart while clearing private cache
     }),
   );
 });
-it("ignores a late unlock response after the user locks", async () => {
+
+it("ignores a late automatic grant after the type is disabled", async () => {
   const pending = deferred<AdultSettings>();
   vi.mocked(adultApi.settings).mockResolvedValue({
-    ...closed,
-    entry_visible: true,
+    ...enabled,
+    unlocked: false,
   });
   vi.mocked(adultApi.unlock).mockReturnValue(pending.promise);
   show();
+  await waitFor(() => expect(adultApi.unlock).toHaveBeenCalled());
+  expect(screen.getByText("Fixture hidden")).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Fixture disable"));
   await screen.findByText("Fixture ready");
-  fireEvent.click(screen.getByText("Fixture unlock"));
-  fireEvent.click(screen.getByText("Fixture lock"));
-  await waitFor(() => expect(adultApi.lock).toHaveBeenCalled());
-  await act(async () =>
-    pending.resolve({ ...closed, entry_visible: true, unlocked: true }),
-  );
-  expect(screen.queryByText("Fixture adult content")).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("link", { name: "Fixture adult entry" }),
-  ).toBeInTheDocument();
+  await act(async () => pending.resolve(enabled));
+  expect(screen.queryByText("Fixture content")).not.toBeInTheDocument();
+  expect(screen.queryByText("Fixture category")).not.toBeInTheDocument();
 });
-it("ignores a late enable-settings response after hiding the entry", async () => {
+
+it("does not grant from a stale enable-settings response", async () => {
   const pending = deferred<AdultSettings>();
   vi.mocked(adultApi.saveSettings)
     .mockReturnValueOnce(pending.promise)
     .mockResolvedValueOnce(closed);
   show();
   await screen.findByText("Fixture ready");
-  fireEvent.click(screen.getByText("Fixture show entry"));
-  fireEvent.click(screen.getByText("Fixture hide entry"));
-  await act(async () =>
-    pending.resolve({ ...closed, entry_visible: true, unlocked: true }),
+  fireEvent.click(screen.getByText("Fixture enable"));
+  await waitFor(() => expect(adultApi.saveSettings).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByText("Fixture disable"));
+  expect(adultApi.saveSettings).toHaveBeenCalledTimes(1);
+  await act(async () => pending.resolve({ ...enabled, unlocked: false }));
+  await waitFor(() => expect(adultApi.saveSettings).toHaveBeenCalledTimes(2));
+  expect(vi.mocked(adultApi.saveSettings).mock.calls[1][0].entry_visible).toBe(
+    false,
   );
-  expect(screen.queryByRole("link")).not.toBeInTheDocument();
-  expect(screen.queryByText("Fixture adult content")).not.toBeInTheDocument();
+  expect(adultApi.unlock).not.toHaveBeenCalled();
+  expect(screen.queryByText("Fixture content")).not.toBeInTheDocument();
+});
+
+it("keeps backend data unavailable on authorization failure", async () => {
+  vi.mocked(adultApi.settings).mockResolvedValue({
+    ...enabled,
+    unlocked: false,
+  });
+  vi.mocked(adultApi.unlock).mockRejectedValue(
+    new Error("fixture unavailable"),
+  );
+  show();
+  await screen.findByText("Fixture ready");
+  expect(screen.getByText("Fixture unavailable")).toBeInTheDocument();
+  expect(screen.queryByText("Fixture content")).not.toBeInTheDocument();
+});
+
+it("migrates enabled legacy display preferences to the ordinary category presentation", async () => {
+  vi.mocked(adultApi.settings).mockResolvedValue({
+    ...closed,
+    entry_visible: true,
+    remember_recent: true,
+  });
+  show();
+  await screen.findByText("Fixture content");
+  expect(adultApi.saveSettings).toHaveBeenCalledWith({
+    entry_visible: true,
+    covers_visible: true,
+    remember_recent: false,
+  });
+  expect(adultApi.unlock).toHaveBeenCalledTimes(1);
+});
+
+it("does not grant from a settings response after the provider unmounts", async () => {
+  const pending = deferred<AdultSettings>();
+  vi.mocked(adultApi.settings).mockReturnValue(pending.promise);
+  const view = show();
+  view.unmount();
+  await act(async () => pending.resolve({ ...enabled, unlocked: false }));
+  expect(adultApi.unlock).not.toHaveBeenCalled();
 });

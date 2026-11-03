@@ -1,9 +1,30 @@
 import { expect, it } from "vitest";
 import {
   changeToolsFilters,
+  changeToolsRouteFilters,
   toolsBrowseQuery,
+  toolsRouteBrowseQuery,
+  validateToolsRouteSearch,
   validateToolsSearch,
 } from "./search";
+
+it("routes the adult type separately without granting ordinary query visibility", () => {
+  expect(
+    validateToolsRouteSearch({
+      kind: "adult_video",
+      media: "private-id",
+      q: "private",
+      include_adult: true,
+    }),
+  ).toEqual({ kind: "adult_video", media: "private-id", q: "private" });
+  expect(
+    validateToolsSearch({ kind: "adult_video", include_adult: true }),
+  ).toEqual({});
+  expect(
+    toolsBrowseQuery(validateToolsSearch({ kind: "adult_video" }))
+      .include_adult,
+  ).toBe(false);
+});
 
 it("accepts only bounded, whitelisted ordinary tool query fields", () => {
   expect(
@@ -71,4 +92,38 @@ it("resets invalid cursor, page and detail when changing a server filter while r
     sort: "title_asc",
     include_adult: false,
   });
+});
+
+it("retains shared server filters for the adult adapter and clears cross-type root/detail selections", () => {
+  const search = validateToolsRouteSearch({
+    kind: "adult_video",
+    root: "adult-root",
+    q: "code",
+    health: "missing_poster",
+    sort: "title_asc",
+    cursor: "next",
+    page: 2,
+  });
+  expect(toolsRouteBrowseQuery(search)).toMatchObject({
+    kind: "adult_video",
+    include_adult: true,
+    root_id: "adult-root",
+    query: "code",
+    cursor: "next",
+    sort: "title_asc",
+  });
+  expect(
+    changeToolsRouteFilters(
+      { ...search, media: "selected" },
+      { kind: "movie" },
+    ),
+  ).toEqual({
+    kind: "movie",
+    q: "code",
+    health: "missing_poster",
+    sort: "title_asc",
+  });
+  expect(
+    toolsBrowseQuery(validateToolsSearch({ ...search })).include_adult,
+  ).toBe(false);
 });

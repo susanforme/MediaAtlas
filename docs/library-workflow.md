@@ -2,6 +2,8 @@
 
 社区实践、当前实现对照和后续优化优先级见 [社区刮削工具实践与 MediaAtlas 后续优化](community-scraper-best-practices.md)。
 
+> 当前默认工作流已按用户要求改为 [自动媒体库](automatic-library.md)：添加普通目录即后台扫描、索引并自动补全可靠匹配资料，本地媒体先显示；下面 P2/P7 的手动确认与可信资料可见规则保留作历史设计，发生冲突时以新工作流为准。真实媒体文件仍只读，旁车/组织操作保留明确确认。
+
 状态：Phase 2 实施设计。基线见 [原始计划](UNIVERSAL_MEDIA_SCRAPER_AGENT_PLAN.md)，共享边界见 [phase-2-contract.md](phase-2-contract.md)，界面见 [ui-spec.md](ui-spec.md)。用户已明确授权启动 P2；保留 P0 平台启动和 P1 远端 CI 尚未确认的记录，不将其改写为通过。
 
 ## 范围与边界

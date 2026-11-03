@@ -4,37 +4,51 @@ import {
   createRoute,
   createRouter,
   lazyRouteComponent,
+  Navigate,
   RouterProvider,
 } from "@tanstack/react-router";
 import { AppShell } from "./components/shell/app-shell";
-import { LibraryPage, validateLibrarySearch } from "./features/library/browse";
+import { DashboardPage } from "./features/home/page";
+import { validateLibrarySearch } from "./features/library/browse-model";
 import { PrivacyProvider } from "./features/library/context";
-import { MediaDetailPage } from "./features/library/detail";
 import { validateScannerSearch } from "./features/library/scanner-navigation";
-import {
-  NetworkInspectorPage,
-  ProvidersPage,
-} from "./features/providers/pages";
+import { Loading } from "./features/library/shared";
 import "./features/scraper/navigation";
 import {
   validateScraperReturnSearch,
   validateScraperSearch,
 } from "./features/scraper/search";
-import "./features/music/translations";
+import "./features/music/navigation";
 import "./features/tools/navigation";
-import { validateToolsSearch } from "./features/tools/search";
+import { validateToolsRouteSearch } from "./features/tools/search";
 
-const DashboardPage = lazyRouteComponent(
-  () => import("./features/library/pages"),
-  "DashboardPage",
+const LibraryPage = lazyRouteComponent(
+  () => import("./features/library/browse"),
+  "LibraryPage",
+);
+const MediaDetailPage = lazyRouteComponent(
+  () => import("./features/library/detail"),
+  "MediaDetailPage",
+);
+const AdultLibraryPage = lazyRouteComponent(
+  () => import("./features/adult/library-page"),
+  "AdultLibraryPage",
 );
 const RootsPage = lazyRouteComponent(
   () => import("./features/library/pages"),
   "RootsPage",
 );
 const SettingsPage = lazyRouteComponent(
-  () => import("./features/library/pages"),
+  () => import("./features/settings/page"),
   "SettingsPage",
+);
+const ProvidersPage = lazyRouteComponent(
+  () => import("./features/providers/pages"),
+  "ProvidersPage",
+);
+const NetworkInspectorPage = lazyRouteComponent(
+  () => import("./features/providers/pages"),
+  "NetworkInspectorPage",
 );
 const ScannerPage = lazyRouteComponent(
   () => import("./features/library/scanner"),
@@ -64,10 +78,15 @@ const libraryRoute = createRoute({
   component: () => {
     const search = libraryRoute.useSearch();
     const navigate = libraryRoute.useNavigate();
+    const Page = search.kind === "adult_video" ? AdultLibraryPage : LibraryPage;
     return (
-      <LibraryPage
+      <Page
         search={search}
-        onSearch={(patch, replace) => void navigate({ search: patch, replace })}
+        onSearch={(patch, replace) =>
+          patch.kind === "music_release"
+            ? void navigate({ to: "/music", replace })
+            : void navigate({ search: patch, replace })
+        }
       />
     );
   },
@@ -75,17 +94,15 @@ const libraryRoute = createRoute({
 const adultRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/adult",
-  component: lazyRouteComponent(
-    () => import("./features/adult/page"),
-    "AdultPage",
+  component: () => (
+    <Navigate to="/library" search={{ kind: "adult_video" }} replace />
   ),
 });
 const adultToolsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/adult/tools",
-  component: lazyRouteComponent(
-    () => import("./features/adult/page"),
-    "AdultToolsPage",
+  component: () => (
+    <Navigate to="/tools" search={{ kind: "adult_video" }} replace />
   ),
 });
 const MediaToolsPage = lazyRouteComponent(
@@ -95,7 +112,7 @@ const MediaToolsPage = lazyRouteComponent(
 const toolsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tools",
-  validateSearch: validateToolsSearch,
+  validateSearch: validateToolsRouteSearch,
   component: () => {
     const search = toolsRoute.useSearch();
     const navigate = toolsRoute.useNavigate();
@@ -113,7 +130,14 @@ const adultDetailRoute = createRoute({
   path: "/adult/media/$mediaId",
   component: () => {
     const { mediaId } = adultDetailRoute.useParams();
-    return <AdultDetailRoute mediaId={mediaId} />;
+    return (
+      <Navigate
+        to="/media/$mediaId"
+        params={{ mediaId }}
+        search={{ kind: "adult_video" }}
+        replace
+      />
+    );
   },
 });
 const AdultDetailRoute = lazyRouteComponent(
@@ -123,19 +147,35 @@ const AdultDetailRoute = lazyRouteComponent(
 const detailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/media/$mediaId",
+  validateSearch: (search: Record<string, unknown>) =>
+    search.kind === "adult_video" ? { kind: "adult_video" as const } : {},
   component: () => {
     const { mediaId } = detailRoute.useParams();
-    return <MediaDetailPage mediaId={mediaId} />;
+    const search = detailRoute.useSearch();
+    return search.kind === "adult_video" ? (
+      <AdultDetailRoute mediaId={mediaId} />
+    ) : (
+      <MediaDetailPage mediaId={mediaId} />
+    );
   },
 });
 const rootsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/roots",
+  validateSearch: (search: Record<string, unknown>) =>
+    search.kind === "adult_video" ? { kind: "adult_video" as const } : {},
   component: () => {
     const navigate = rootsRoute.useNavigate();
+    const search = rootsRoute.useSearch();
     return (
       <RootsPage
-        onNavigateScan={(search) => void navigate({ to: "/scanner", search })}
+        adult={search.kind === "adult_video"}
+        onNavigateScan={(search) =>
+          void navigate({
+            to: "/library",
+            search: { root: search.root, kind: search.kind },
+          })
+        }
       />
     );
   },
@@ -149,8 +189,20 @@ const scannerRoute = createRoute({
     const navigate = scannerRoute.useNavigate();
     return (
       <ScannerPage
-        key={search.task ?? "no-task"}
+        key={`${search.kind ?? "ordinary"}:${search.task ?? "no-task"}`}
         search={search}
+        onAddRoot={() =>
+          void navigate({
+            to: "/roots",
+            search: search.kind ? { kind: search.kind } : {},
+          })
+        }
+        onBrowse={() =>
+          void navigate({
+            to: "/library",
+            search: { kind: search.kind, root: search.root },
+          })
+        }
         onSearch={(value) => void navigate({ search: value })}
       />
     );
@@ -222,6 +274,8 @@ const musicArtistRoute = createRoute({
 const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks",
+  validateSearch: (search: Record<string, unknown>) =>
+    search.kind === "adult_video" ? { kind: "adult_video" as const } : {},
   component: TasksPage,
 });
 const settingsRoute = createRoute({
@@ -268,6 +322,9 @@ const networkRoute = createRoute({
   component: NetworkInspectorPage,
 });
 const router = createRouter({
+  defaultPendingComponent: Loading,
+  defaultPendingMs: 0,
+  defaultPendingMinMs: 0,
   routeTree: rootRoute.addChildren([
     indexRoute,
     libraryRoute,

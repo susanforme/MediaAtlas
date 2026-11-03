@@ -22,7 +22,7 @@ import i18n from "../../i18n";
 import { MAX_SCRAPE_QUEUE } from "../scraper/search";
 import { OrdinaryCandidates } from "./ordinary-candidates";
 import { LocalCandidates } from "./page";
-import { TOOLS_PAGE_SIZE, type ToolsSearch } from "./search";
+import { TOOLS_PAGE_SIZE, type ToolsRouteSearch } from "./search";
 import "./translations";
 
 vi.mock("@tanstack/react-router", async (original) => {
@@ -54,8 +54,19 @@ vi.mock("../../api/library", async (original) => {
 });
 vi.mock("../../api/adult", async (original) => {
   const module = await original<typeof import("../../api/adult")>();
-  return { ...module, adultApi: { ...module.adultApi, toolsMedia: vi.fn() } };
+  return {
+    ...module,
+    adultApi: { ...module.adultApi, toolsMedia: vi.fn(), roots: vi.fn() },
+  };
 });
+const privacy = vi.hoisted(() => ({ enabled: true, allowed: true }));
+vi.mock("../library/context", () => ({
+  usePrivacy: () => ({
+    includeAdult: privacy.allowed,
+    settings: { entry_visible: privacy.enabled },
+    loading: false,
+  }),
+}));
 const time = "2026-01-01";
 const root: RootView = {
   id: "root-a",
@@ -93,7 +104,11 @@ const second = card("second", "tv_series");
 const third = card("third", "anime");
 const episode = card("episode", "tv_episode");
 const privateCard = card("private", "adult_video", "Synthetic private title");
-function Controlled({ initialSearch = {} }: { initialSearch?: ToolsSearch }) {
+function Controlled({
+  initialSearch = {},
+}: {
+  initialSearch?: ToolsRouteSearch;
+}) {
   const [search, setSearch] = useState(initialSearch);
   return (
     <OrdinaryCandidates
@@ -108,7 +123,7 @@ function Controlled({ initialSearch = {} }: { initialSearch?: ToolsSearch }) {
     />
   );
 }
-function show(initialSearch: ToolsSearch = {}) {
+function show(initialSearch: ToolsRouteSearch = {}) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -131,6 +146,9 @@ function selectedQueue(): string[] {
 }
 beforeEach(async () => {
   vi.resetAllMocks();
+  privacy.enabled = true;
+  privacy.allowed = true;
+  vi.mocked(adultApi.roots).mockResolvedValue([]);
   await i18n.changeLanguage("en-US");
   vi.mocked(libraryApi.roots).mockResolvedValue([
     root,
@@ -145,6 +163,62 @@ beforeEach(async () => {
     items: [first, second, third, episode, privateCard, first],
     next_cursor: null,
   });
+});
+
+it("uses the same type selector and table while switching backend adapters and clearing ordinary selection", async () => {
+  vi.mocked(adultApi.toolsMedia).mockResolvedValue({
+    items: [privateCard, first],
+    next_cursor: null,
+  });
+  show();
+  fireEvent.click(
+    await screen.findByRole("checkbox", {
+      name: `Select for scraping: ${first.media.title}`,
+    }),
+  );
+  fireEvent.change(screen.getByRole("combobox", { name: "Media type" }), {
+    target: { value: "adult_video" },
+  });
+  expect(
+    await screen.findByRole("cell", { name: privateCard.media.title }),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("cell", { name: first.media.title }),
+  ).not.toBeInTheDocument();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("link", { name: "Scrape selected" }),
+  ).not.toBeInTheDocument();
+  expect(adultApi.toolsMedia).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: "adult_video",
+      include_adult: true,
+      limit: TOOLS_PAGE_SIZE,
+    }),
+  );
+  fireEvent.change(screen.getByRole("combobox", { name: "Media type" }), {
+    target: { value: "movie" },
+  });
+  expect(
+    await screen.findByRole("checkbox", {
+      name: `Select for scraping: ${first.media.title}`,
+    }),
+  ).not.toBeChecked();
+  expect(
+    screen.queryByRole("cell", { name: privateCard.media.title }),
+  ).not.toBeInTheDocument();
+});
+
+it("does not fetch or render the adult type while its setting is disabled", async () => {
+  privacy.enabled = false;
+  privacy.allowed = false;
+  show({ kind: "adult_video" });
+  await waitFor(() =>
+    expect(screen.getByRole("option", { name: "Adult video" })).toBeDisabled(),
+  );
+  expect(adultApi.toolsMedia).not.toHaveBeenCalled();
+  expect(adultApi.roots).not.toHaveBeenCalled();
+  expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });
 
 it("renders ordinary candidate metadata in a table with independent view and selection actions", async () => {
@@ -436,7 +510,7 @@ it("keeps adult candidates on their independent endpoint without ordinary multi-
     </I18nextProvider>,
   );
   expect(
-    await screen.findByRole("option", { name: privateCard.media.title }),
+    await screen.findByRole("cell", { name: privateCard.media.title }),
   ).toBeInTheDocument();
   expect(adultApi.toolsMedia).toHaveBeenCalledWith(
     expect.objectContaining({ include_adult: true }),

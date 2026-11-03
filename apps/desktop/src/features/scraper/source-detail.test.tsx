@@ -155,6 +155,6 @@ it("does not request ordinary source details for adult library entries", async (
     media: { ...localDetail.media, kind: "adult_video" },
   });
   show(<MediaDetailPage mediaId="media-1" />);
-  await screen.findByText("Adult media stays hidden");
+  await screen.findByText("No matching media");
   expect(scraperApi.mediaDetail).not.toHaveBeenCalled();
 });

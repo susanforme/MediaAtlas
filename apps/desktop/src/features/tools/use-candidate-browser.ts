@@ -1,42 +1,55 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
+import { adultApi } from "../../api/adult";
 import { libraryApi, type MediaCard } from "../../api/library";
+import { usePrivacy } from "../library/context";
 import {
+  adultCandidates,
   changeCandidateSelection,
   ordinaryCandidates,
 } from "./candidate-model";
 import {
-  changeToolsFilters,
-  type ToolsFilters,
-  type ToolsSearch,
-  toolsBrowseQuery,
-  toolsFilterKey,
-  validateToolsSearch,
+  changeToolsRouteFilters,
+  type ToolsRouteFilters,
+  type ToolsRouteSearch,
+  toolsRouteBrowseQuery,
+  validateToolsRouteSearch,
 } from "./search";
 
 export function useCandidateBrowser(
-  initialSearch: ToolsSearch,
-  onSearch?: (search: ToolsSearch, replace?: boolean) => void,
+  initialSearch: ToolsRouteSearch,
+  onSearch?: (search: ToolsRouteSearch, replace?: boolean) => void,
 ) {
   const [localSearch, setLocalSearch] = useState(initialSearch);
-  const rawSearch = validateToolsSearch(
+  const rawSearch = validateToolsRouteSearch(
     onSearch
       ? (initialSearch as Record<string, unknown>)
       : (localSearch as Record<string, unknown>),
   );
-  const scope = toolsFilterKey(rawSearch);
+  const { includeAdult, settings, loading, error } = usePrivacy();
+  const adult = rawSearch.kind === "adult_video";
+  const allowed = !adult || includeAdult;
+  const scope = JSON.stringify([
+    rawSearch.q,
+    rawSearch.root,
+    rawSearch.kind,
+    rawSearch.health,
+    rawSearch.sort,
+  ]);
   const [selection, setSelection] = useState<{
     scope: string;
     cards: MediaCard[];
     limitReached: boolean;
   }>({ scope, cards: [], limitReached: false });
   const filterChanged = selection.scope !== scope;
-  const search = filterChanged ? changeToolsFilters(rawSearch, {}) : rawSearch;
+  const search = filterChanged
+    ? changeToolsRouteFilters(rawSearch, {})
+    : rawSearch;
   const history = useRef<{ scope: string; cursors: (string | undefined)[] }>({
     scope,
     cursors: [undefined],
   });
-  function navigate(next: ToolsSearch, replace = false) {
+  function navigate(next: ToolsRouteSearch, replace = false) {
     if (onSearch) onSearch(next, replace);
     else setLocalSearch(next);
   }
@@ -45,26 +58,35 @@ export function useCandidateBrowser(
     setSelection({ scope, cards: [], limitReached: false });
     history.current = { scope, cursors: [undefined] };
     if (rawSearch.cursor || rawSearch.page || rawSearch.media)
-      navigate(changeToolsFilters(rawSearch, {}), true);
+      navigate(changeToolsRouteFilters(rawSearch, {}), true);
   });
-  const query = toolsBrowseQuery(search);
+  const query = toolsRouteBrowseQuery(search);
   const roots = useQuery({
-    queryKey: ["roots", false],
-    queryFn: () => libraryApi.roots(false),
+    queryKey: adult ? ["adult", "roots"] : ["roots", false],
+    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
+    enabled: allowed,
   });
   const media = useQuery({
-    queryKey: ["tools-media", query],
-    queryFn: () => libraryApi.toolsMedia(query),
-    select: (value) => ({ ...value, items: ordinaryCandidates(value.items) }),
+    queryKey: adult ? ["adult", "tools-media", query] : ["tools-media", query],
+    queryFn: () =>
+      adult ? adultApi.toolsMedia(query) : libraryApi.toolsMedia(query),
+    enabled: allowed,
+    select: (value) => ({
+      ...value,
+      items: adult
+        ? adultCandidates(value.items)
+        : ordinaryCandidates(value.items),
+    }),
   });
   const selected = filterChanged ? [] : selection.cards;
   const page = search.page ?? 1;
-  function filter(patch: ToolsFilters) {
+  function filter(patch: ToolsRouteFilters) {
     setSelection({ scope, cards: [], limitReached: false });
     history.current = { scope, cursors: [undefined] };
-    navigate(changeToolsFilters(search, patch));
+    navigate(changeToolsRouteFilters(search, patch));
   }
   function select(cards: MediaCard[], checked: boolean) {
+    if (adult || !allowed) return;
     // Callers supply records from this backend page; arbitrary IDs never enter the queue.
     const present = new Map(
       media.data?.items.map((card) => [card.media.id, card]),
@@ -89,7 +111,7 @@ export function useCandidateBrowser(
         ? history.current.cursors[page - 2]
         : undefined;
     navigate(
-      validateToolsSearch({
+      validateToolsRouteSearch({
         ...search,
         cursor,
         page: cursor ? page - 1 : undefined,
@@ -106,6 +128,11 @@ export function useCandidateBrowser(
     navigate({ ...search, cursor, page: page + 1 });
   }
   return {
+    adult,
+    allowed,
+    privacyLoading: loading,
+    privacyError: error,
+    adultEnabled: settings.entry_visible,
     search,
     roots,
     media,
@@ -138,6 +165,6 @@ export function useCandidateBrowser(
         limitReached: false,
       })),
     closeDetail: () =>
-      navigate(validateToolsSearch({ ...search, media: undefined }), true),
+      navigate(validateToolsRouteSearch({ ...search, media: undefined }), true),
   };
 }

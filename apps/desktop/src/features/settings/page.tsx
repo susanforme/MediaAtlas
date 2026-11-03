@@ -59,56 +59,47 @@ export function SettingsPage({
               </Select>
             </Label>
           </section>
-          <PrivacyPreferences />
+          <ContentPreferences />
         </div>
       </div>
     </>
   );
 }
 
-function PrivacyPreferences() {
+function ContentPreferences() {
   const { t } = useTranslation();
-  const { settings, saveSettings, lock, error } = usePrivacy();
-  const [preferences, setPreferences] = useState(settings);
+  const { settings, saveSettings, loading, error } = usePrivacy();
+  const [enabled, setEnabled] = useState(settings.entry_visible);
   const [edited, setEdited] = useState(false);
-  const value = edited ? preferences : settings;
+  const value = edited ? enabled : settings.entry_visible;
   return (
     <section className="panel">
-      <h2 className="section-title">{t("adultSettings")}</h2>
-      {(["entry_visible", "covers_visible", "remember_recent"] as const).map(
-        (key) => (
-          <Label key={key} className="mb-4 flex items-center gap-3">
-            <Checkbox
-              checked={value[key]}
-              onChange={(event) => {
-                setEdited(true);
-                setPreferences({ ...value, [key]: event.target.checked });
-              }}
-            />
-            {t(
-              key === "entry_visible"
-                ? "adultEntry"
-                : key === "covers_visible"
-                  ? "adultCovers"
-                  : "adultRecent",
-            )}
-          </Label>
-        ),
-      )}
+      <h2 className="section-title">{t("kind")}</h2>
+      <Label className="mb-4 flex items-center gap-3">
+        <Checkbox
+          checked={value}
+          disabled={loading}
+          onChange={(event) => {
+            setEdited(true);
+            setEnabled(event.target.checked);
+          }}
+        />
+        {t("adultEntry")}
+      </Label>
       <div className="flex gap-3">
         <Button
+          disabled={loading}
           onClick={() => {
-            void saveSettings(value);
+            void saveSettings({
+              entry_visible: value,
+              covers_visible: value,
+              remember_recent: false,
+            });
             setEdited(false);
           }}
         >
-          {t("adultSavePrivacy")}
+          {t("save")}
         </Button>
-        {settings.unlocked && (
-          <Button variant="outline" onClick={() => void lock()}>
-            {t("adultLock")}
-          </Button>
-        )}
       </div>
       {error !== undefined && <ErrorNotice error={error} />}
     </section>

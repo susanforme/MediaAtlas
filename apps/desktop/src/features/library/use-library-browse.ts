@@ -1,7 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
 import { type LibrarySearch, libraryBrowseQuery } from "./browse-model";
+import { usePrivacy } from "./context";
+import { useLibraryActivity } from "./use-library-activity";
 
 export function useLibraryBrowse(
   search: LibrarySearch,
@@ -10,27 +13,51 @@ export function useLibraryBrowse(
 ) {
   const [advanced, setAdvanced] = useState(false);
   const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
-  const access = false;
-  const query = libraryBrowseQuery(search, adult);
-  const allowed = !adult;
+  const { settings, includeAdult } = usePrivacy();
+  const query = {
+    ...libraryBrowseQuery(search, adult),
+    ...(adult
+      ? {
+          include_adult: true,
+          genre: null,
+          person: null,
+          studio: null,
+          year: null,
+        }
+      : {}),
+  };
+  const allowed = !adult || (settings.entry_visible && includeAdult);
+  const activity = useLibraryActivity(search.root, !adult);
   const roots = useQuery({
-    queryKey: ["roots", access],
-    queryFn: () => libraryApi.roots(access),
+    queryKey: adult ? ["adult", "roots"] : ["roots", false],
+    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
     enabled: allowed,
   });
   const media = useQuery({
-    queryKey: ["media", query],
-    queryFn: () => libraryApi.media(query),
+    queryKey: adult
+      ? ["adult", "library", query, settings.covers_visible]
+      : ["media", query],
+    queryFn: () => (adult ? adultApi.media(query) : libraryApi.media(query)),
     select: (result) => ({
       ...result,
-      items: result.items.filter((card) => card.media.kind !== "adult_video"),
+      items: result.items
+        .filter((card) =>
+          adult
+            ? card.media.kind === "adult_video"
+            : card.media.kind !== "adult_video",
+        )
+        .map((card) =>
+          adult && !settings.covers_visible
+            ? { ...card, poster_uri: null }
+            : card,
+        ),
     }),
     enabled: allowed,
   });
   const facets = useQuery({
     queryKey: ["facets", { ...query, cursor: null }],
     queryFn: () => libraryApi.facets({ ...query, cursor: null }),
-    enabled: allowed,
+    enabled: allowed && !adult,
   });
   function filter(patch: LibrarySearch) {
     setHistory([undefined]);
@@ -46,5 +73,7 @@ export function useLibraryBrowse(
     facets,
     filter,
     allowed,
+    activity,
+    adultAvailable: settings.entry_visible,
   };
 }

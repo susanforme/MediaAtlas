@@ -9,12 +9,13 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import type { LibrarySearch } from "./browse-model";
+import { LibraryActivity } from "./library-activity";
+import { LIBRARY_CATEGORIES } from "./library-model";
 import { MediaArtwork } from "./media-artwork";
 import { useLibraryBrowse } from "./use-library-browse";
 import "./library.css";
 import { NativeOpen } from "./native-open";
 import {
-  ALL_KINDS,
   Empty,
   ErrorNotice,
   HEALTH,
@@ -76,6 +77,8 @@ export function LibraryPage({
     facets,
     filter,
     allowed,
+    activity,
+    adultAvailable,
   } = useLibraryBrowse(search, onSearch, adult);
   const [toolbarSearch, setToolbarSearch] = useState<HTMLElement | null>(null);
   useLayoutEffect(() => {
@@ -98,13 +101,18 @@ export function LibraryPage({
     ? createPortal(searchInput, toolbarSearch)
     : searchInput;
   const page = search.page ?? 1;
-  if (!allowed) return <Empty title={t("privacyHidden")} />;
+  if (!allowed)
+    return adultAvailable ? <Loading /> : <Empty title={t("noResults")} />;
   return (
     <>
-      <PageHeading title={adult ? t("adultLibrary") : t("library")}>
-        <div className="flex gap-2">
+      <PageHeading title={t("library")}>
+        <div className="flex min-w-0 flex-wrap gap-2">
           <Button asChild variant="ghost">
-            <Link to="/tools" className="action-link">
+            <Link
+              to="/tools"
+              search={adult ? { kind: "adult_video" } : {}}
+              className="action-link"
+            >
               {t("videoTools")}
             </Link>
           </Button>
@@ -124,6 +132,7 @@ export function LibraryPage({
           </Button>
         </div>
       </PageHeading>
+      {!adult && <LibraryActivity activity={activity} />}
       <div className="panel mb-6">
         <div className="filter-grid">
           {searchField}
@@ -149,28 +158,37 @@ export function LibraryPage({
                 ))}
             </Select>
           </Label>
-          {!adult && (
-            <Label className="filter-field">
-              <span>{t("type")}</span>
-              <Select
-                value={search.kind ?? ""}
-                onChange={(event) =>
-                  filter({
-                    kind: (event.target.value || undefined) as
-                      | MediaKind
-                      | undefined,
-                  })
-                }
-              >
-                <option value="">{t("allKinds")}</option>
-                {ALL_KINDS.filter((k) => k !== "adult_video").map((kind) => (
-                  <option value={kind} key={kind}>
-                    {t(`kind_${kind}`)}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-          )}
+          <Label className="filter-field">
+            <span>{t("type")}</span>
+            <Select
+              value={search.kind ?? ""}
+              onChange={(event) =>
+                filter({
+                  kind: (event.target.value || undefined) as
+                    | MediaKind
+                    | undefined,
+                  root: undefined,
+                  genre: undefined,
+                  person: undefined,
+                  studio: undefined,
+                  year: undefined,
+                })
+              }
+            >
+              <option value="">{t("allKinds")}</option>
+              {LIBRARY_CATEGORIES.filter(
+                (k) => k !== "adult_video" || adultAvailable,
+              ).map((kind) => (
+                <option value={kind} key={kind}>
+                  {t(
+                    kind === "music_release"
+                      ? "libraryKindMusic"
+                      : `kind_${kind}`,
+                  )}
+                </option>
+              ))}
+            </Select>
+          </Label>
           <Label className="filter-field">
             <span>{t("health")}</span>
             <Select
@@ -180,7 +198,9 @@ export function LibraryPage({
               }
             >
               <option value="">{t("allHealth")}</option>
-              {HEALTH.map((health) => (
+              {HEALTH.filter(
+                (health) => !adult || !health.startsWith("metadata_"),
+              ).map((health) => (
                 <option key={health} value={health}>
                   {t(`health_${health}`)}
                 </option>
@@ -204,13 +224,15 @@ export function LibraryPage({
           </Label>
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setAdvanced(!advanced)}
-          >
-            {t(advanced ? "showLess" : "showMore")}
-          </Button>
+          {!adult && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setAdvanced(!advanced)}
+            >
+              {t(advanced ? "showLess" : "showMore")}
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -222,7 +244,7 @@ export function LibraryPage({
             {t("clearFilters")}
           </Button>
         </div>
-        {advanced && (
+        {advanced && !adult && (
           <div className="filter-grid mt-5">
             <FacetSelect
               label={t("allGenres")}
@@ -261,14 +283,49 @@ export function LibraryPage({
       ) : media.isError ? (
         <ErrorNotice error={media.error} retry={() => void media.refetch()} />
       ) : media.data.items.length === 0 ? (
-        <Empty
-          title={
-            search.q || search.kind || search.root || search.health
-              ? t("noResults")
-              : t("emptyLibrary")
-          }
-          body={t("emptyLibraryBody")}
-        />
+        <>
+          <Empty
+            title={
+              search.q ||
+              search.kind ||
+              search.root ||
+              search.health ||
+              search.genre ||
+              search.person ||
+              search.studio ||
+              search.year
+                ? t("libraryNoResults")
+                : roots.data?.length
+                  ? t("libraryNoFiles")
+                  : t("emptyLibrary")
+            }
+            body={
+              search.q ||
+              search.kind ||
+              search.root ||
+              search.health ||
+              search.genre ||
+              search.person ||
+              search.studio ||
+              search.year
+                ? undefined
+                : roots.data?.length
+                  ? activity.active.length > 0
+                    ? t("libraryRefreshReady")
+                    : t("libraryNoFilesBody")
+                  : t("emptyLibraryBody")
+            }
+          />
+          {!adult && (
+            <div className="mt-4 flex justify-center">
+              <Button asChild variant="outline">
+                <Link to="/roots">
+                  {t(roots.data?.length ? "libraryRefreshManage" : "addRoot")}
+                </Link>
+              </Button>
+            </div>
+          )}
+        </>
       ) : search.view === "list" ? (
         <div className="table-wrap">
           <table>
@@ -284,13 +341,14 @@ export function LibraryPage({
               {media.data.items.map((card) => (
                 <tr key={card.media.id}>
                   <td>
-                    <NativeOpen mediaId={card.media.id}>
+                    <NativeOpen mediaId={card.media.id} adult={adult}>
                       {card.media.title}
                     </NativeOpen>
                     <Button asChild variant="ghost">
                       <Link
                         to="/media/$mediaId"
                         params={{ mediaId: card.media.id }}
+                        search={adult ? { kind: "adult_video" } : {}}
                         className="font-medium text-ring"
                       >
                         {t("detailsAction")}
@@ -313,6 +371,7 @@ export function LibraryPage({
             <article key={card.media.id} className="poster-card">
               <NativeOpen
                 mediaId={card.media.id}
+                adult={adult}
                 label={card.media.title}
                 className="h-auto w-full flex-col items-stretch overflow-hidden rounded-none bg-transparent p-0 text-left text-foreground hover:bg-muted"
               >
@@ -334,6 +393,7 @@ export function LibraryPage({
                   <Link
                     to="/media/$mediaId"
                     params={{ mediaId: card.media.id }}
+                    search={adult ? { kind: "adult_video" } : {}}
                     className="action-link"
                   >
                     {t("detailsAction")}

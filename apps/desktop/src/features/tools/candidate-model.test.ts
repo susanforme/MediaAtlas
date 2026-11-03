@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import type { MediaCard, MediaKind } from "../../api/library";
 import {
+  adultCandidates,
   changeCandidateSelection,
   isSelectableCandidate,
   ordinaryCandidates,
@@ -49,4 +50,14 @@ it("never admits private, unsupported, empty or control-character IDs to the scr
       true,
     ),
   ).toEqual({ cards: [card("ordinary")], limitReached: false });
+});
+it("uses the shared table model for adult records without accepting other types or duplicate IDs", () => {
+  expect(
+    adultCandidates([
+      card("movie"),
+      card("private", "adult_video"),
+      card("private", "adult_video"),
+      card("bad id", "adult_video"),
+    ]),
+  ).toEqual([card("private", "adult_video")]);
 });

@@ -8,6 +8,10 @@ export const TOOLS_HEALTH = [
   "missing_nfo",
   "incomplete_metadata",
   "duplicate",
+  "metadata_pending",
+  "metadata_needs_review",
+  "metadata_failed",
+  "metadata_unconfigured",
 ] as const;
 export const TOOLS_SORTS = [
   "title_asc",
@@ -30,6 +34,26 @@ export type ToolsFilters = Pick<
   ToolsSearch,
   "q" | "root" | "kind" | "health" | "sort"
 >;
+/** Routing selects an isolated API lane; ordinary query validation stays strict. */
+export type ToolsRouteSearch = Omit<ToolsSearch, "kind"> & {
+  kind?: ToolsSearch["kind"] | "adult_video";
+};
+export type ToolsRouteFilters = Pick<
+  ToolsRouteSearch,
+  "q" | "root" | "kind" | "health" | "sort"
+>;
+export function validateToolsRouteSearch(
+  value: Record<string, unknown>,
+): ToolsRouteSearch {
+  if (value.kind === "adult_video") {
+    const ordinary = validateToolsSearch(value);
+    return {
+      ...ordinary,
+      kind: "adult_video",
+    };
+  }
+  return validateToolsSearch(value);
+}
 function boundedString(value: unknown, max: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= max;
 }
@@ -87,4 +111,26 @@ export function toolsBrowseQuery(search: ToolsSearch): BrowseQuery {
     cursor: search.cursor ?? null,
     limit: TOOLS_PAGE_SIZE,
   };
+}
+
+export function changeToolsRouteFilters(
+  search: ToolsRouteSearch,
+  patch: ToolsRouteFilters,
+): ToolsRouteSearch {
+  const changesType = "kind" in patch && patch.kind !== search.kind;
+  return validateToolsRouteSearch({
+    ...search,
+    ...patch,
+    ...(changesType ? { root: undefined } : {}),
+    media: undefined,
+    cursor: undefined,
+    page: undefined,
+  });
+}
+
+export function toolsRouteBrowseQuery(search: ToolsRouteSearch): BrowseQuery {
+  const ordinary = toolsBrowseQuery(validateToolsSearch({ ...search }));
+  return search.kind === "adult_video"
+    ? { ...ordinary, kind: "adult_video", include_adult: true }
+    : ordinary;
 }

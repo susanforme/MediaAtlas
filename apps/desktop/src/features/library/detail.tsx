@@ -3,12 +3,16 @@ import "./library.css";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { LockKeyhole } from "lucide-react";
-import { lazy, Suspense } from "react";
+import { lazy, type ReactNode, Suspense } from "react";
 import { useTranslation } from "react-i18next";
+import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
 import { Button } from "../../components/ui/button";
+import { usePrivacy } from "./context";
 import { NativeOpen } from "./native-open";
+import { useLibraryActivity } from "./use-library-activity";
 import "../scraper/translations";
+import "./library-status-translations";
 import {
   Empty,
   ErrorNotice,
@@ -24,25 +28,48 @@ const LibraryVideoSourceDetail = lazy(() =>
   })),
 );
 
-export function MediaDetailPage({ mediaId }: { mediaId: string }) {
+export function MediaDetailPage({
+  mediaId,
+  adult = false,
+  sourceDetail,
+}: {
+  mediaId: string;
+  adult?: boolean;
+  sourceDetail?: ReactNode;
+}) {
+  useLibraryActivity(undefined, !adult);
   const { t } = useTranslation();
   const { number, date } = useFormat();
+  const { settings, includeAdult } = usePrivacy();
+  const allowed = !adult || (settings.entry_visible && includeAdult);
   const detail = useQuery({
-    queryKey: ["detail", mediaId, false],
-    queryFn: () => libraryApi.detail(mediaId, false),
+    queryKey: adult ? ["adult", "media", mediaId] : ["detail", mediaId, false],
+    queryFn: () =>
+      adult ? adultApi.getMedia(mediaId) : libraryApi.detail(mediaId, false),
+    enabled: allowed,
   });
+  if (!allowed)
+    return settings.entry_visible ? (
+      <Loading />
+    ) : (
+      <Empty title={t("noResults")} />
+    );
   if (detail.isPending) return <Loading />;
   if (detail.isError)
     return (
       <ErrorNotice error={detail.error} retry={() => void detail.refetch()} />
     );
   const data = detail.data;
-  if (data.media.kind === "adult_video")
-    return <Empty title={t("privacyHidden")} />;
+  if (adult !== (data.media.kind === "adult_video"))
+    return <Empty title={t("noResults")} />;
   return (
     <>
       <Button asChild variant="ghost">
-        <Link to="/library" className="mb-5 inline-block text-sm text-ring">
+        <Link
+          to="/library"
+          search={adult ? { kind: "adult_video" } : {}}
+          className="mb-5 inline-block text-sm text-ring"
+        >
           ← {t("backToLibrary")}
         </Link>
       </Button>
@@ -50,16 +77,38 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         title={data.media.title}
         description={`${t(`kind_${data.media.kind}`)} · ${data.media.year ?? t("unknownYear")}`}
       >
-        <NativeOpen files={data.files} />
-        {["movie", "tv_series", "anime"].includes(data.media.kind) && (
-          <Button asChild variant="outline">
-            <Link to="/scraper" search={{ media: data.media.id }}>
-              {t("scraperThisMedia")}
-            </Link>
-          </Button>
-        )}
+        <NativeOpen files={data.files} adult={adult} />
+        {["movie", "tv_series", "anime", "adult_video"].includes(
+          data.media.kind,
+        ) &&
+          !data.health.includes("metadata_pending") && (
+            <Button asChild variant="outline">
+              <Link
+                to={adult ? "/tools" : "/scraper"}
+                search={
+                  adult
+                    ? { kind: "adult_video", media: data.media.id }
+                    : { media: data.media.id }
+                }
+              >
+                {t(
+                  data.health.includes("incomplete_metadata")
+                    ? "libraryIdentify"
+                    : "libraryCorrectMatch",
+                )}
+              </Link>
+            </Button>
+          )}
         <Button asChild variant="ghost">
-          <Link to="/tools" className="action-link">
+          <Link
+            to="/tools"
+            search={
+              adult
+                ? { kind: "adult_video", media: data.media.id }
+                : { media: data.media.id }
+            }
+            className="action-link"
+          >
             {t("videoTools")}
           </Link>
         </Button>
@@ -68,7 +117,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
         <div>
           <div className="poster-image rounded-2xl border border-border">
             <MediaArtwork
-              uri={data.poster_uri}
+              uri={adult && !settings.covers_visible ? null : data.poster_uri}
               title={data.media.title}
               eager
             />
@@ -81,6 +130,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
           </p>
         </div>
         <div className="space-y-6">
+          {sourceDetail}
           {["movie", "tv_series", "anime"].includes(data.media.kind) && (
             <Suspense fallback={<Loading />}>
               <LibraryVideoSourceDetail mediaId={mediaId} />
@@ -181,6 +231,7 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
                       <Link
                         to="/media/$mediaId"
                         params={{ mediaId: relation.id }}
+                        search={adult ? { kind: "adult_video" } : {}}
                         className="text-ring"
                       >
                         {relation.title}

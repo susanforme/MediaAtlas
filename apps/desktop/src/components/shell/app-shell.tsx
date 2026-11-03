@@ -9,7 +9,6 @@ import {
   House,
   Layers3,
   ListTodo,
-  LockKeyhole,
   Music2,
   Search,
   Settings2,
@@ -19,7 +18,6 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { usePrivacy } from "../../features/library/context";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
@@ -47,7 +45,6 @@ const serviceEntries = [
 
 function Sidebar() {
   const { t } = useTranslation();
-  const { settings } = usePrivacy();
   return (
     <aside className="app-sidebar">
       <div className="app-brand">
@@ -75,18 +72,6 @@ function Sidebar() {
             ))}
           </div>
         ))}
-        {settings.entry_visible && (
-          <Button asChild variant="ghost" className="app-nav-item">
-            <Link
-              to="/adult"
-              activeProps={{ className: "active" }}
-              aria-label={t("adultLibrary")}
-            >
-              <LockKeyhole size={20} aria-hidden="true" />
-              <span className="app-nav-label">{t("adultLibrary")}</span>
-            </Link>
-          </Button>
-        )}
       </nav>
       <div className="app-sidebar-bottom">
         <Button asChild variant="ghost" className="app-nav-item">

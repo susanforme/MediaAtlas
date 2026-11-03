@@ -1,153 +1,126 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useRef } from "react";
 import { adultApi } from "../../api/adult";
 import { libraryApi, type ScanTask } from "../../api/library";
-import { usePrivacy } from "./context";
-import { isActiveScanTask, recentScanTasks } from "./library-model";
+import { recentScanTasks } from "./library-model";
 import type { ScannerSearch } from "./scanner-navigation";
+import { useLibraryDirectories } from "./use-library-directories";
 
-type ReviewState = {
-  taskId: string;
-  selected: string[];
-  cursors: (string | null)[];
-  page: number;
-  confirmOpen: boolean;
-};
-const emptyReview = (taskId: string): ReviewState => ({
-  taskId,
-  selected: [],
-  cursors: [null],
-  page: 0,
-  confirmOpen: false,
-});
-
+/** A unified directory workflow with separate authorized query/cache lanes. */
 export function useScannerPreview(
   search: ScannerSearch,
   onSearch: (value: ScannerSearch) => void,
-  adult: boolean,
+  _adult: boolean,
 ) {
-  const { includeAdult: unlockedAdult } = usePrivacy();
-  const includeAdult = adult && unlockedAdult;
+  const { roots, adultAvailable } = useLibraryDirectories();
   const client = useQueryClient();
   const active = useRef(true);
   const startLock = useRef(false);
-  const confirmLock = useRef(false);
   const autoNavigation = useRef("");
+  const privateAccess = useRef(adultAvailable);
+  privateAccess.current = adultAvailable;
   useEffect(() => {
     active.current = true;
     return () => {
       active.current = false;
     };
   }, []);
-  const roots = useQuery({
-    queryKey: adult ? ["adult", "roots"] : ["roots", false],
-    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
-    enabled: !adult || unlockedAdult,
-  });
-  const tasksKey = adult ? ["adult", "scan-tasks"] : ["tasks", false];
-  const tasks = useQuery({
-    queryKey: tasksKey,
-    queryFn: () => (adult ? adultApi.tasks() : libraryApi.tasks(false)),
-    enabled: !adult || unlockedAdult,
+  const ordinaryTasks = useQuery({
+    queryKey: ["tasks", false],
+    queryFn: () => libraryApi.tasks(false),
     refetchInterval: 2000,
   });
-  const availableRoots =
-    roots.data?.filter(
-      (root) => root.enabled && (adult || root.kind !== "adult_video"),
-    ) ?? [];
-  const explicitTask = tasks.data?.find((entry) => entry.id === search.task);
+  const privateTasks = useQuery({
+    queryKey: ["adult", "scan-tasks"],
+    queryFn: adultApi.tasks,
+    enabled: adultAvailable,
+    refetchInterval: adultAvailable ? 2000 : false,
+  });
+  const tasks = {
+    ...ordinaryTasks,
+    data: [
+      ...(ordinaryTasks.data ?? []),
+      ...(adultAvailable ? (privateTasks.data ?? []) : []),
+    ],
+    isPending:
+      ordinaryTasks.isPending || (adultAvailable && privateTasks.isPending),
+    isError: ordinaryTasks.isError || (adultAvailable && privateTasks.isError),
+    error: ordinaryTasks.error ?? (adultAvailable ? privateTasks.error : null),
+  };
+  const availableRoots = roots.data.filter((root) => root.enabled);
+  const explicitTask = tasks.data.find((entry) => entry.id === search.task);
   const rootId =
     explicitTask?.root_id ??
     search.root ??
     (availableRoots.length === 1 ? availableRoots[0].id : undefined);
   const selectedRoot = availableRoots.find((root) => root.id === rootId);
-  const matchingTasks = recentScanTasks(tasks.data ?? [], rootId);
+  const matchingTasks = recentScanTasks(tasks.data, rootId);
   const task =
     explicitTask ?? (!search.task && rootId ? matchingTasks[0] : undefined);
-  const taskId = task?.id ?? search.task ?? "";
-  const currentContext = useRef({ rootId, taskId });
-  currentContext.current = { rootId, taskId };
+  const selectedAdult =
+    selectedRoot?.kind === "adult_video" ||
+    Boolean(
+      adultAvailable &&
+        privateTasks.data?.some((entry) => entry.id === task?.id),
+    );
+  const context = useRef({ rootId });
+  context.current = { rootId };
+  const running = matchingTasks.some(
+    (entry) => entry.state === "queued" || entry.state === "running",
+  );
+  function routeFor(id: string | undefined, taskId?: string): ScannerSearch {
+    const isAdult =
+      roots.data.some(
+        (root) => root.id === id && root.kind === "adult_video",
+      ) ||
+      Boolean(
+        adultAvailable &&
+          privateTasks.data?.some((entry) => entry.root_id === id),
+      );
+    return {
+      root: id,
+      ...(taskId ? { task: taskId } : {}),
+      ...(isAdult ? { kind: "adult_video" as const } : {}),
+    };
+  }
   useEffect(() => {
     if (!rootId || (search.root === rootId && (search.task || !task))) return;
-    const next = { root: rootId, task: search.task ?? task?.id };
+    const next = {
+      root: rootId,
+      task: search.task ?? task?.id,
+      ...(selectedAdult ? { kind: "adult_video" as const } : {}),
+    };
     const key = JSON.stringify(next);
     if (key === autoNavigation.current) return;
     autoNavigation.current = key;
     onSearch(next);
-  }, [rootId, search.root, search.task, task, onSearch]);
-  const [review, setReview] = useState(() => emptyReview(taskId));
-  const currentReview = review.taskId === taskId ? review : emptyReview(taskId);
-  function updateReview(update: (value: ReviewState) => ReviewState) {
-    setReview((old) =>
-      update(old.taskId === taskId ? old : emptyReview(taskId)),
-    );
-  }
-  const setSelected: Dispatch<SetStateAction<string[]>> = (value) =>
-    updateReview((old) => ({
-      ...old,
-      selected: typeof value === "function" ? value(old.selected) : value,
-    }));
-  const setCursors: Dispatch<SetStateAction<(string | null)[]>> = (value) =>
-    updateReview((old) => ({
-      ...old,
-      cursors: typeof value === "function" ? value(old.cursors) : value,
-    }));
-  const setPage: Dispatch<SetStateAction<number>> = (value) =>
-    updateReview((old) => ({
-      ...old,
-      page: typeof value === "function" ? value(old.page) : value,
-    }));
-  const setConfirmOpen: Dispatch<SetStateAction<boolean>> = (value) =>
-    updateReview((old) => ({
-      ...old,
-      confirmOpen: typeof value === "function" ? value(old.confirmOpen) : value,
-    }));
-  const preview = useQuery({
-    queryKey: adult
-      ? [
-          "adult",
-          "scan-preview",
-          taskId,
-          currentReview.cursors[currentReview.page],
-        ]
-      : ["preview", taskId, currentReview.cursors[currentReview.page], false],
-    queryFn: () =>
-      libraryApi.preview(
-        taskId,
-        currentReview.cursors[currentReview.page] ?? null,
-        includeAdult,
-      ),
-    enabled: Boolean(task) && (!adult || unlockedAdult),
-    refetchInterval:
-      task?.state === "running" || task?.state === "queued" ? 2000 : false,
-  });
+  }, [rootId, search.root, search.task, task, onSearch, selectedAdult]);
   function selectTask(id: string) {
-    const selectedTask = tasks.data?.find((entry) => entry.id === id);
-    setReview(emptyReview(id));
-    onSearch({ root: selectedTask?.root_id ?? rootId, task: id || undefined });
+    const selected = tasks.data.find((entry) => entry.id === id);
+    if (!selected) return;
+    onSearch(routeFor(selected.root_id, id));
   }
   function selectRoot(id: string) {
-    setReview(emptyReview(""));
-    onSearch({ root: id || undefined });
+    if (id && !availableRoots.some((root) => root.id === id)) return;
+    onSearch(routeFor(id || undefined));
   }
   const startMutation = useMutation({
-    mutationFn: (id: string) => libraryApi.start(id),
-    onSuccess: (result, startedRoot) => {
-      client.setQueryData<ScanTask[]>(tasksKey, (old) => [
+    mutationFn: (input: { id: string; adult: boolean }) =>
+      libraryApi.sync(input.id),
+    onSuccess: (result, input) => {
+      if (input.adult && !privateAccess.current) return;
+      const key = input.adult ? ["adult", "scan-tasks"] : ["tasks", false];
+      client.setQueryData<ScanTask[]>(key, (old) => [
         result,
         ...(old ?? []).filter((entry) => entry.id !== result.id),
       ]);
-      void client.invalidateQueries({ queryKey: tasksKey });
-      if (!active.current || currentContext.current.rootId !== startedRoot)
-        return;
-      setReview(emptyReview(result.id));
-      onSearch({ root: result.root_id, task: result.id });
+      void client.invalidateQueries({ queryKey: key });
+      if (!active.current || context.current.rootId !== input.id) return;
+      onSearch({
+        root: result.root_id,
+        task: result.id,
+        ...(input.adult ? { kind: "adult_video" as const } : {}),
+      });
     },
     onSettled: () => {
       startLock.current = false;
@@ -155,93 +128,55 @@ export function useScannerPreview(
   });
   const start = {
     ...startMutation,
-    isError: startMutation.isError && startMutation.variables === rootId,
-    error: startMutation.variables === rootId ? startMutation.error : null,
+    isError: startMutation.isError && startMutation.variables?.id === rootId,
+    error: startMutation.variables?.id === rootId ? startMutation.error : null,
     mutate: (id: string) => {
+      const root = availableRoots.find((entry) => entry.id === id);
       if (
         startLock.current ||
-        confirmLock.current ||
-        (adult && !unlockedAdult) ||
-        !availableRoots.some((root) => root.id === id) ||
-        matchingTasks.some(isActiveScanTask)
+        !root ||
+        (root.kind === "adult_video" && !privateAccess.current) ||
+        running
       )
         return;
       startLock.current = true;
-      startMutation.mutate(id);
+      startMutation.mutate({ id, adult: root.kind === "adult_video" });
     },
   };
-  const confirmMutation = useMutation({
-    mutationFn: (input: { taskId: string; ids: string[] }) =>
-      libraryApi.confirm(input.taskId, input.ids),
-    onSuccess: (_result, input) => {
-      void client.invalidateQueries();
-      if (!active.current || currentContext.current.taskId !== input.taskId)
-        return;
-      setReview(emptyReview(input.taskId));
-    },
-    onSettled: () => {
-      confirmLock.current = false;
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => libraryApi.cancel(id),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: ["tasks"] });
+      if (privateAccess.current)
+        void client.invalidateQueries({ queryKey: ["adult", "scan-tasks"] });
     },
   });
-  const confirm = {
-    ...confirmMutation,
-    isError:
-      confirmMutation.isError && confirmMutation.variables?.taskId === taskId,
-    error:
-      confirmMutation.variables?.taskId === taskId
-        ? confirmMutation.error
-        : null,
-    isSuccess:
-      confirmMutation.isSuccess && confirmMutation.variables?.taskId === taskId,
-    mutate: () => {
+  const cancel = {
+    ...cancelMutation,
+    mutate: (id: string) => {
       if (
-        confirmLock.current ||
-        !task ||
-        (adult && !unlockedAdult) ||
-        task.state !== "waiting_for_user" ||
-        !currentReview.selected.length ||
-        !currentReview.confirmOpen
+        cancelMutation.isPending ||
+        (privateTasks.data?.some((entry) => entry.id === id) &&
+          !privateAccess.current) ||
+        !matchingTasks.some((entry) => entry.id === id)
       )
         return;
-      confirmLock.current = true;
-      confirmMutation.mutate({ taskId, ids: currentReview.selected });
+      cancelMutation.mutate(id);
     },
   };
-  const cancel = useMutation({
-    mutationFn: (id: string) => libraryApi.cancel(id),
-    onSuccess: (_result, id) => {
-      void client.invalidateQueries({ queryKey: tasksKey });
-      if (active.current && currentContext.current.taskId === id)
-        setReview(emptyReview(id));
-    },
-  });
-  const pendingIds =
-    preview.data?.items
-      .filter((candidate) => candidate.status === "pending")
-      .map((candidate) => candidate.id) ?? [];
   return {
     roots,
     tasks,
     task,
-    preview,
     start,
-    confirm,
     cancel,
     availableRoots,
     selectedRoot,
+    selectedAdult,
     rootId,
     matchingTasks,
     selectRoot,
-    canStart: Boolean(selectedRoot) && !matchingTasks.some(isActiveScanTask),
-    canImport: task?.state === "waiting_for_user" && (!adult || unlockedAdult),
-    pendingIds,
-    selected: currentReview.selected,
-    setSelected,
-    confirmOpen: currentReview.confirmOpen,
-    setConfirmOpen,
-    page: currentReview.page,
-    setPage,
-    setCursors,
     selectTask,
+    canStart: Boolean(selectedRoot) && !running,
   };
 }

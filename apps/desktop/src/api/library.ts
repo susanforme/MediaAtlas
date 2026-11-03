@@ -147,6 +147,11 @@ export interface ScanTask {
   error_code: string | null;
   created_at: string;
   updated_at: string;
+  mode?: "manual" | "automatic";
+  phase?: "scan" | "index" | "metadata" | "complete";
+  matched_count?: number;
+  review_count?: number;
+  metadata_failed_count?: number;
 }
 export interface ScanCandidate {
   id: string;
@@ -278,7 +283,16 @@ function task(v: unknown): v is ScanTask {
     ].every(uint) &&
     optionalText(v.error_code) &&
     text(v.created_at) &&
-    text(v.updated_at)
+    text(v.updated_at) &&
+    (v.mode === undefined || v.mode === "manual" || v.mode === "automatic") &&
+    (v.phase === undefined ||
+      ["scan", "index", "metadata", "complete"].includes(String(v.phase))) &&
+    [v.matched_count, v.review_count, v.metadata_failed_count].every(
+      (count) => count === undefined || uint(count),
+    ) &&
+    (v.mode !== "automatic" ||
+      (["scan", "index", "metadata", "complete"].includes(String(v.phase)) &&
+        [v.matched_count, v.review_count, v.metadata_failed_count].every(uint)))
   );
 }
 function candidate(v: unknown): v is ScanCandidate {
@@ -471,6 +485,7 @@ export const libraryApi = {
     ),
   facets: (input: BrowseQuery) => request("library_facets", input, facets),
   start: (rootId: string) => request("scan_start", { root_id: rootId }, task),
+  sync: (rootId: string) => request("library_sync", { root_id: rootId }, task),
   tasks: (includeAdult: boolean) =>
     request("scan_list_tasks", { include_adult: includeAdult }, arrayOf(task)),
   preview: (taskId: string, cursor: string | null, includeAdult: boolean) =>

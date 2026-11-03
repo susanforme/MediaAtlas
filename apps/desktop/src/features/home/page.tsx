@@ -3,6 +3,7 @@ import { ArrowRight, ChevronRight, Film, Info, Plus } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
+import { LibraryActivity } from "../library/library-activity";
 import { MediaArtwork } from "../library/media-artwork";
 import { NativeOpen } from "../library/native-open";
 import { ErrorNotice, Loading, useFormat } from "../library/shared";
@@ -15,7 +16,8 @@ import "./home.css";
 export function DashboardPage() {
   const { t } = useTranslation();
   const { number } = useFormat();
-  const { summary, media, cards, featured, detail } = useHomeLibrary();
+  const { summary, media, cards, featured, detail, activity } =
+    useHomeLibrary();
   const [failedBackdrop, setFailedBackdrop] = useState<string>();
   const backdrop = featuredBackdrop(detail.data);
   const description = featuredDescription(detail.data);
@@ -78,38 +80,39 @@ export function DashboardPage() {
             <>
               <h1>
                 {t(
-                  summary.data?.total_roots ? "homeReadyToScan" : "homeWelcome",
+                  summary.data?.total_roots
+                    ? "homeLibraryPreparing"
+                    : "homeWelcome",
                 )}
               </h1>
               <p className="home-synopsis">
                 {t(
                   summary.data?.total_roots
-                    ? "homeScanBeforeBrowse"
+                    ? activity.active.length > 0
+                      ? "homeAutomaticLibrary"
+                      : "homeCheckFolders"
                     : "homeNewLibrary",
                 )}
               </p>
               <div className="home-actions">
                 {summary.data?.total_roots ? (
-                  <>
-                    <Button asChild>
-                      <Link
-                        to={
-                          summary.data.pending_tasks > 0 ? "/tasks" : "/scanner"
-                        }
-                      >
-                        {t(
-                          summary.data.pending_tasks > 0
-                            ? "homeReviewTasks"
-                            : "startScan",
-                        )}
-                      </Link>
-                    </Button>
-                    {summary.data.pending_tasks > 0 && (
-                      <Button asChild variant="outline">
-                        <Link to="/scanner">{t("scanner")}</Link>
-                      </Button>
-                    )}
-                  </>
+                  <Button asChild>
+                    <Link
+                      to={
+                        activity.active.length > 0 ||
+                        activity.attention.length > 0
+                          ? "/scanner"
+                          : "/roots"
+                      }
+                    >
+                      {t(
+                        activity.active.length > 0 ||
+                          activity.attention.length > 0
+                          ? "homeReviewTasks"
+                          : "libraryRefreshManage",
+                      )}
+                    </Link>
+                  </Button>
                 ) : (
                   <Button asChild>
                     <Link to="/roots">
@@ -124,6 +127,7 @@ export function DashboardPage() {
         </div>
       </section>
       <div className="home-shelves">
+        <LibraryActivity activity={activity} />
         {cards.length > 0 && (
           <>
             <section aria-labelledby="home-explore">

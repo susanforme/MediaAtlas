@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   type ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -36,25 +37,56 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>();
   const generation = useRef(0);
+  const settingsWrites = useRef<Promise<unknown>>(Promise.resolve());
+  const persistSettings = useCallback(
+    (value: Omit<AdultSettings, "unlocked">) => {
+      // Keep backend preference writes ordered too: ignoring a stale response
+      // alone would not stop a late enable from persisting after a disable.
+      const pending = settingsWrites.current
+        .catch(() => {})
+        .then(() => adultApi.saveSettings(value));
+      settingsWrites.current = pending;
+      return pending;
+    },
+    [],
+  );
   useEffect(() => {
     let active = true;
     const epoch = generation.current;
     void adultApi
       .settings()
-      .then((value) => {
-        if (active && epoch === generation.current) setSettings(value);
+      .then(async (value) => {
+        if (!active || epoch !== generation.current) return;
+        // The persisted content-type setting is the user's opt-in. Establish
+        // the revocable backend session without a second frontend unlock flow.
+        setSettings(value);
+        const preferences =
+          value.entry_visible &&
+          (!value.covers_visible || value.remember_recent)
+            ? await persistSettings({
+                entry_visible: true,
+                covers_visible: true,
+                remember_recent: false,
+              })
+            : value;
+        if (!active || epoch !== generation.current) return;
+        const current =
+          preferences.entry_visible && !preferences.unlocked
+            ? await adultApi.unlock()
+            : preferences;
+        if (active && epoch === generation.current) setSettings(current);
       })
-      .catch(() => {
-        /* Browser previews keep privacy closed. */
+      .catch((failure) => {
+        if (active && epoch === generation.current) setError(failure);
       })
       .finally(() => {
-        if (active) setLoading(false);
+        if (active && epoch === generation.current) setLoading(false);
       });
     return () => {
       active = false;
       generation.current += 1;
     };
-  }, []);
+  }, [persistSettings]);
   function clearPrivate() {
     void queryClient.cancelQueries();
     queryClient.clear();
@@ -62,23 +94,35 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
   async function saveSettings(value: Omit<AdultSettings, "unlocked">) {
     const epoch = ++generation.current;
     setError(undefined);
+    setLoading(true);
     if (!value.entry_visible) {
       clearPrivate();
       setSettings((previous) => ({ ...previous, ...value, unlocked: false }));
     }
     try {
-      const result = await adultApi.saveSettings({
+      const result = await persistSettings({
         entry_visible: value.entry_visible,
         covers_visible: value.covers_visible,
         remember_recent: value.remember_recent,
       });
-      if (epoch === generation.current) setSettings(result);
+      if (epoch !== generation.current) return;
+      setSettings(result);
+      if (result.entry_visible && !result.unlocked) {
+        const current = await adultApi.unlock();
+        if (epoch === generation.current) setSettings(current);
+      }
     } catch (failure) {
       if (epoch === generation.current) setError(failure);
+    } finally {
+      if (epoch === generation.current) setLoading(false);
     }
   }
   function setIncludeAdult(value: boolean) {
-    void saveSettings({ ...settings, entry_visible: value });
+    void saveSettings({
+      entry_visible: value,
+      covers_visible: value,
+      remember_recent: false,
+    });
   }
   async function unlock() {
     const epoch = ++generation.current;

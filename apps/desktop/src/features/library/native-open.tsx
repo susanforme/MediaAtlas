@@ -1,12 +1,20 @@
 import { useMutation } from "@tanstack/react-query";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { libraryApi, type MediaFile } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
 import { Button } from "../../components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { ErrorNotice } from "./shared";
 import "./native-open-translations";
+
+const NativeOpenPicker = lazy(() => import("./native-open-picker"));
 export function playableFiles(files: MediaFile[]) {
   return files.filter((f) =>
     /\.(mkv|mp4|avi|mov|wmv|m4v|webm|mpg|mpeg|ts|m2ts|vob|ogv)$/i.test(
@@ -73,7 +81,7 @@ export function NativeOpen({
         ref={trigger}
         className={className}
         onClick={() => choose.mutate()}
-        disabled={choose.isPending || launch.isPending}
+        disabled={choose.isPending || launch.isPending || choices !== undefined}
         aria-label={
           label || typeof children === "string"
             ? `${t("nativeOpen")}: ${label ?? String(children)}`
@@ -83,45 +91,15 @@ export function NativeOpen({
         {children ?? t("nativeOpen")}
       </Button>
       {choices && (
-        <Dialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setChoices(undefined);
-          }}
-        >
-          <DialogContent
-            aria-describedby={undefined}
-            onCloseAutoFocus={(event) => {
-              event.preventDefault();
-              trigger.current?.focus();
-            }}
-          >
-            <DialogTitle className="mb-4 font-semibold">
-              {t("nativeSelect")}
-            </DialogTitle>
-            {choices.length ? (
-              <ul>
-                {choices.map((f) => (
-                  <li key={f.id}>
-                    <Button
-                      variant="outline"
-                      disabled={launch.isPending}
-                      onClick={() => launch.mutate(f.id)}
-                    >
-                      {f.relative_path}
-                      {f.part !== null ? ` · ${t("part")} ${f.part}` : ""}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>{t("nativeNoFiles")}</p>
-            )}
-            <Button variant="outline" onClick={() => setChoices(undefined)}>
-              {t("nativeClose")}
-            </Button>
-          </DialogContent>
-        </Dialog>
+        <Suspense fallback={<p role="status">{t("loading")}</p>}>
+          <NativeOpenPicker
+            choices={choices}
+            pending={launch.isPending}
+            trigger={trigger}
+            onSelect={(fileId) => launch.mutate(fileId)}
+            onClose={() => setChoices(undefined)}
+          />
+        </Suspense>
       )}
       {(choose.error || launch.error) && (
         <ErrorNotice error={choose.error ?? launch.error} />

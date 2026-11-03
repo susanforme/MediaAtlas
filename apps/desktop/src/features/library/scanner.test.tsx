@@ -12,25 +12,34 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { adultApi } from "../../api/adult";
 import { DesktopError } from "../../api/desktop";
-import {
-  libraryApi,
-  type RootView,
-  type ScanCandidate,
-  type ScanTask,
-} from "../../api/library";
+import { libraryApi, type RootView, type ScanTask } from "../../api/library";
 import i18n from "../../i18n";
 import { PrivacyProvider } from "./context";
 import { ScannerPage } from "./scanner";
 import type { ScannerSearch } from "./scanner-navigation";
 
+const privacy = vi.hoisted(() => ({ visible: false, allowed: true }));
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
+  Link: ({
+    to,
+    children,
+    search,
+  }: {
+    to: string;
+    children: React.ReactNode;
+    search?: unknown;
+  }) => (
+    <a href={to} data-search={JSON.stringify(search)}>
+      {children}
+    </a>
   ),
 }));
 vi.mock("./context", async (original) => ({
   ...(await original<typeof import("./context")>()),
-  usePrivacy: () => ({ includeAdult: true }),
+  usePrivacy: () => ({
+    includeAdult: privacy.allowed,
+    settings: { entry_visible: privacy.visible },
+  }),
 }));
 vi.mock("../../api/adult", async (original) => ({
   ...(await original<typeof import("../../api/adult")>()),
@@ -48,6 +57,7 @@ vi.mock("../../api/library", async (original) => {
       confirm: vi.fn(),
       cancel: vi.fn(),
       start: vi.fn(),
+      sync: vi.fn(),
     },
   };
 });
@@ -76,26 +86,6 @@ const root: RootView = {
   last_scan_at: null,
   created_at: time,
   updated_at: time,
-};
-const candidate: ScanCandidate = {
-  id: "fixture-candidate",
-  root_id: root.id,
-  relative_path: "Fixture/movie.mkv",
-  size_bytes: 123,
-  modified_at: time,
-  kind: "movie",
-  title: "Fixture movie",
-  year: 2026,
-  part: null,
-  series_title: null,
-  season_number: null,
-  episode_number: null,
-  absolute_number: null,
-  catalog_number: null,
-  needs_review: true,
-  warnings: ["fixture_warning"],
-  existing_media_id: null,
-  status: "pending",
 };
 function ControlledScanner({
   initialSearch,
@@ -151,6 +141,8 @@ function deferred<T>() {
 describe("Fixture scan review", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
+    privacy.visible = false;
+    privacy.allowed = true;
     localStorage.clear();
     await i18n.changeLanguage("en-US");
     vi.mocked(libraryApi.roots).mockResolvedValue([root]);
@@ -159,15 +151,10 @@ describe("Fixture scan review", () => {
       { ...root, kind: "adult_video" },
     ]);
     vi.mocked(adultApi.tasks).mockResolvedValue([task]);
-    vi.mocked(libraryApi.start).mockResolvedValue({
+    vi.mocked(libraryApi.sync).mockResolvedValue({
       ...task,
       id: "fixture-new-scan",
       state: "queued",
-    });
-    vi.mocked(libraryApi.preview).mockResolvedValue({
-      task_id: task.id,
-      items: [candidate],
-      next_cursor: "fixture-next-page",
     });
     vi.mocked(libraryApi.confirm).mockResolvedValue({
       imported: 1,
@@ -180,57 +167,17 @@ describe("Fixture scan review", () => {
     });
   });
 
-  it("requires selection and an explicit confirmation before importing uncertain candidates", async () => {
-    show();
-    await screen.findByText("Fixture movie");
-    expect(
-      screen.getByRole("button", { name: "Confirm selected import" }),
-    ).toBeDisabled();
-    expect(libraryApi.confirm).not.toHaveBeenCalled();
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: "Confirm selected import: Fixture movie",
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Confirm selected import" }),
-    );
-    expect(
-      screen.getByRole("dialog", { name: "Confirm import preview" }),
-    ).toBeInTheDocument();
-    expect(libraryApi.confirm).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
-    await waitFor(() =>
-      expect(libraryApi.confirm).toHaveBeenCalledWith(task.id, [candidate.id]),
-    );
-    expect(
-      await screen.findByText("Imported 1; 0 unchanged."),
-    ).toBeInTheDocument();
-  });
-
   it("cancels the task without importing candidates", async () => {
+    vi.mocked(libraryApi.tasks).mockResolvedValue([
+      { ...task, state: "running" },
+    ]);
     show();
-    await screen.findByText("Fixture movie");
+    await screen.findByRole("button", { name: "Cancel task" });
     fireEvent.click(screen.getByRole("button", { name: "Cancel task" }));
     await waitFor(() =>
       expect(libraryApi.cancel).toHaveBeenCalledWith(task.id),
     );
     expect(libraryApi.confirm).not.toHaveBeenCalled();
-  });
-
-  it("requests a bounded next page with privacy filtering", async () => {
-    show();
-    await screen.findByText("Fixture movie");
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await waitFor(() =>
-      expect(libraryApi.preview).toHaveBeenLastCalledWith(
-        task.id,
-        "fixture-next-page",
-        false,
-      ),
-    );
-    expect(libraryApi.roots).toHaveBeenCalledWith(false);
-    expect(libraryApi.tasks).toHaveBeenCalledWith(false);
   });
 
   it("guides an empty scanner to adding a directory without starting a task", async () => {
@@ -244,7 +191,7 @@ describe("Fixture scan review", () => {
     expect(libraryApi.start).not.toHaveBeenCalled();
   });
 
-  it("preselects the only enabled directory while keeping scan startup explicit", async () => {
+  it("preselects the only enabled directory while keeping an extra refresh explicit", async () => {
     vi.mocked(libraryApi.tasks).mockResolvedValue([]);
     const view = show({});
     await waitFor(() =>
@@ -252,7 +199,9 @@ describe("Fixture scan review", () => {
         root.id,
       ),
     );
-    expect(screen.getByRole("button", { name: "Start scan" })).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: "Update library" }),
+    ).toBeEnabled();
     expect(libraryApi.start).not.toHaveBeenCalled();
     expect(view.onSearch).toHaveBeenCalledWith({
       root: root.id,
@@ -266,7 +215,9 @@ describe("Fixture scan review", () => {
       task,
     ]);
     const view = show({});
-    expect(await screen.findByText("Fixture movie")).toBeInTheDocument();
+    await screen.findByText(
+      "Update the library to process this directory automatically, without confirming individual imports.",
+    );
     expect(screen.getByLabelText("Recent scans")).toHaveValue(task.id);
     expect(view.onSearch).toHaveBeenCalledWith({
       root: root.id,
@@ -282,25 +233,25 @@ describe("Fixture scan review", () => {
 
   it("can retry a failed scan startup and blocks duplicate requests while one is pending", async () => {
     vi.mocked(libraryApi.tasks).mockResolvedValue([]);
-    vi.mocked(libraryApi.start).mockRejectedValueOnce(
+    vi.mocked(libraryApi.sync).mockRejectedValueOnce(
       new DesktopError("request_failed"),
     );
     const pending = deferred<ScanTask>();
-    vi.mocked(libraryApi.start).mockReturnValueOnce(pending.promise);
+    vi.mocked(libraryApi.sync).mockReturnValueOnce(pending.promise);
     const view = show({ root: root.id });
     const startButton = await screen.findByRole("button", {
-      name: "Start scan",
+      name: "Update library",
     });
     await waitFor(() => expect(startButton).toBeEnabled());
     fireEvent.click(startButton);
     await screen.findByRole("alert");
-    const retryButton = screen.getByRole("button", { name: "Start scan" });
+    const retryButton = screen.getByRole("button", { name: "Update library" });
     fireEvent.click(retryButton);
     fireEvent.click(retryButton);
     await waitFor(() =>
       expect(screen.getByLabelText("Choose an enabled root")).toBeDisabled(),
     );
-    await waitFor(() => expect(libraryApi.start).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(libraryApi.sync).toHaveBeenCalledTimes(2));
     await act(async () =>
       pending.resolve({ ...task, id: "new-task", state: "queued" }),
     );
@@ -322,114 +273,166 @@ describe("Fixture scan review", () => {
     show();
     expect(
       await screen.findByText(
-        "Scanning. Review and confirm candidates when it finishes.",
+        "This directory scan is running. Update the library after it finishes to process its results automatically.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.queryByText("This scan has no candidates awaiting confirmation."),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start scan" })).toBeDisabled();
-  });
-
-  it("keeps confirmation errors inside the dialog and retries the selected import explicitly", async () => {
-    vi.mocked(libraryApi.confirm)
-      .mockRejectedValueOnce(new DesktopError("request_failed"))
-      .mockResolvedValueOnce({ imported: 1, unchanged: 0, needs_review: 0 });
-    show();
-    await screen.findByText("Fixture movie");
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: "Confirm selected import: Fixture movie",
-      }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Confirm selected import" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Import selected" }));
-    const dialog = screen.getByRole("dialog", {
-      name: "Confirm import preview",
-    });
-    expect(await within(dialog).findByRole("alert")).toBeInTheDocument();
-    expect(libraryApi.confirm).toHaveBeenCalledTimes(1);
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Import selected" }),
-    );
-    await screen.findByText("Imported 1; 0 unchanged.");
-    expect(libraryApi.confirm).toHaveBeenCalledTimes(2);
     expect(
-      screen.getByRole("link", { name: "Browse imported media" }),
-    ).toHaveAttribute("href", "/library");
-    expect(
-      screen.getByRole("link", { name: "Open media tools to scrape" }),
-    ).toHaveAttribute("href", "/tools");
-  });
-
-  it("clears selected candidates when switching tasks", async () => {
-    const other = {
-      ...task,
-      id: "second-task",
-      created_at: "2026-11-02T00:00:00Z",
-    };
-    vi.mocked(libraryApi.tasks).mockResolvedValue([task, other]);
-    vi.mocked(libraryApi.preview).mockImplementation(async (id) => ({
-      task_id: id,
-      items: [
-        { ...candidate, id: id === task.id ? candidate.id : "other-candidate" },
-      ],
-      next_cursor: null,
-    }));
-    show();
-    await screen.findByText("Fixture movie");
-    fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: "Confirm selected import: Fixture movie",
-      }),
-    );
-    expect(
-      screen.getByRole("button", { name: "Confirm selected import" }),
-    ).toBeEnabled();
-    fireEvent.change(screen.getByLabelText("Recent scans"), {
-      target: { value: other.id },
-    });
-    await waitFor(() =>
-      expect(libraryApi.preview).toHaveBeenCalledWith(other.id, null, false),
-    );
-    expect(
-      await screen.findByRole("button", { name: "Confirm selected import" }),
+      screen.getByRole("button", { name: "Update library" }),
     ).toBeDisabled();
+  });
+
+  it("shows an automatic update as background progress without candidate import controls", async () => {
+    vi.mocked(libraryApi.tasks).mockResolvedValue([
+      {
+        ...task,
+        mode: "automatic",
+        phase: "metadata",
+        state: "running",
+        imported_count: 2,
+        matched_count: 1,
+        review_count: 0,
+        metadata_failed_count: 0,
+      },
+    ]);
+    show();
+    expect(await screen.findByText("Fetching metadata")).toBeInTheDocument();
     expect(
-      screen.getByRole("checkbox", {
-        name: "Confirm selected import: Fixture movie",
-      }),
-    ).not.toBeChecked();
+      screen.getByText(
+        "Updating in the background. Discovered media is available to browse.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View library" })).toHaveAttribute(
+      "href",
+      "/library",
+    );
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Confirm selected import" }),
+    ).not.toBeInTheDocument();
+    expect(libraryApi.preview).not.toHaveBeenCalled();
     expect(libraryApi.confirm).not.toHaveBeenCalled();
   });
 
-  it("keeps adult empty-state and completion navigation inside supplied adult callbacks", async () => {
-    vi.mocked(adultApi.roots).mockResolvedValue([]);
-    vi.mocked(adultApi.tasks).mockResolvedValue([]);
-    const onAddRoot = vi.fn();
-    const empty = show({}, { adult: true, onAddRoot });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Add media directory" }),
-    );
-    expect(onAddRoot).toHaveBeenCalledOnce();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
-    empty.unmount();
-    vi.mocked(adultApi.roots).mockResolvedValue([
-      { ...root, kind: "adult_video" },
+  it("leaves local media available when automatic matching needs attention and allows a fresh update", async () => {
+    vi.mocked(libraryApi.tasks).mockResolvedValue([
+      {
+        ...task,
+        mode: "automatic",
+        phase: "complete",
+        state: "waiting_for_user",
+        imported_count: 2,
+        matched_count: 0,
+        review_count: 2,
+        metadata_failed_count: 1,
+      },
     ]);
-    vi.mocked(adultApi.tasks).mockResolvedValue([
-      { ...task, state: "succeeded", imported_count: 1 },
-    ]);
-    const onBrowse = vi.fn();
-    show({ root: root.id, task: task.id }, { adult: true, onBrowse });
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Browse imported media" }),
+    show();
+    expect(
+      await screen.findByText(
+        "Media is available to browse. Some metadata needs attention.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Review unmatched media" }),
+    ).toHaveAttribute("href", "/tools");
+    expect(
+      screen.getByRole("link", { name: "Configure metadata sources" }),
+    ).toHaveAttribute("href", "/providers");
+    expect(
+      screen.getByRole("link", { name: "Configure credentials" }),
+    ).toHaveAttribute("href", "/settings");
+    expect(
+      screen.getByRole("button", { name: "Update library" }),
+    ).toBeEnabled();
+    expect(
+      screen.queryByRole("button", { name: "Cancel task" }),
+    ).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Update library" }));
+    await waitFor(() =>
+      expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith(root.id),
     );
-    expect(onBrowse).toHaveBeenCalledOnce();
-    expect(libraryApi.roots).not.toHaveBeenCalled();
-    expect(libraryApi.tasks).not.toHaveBeenCalled();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(libraryApi.confirm).not.toHaveBeenCalled();
+  });
+  it("merges authorized adult directories into the same selector and updates them without an import step", async () => {
+    privacy.visible = true;
+    const privateRoot = {
+      ...root,
+      id: "private-root",
+      name: "Private directory",
+      kind: "adult_video" as const,
+    };
+    const privateTask = {
+      ...task,
+      id: "private-task",
+      root_id: privateRoot.id,
+      mode: "automatic" as const,
+      phase: "complete" as const,
+      review_count: 1,
+      matched_count: 0,
+      metadata_failed_count: 0,
+    };
+    vi.mocked(adultApi.roots).mockResolvedValue([privateRoot]);
+    vi.mocked(adultApi.tasks).mockResolvedValue([privateTask]);
+    vi.mocked(libraryApi.sync).mockResolvedValue({
+      ...privateTask,
+      id: "new-private-task",
+      state: "queued",
+    });
+    const view = show({
+      root: privateRoot.id,
+      task: privateTask.id,
+      kind: "adult_video",
+    });
+    expect(
+      await screen.findByRole("option", { name: "Private directory" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "Fixture root" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(libraryApi.preview).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("link", { name: "Review unmatched media" }),
+    ).toHaveAttribute(
+      "data-search",
+      JSON.stringify({
+        root: privateRoot.id,
+        health: "metadata_needs_review",
+        kind: "adult_video",
+      }),
+    );
+    expect(screen.getByRole("link", { name: "View library" })).toHaveAttribute(
+      "data-search",
+      JSON.stringify({ root: privateRoot.id, kind: "adult_video" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Update library" }));
+    await waitFor(() =>
+      expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith(privateRoot.id),
+    );
+    expect(view.onSearch).toHaveBeenCalledWith({
+      root: privateRoot.id,
+      task: "new-private-task",
+      kind: "adult_video",
+    });
+    expect(libraryApi.confirm).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("link", { name: "Configure credentials" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("does not query private tasks or roots without the active backend grant", async () => {
+    privacy.visible = true;
+    privacy.allowed = false;
+    show();
+    await screen.findByText(
+      "Update the library to process this directory automatically, without confirming individual imports.",
+    );
+    expect(adultApi.roots).not.toHaveBeenCalled();
+    expect(adultApi.tasks).not.toHaveBeenCalled();
+    expect(libraryApi.preview).not.toHaveBeenCalled();
+    expect(libraryApi.confirm).not.toHaveBeenCalled();
   });
 });

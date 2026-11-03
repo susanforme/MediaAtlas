@@ -1,28 +1,32 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { adultApi } from "../../api/adult";
 import { pickDirectory } from "../../api/directories";
 import {
   libraryApi,
+  type MediaKind,
   type RootInput,
   type RootView,
   type ScanTask,
 } from "../../api/library";
-import { usePrivacy } from "./context";
 import {
   directoryName,
   newRootInput,
   normalizeRootInput,
   rootInputFromView,
 } from "./library-model";
+import { useLibraryDirectories } from "./use-library-directories";
 
 export function useRootEditor(
   adult: boolean,
-  onScanStarted?: (rootId: string, taskId: string) => void,
+  onScanStarted?: (
+    rootId: string,
+    taskId: string,
+    kind: MediaKind | null,
+  ) => void,
 ) {
   const { t } = useTranslation();
-  const { includeAdult: unlockedAdult } = usePrivacy();
+  const { roots, adultAvailable, adultVisible } = useLibraryDirectories();
   const client = useQueryClient();
   const [form, setForm] = useState<RootInput | null>(null);
   const [excludes, setExcludes] = useState("");
@@ -41,22 +45,37 @@ export function useRootEditor(
   const nameEdited = useRef(false);
   const operationLock = useRef(false);
   const pickerLock = useRef(false);
+  const permitted = useRef(true);
+  permitted.current = form?.kind !== "adult_video" || adultAvailable;
+  const hadAdultAccess = useRef(adultAvailable);
+  useEffect(() => {
+    if (hadAdultAccess.current && !adultAvailable) {
+      if (form?.kind === "adult_video") {
+        epoch.current += 1;
+        operationLock.current = false;
+        setOperation(null);
+      }
+      setForm((current) => (current?.kind === "adult_video" ? null : current));
+      setCompleted((current) =>
+        current?.root.kind === "adult_video" ? null : current,
+      );
+      setRemove((current) =>
+        current?.kind === "adult_video" ? null : current,
+      );
+    }
+    hadAdultAccess.current = adultAvailable;
+  }, [adultAvailable, form?.kind]);
   useEffect(
     () => () => {
       epoch.current += 1;
     },
     [],
   );
-  const roots = useQuery({
-    queryKey: adult ? ["adult", "roots"] : ["roots", false],
-    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
-    enabled: !adult || unlockedAdult,
-  });
   const save = useMutation({
     mutationFn: (input: RootInput) => libraryApi.saveRoot(input),
   });
   const scan = useMutation({
-    mutationFn: (id: string) => libraryApi.start(id),
+    mutationFn: (id: string) => libraryApi.sync(id),
   });
   const deletion = useMutation({
     mutationFn: (id: string) => libraryApi.removeRoot(id),
@@ -74,7 +93,11 @@ export function useRootEditor(
     setForm(null);
   }
   function edit(root?: RootView) {
-    if (operationLock.current) return;
+    if (
+      operationLock.current ||
+      (root?.kind === "adult_video" && !adultAvailable)
+    )
+      return;
     epoch.current += 1;
     pickerLock.current = false;
     nameEdited.current = Boolean(root);
@@ -86,7 +109,9 @@ export function useRootEditor(
     setCompleted(null);
     save.reset();
     scan.reset();
-    const value = root ? rootInputFromView(root) : newRootInput(adult);
+    const value = root
+      ? rootInputFromView(root)
+      : newRootInput(adult && adultVisible);
     setForm(value);
     setExcludes(value.exclude_patterns.join("\n"));
   }
@@ -106,7 +131,13 @@ export function useRootEditor(
     );
   }
   async function chooseDirectory() {
-    if (!form || operationLock.current || pickerLock.current) return;
+    if (
+      !form ||
+      operationLock.current ||
+      pickerLock.current ||
+      !permitted.current
+    )
+      return;
     const started = epoch.current;
     pickerLock.current = true;
     setPicking(true);
@@ -116,7 +147,8 @@ export function useRootEditor(
         title: t("rootChooseDirectory"),
         ...(form.path ? { defaultPath: form.path } : {}),
       });
-      if (started !== epoch.current || path === null) return;
+      if (started !== epoch.current || !permitted.current || path === null)
+        return;
       changePath(path);
     } catch (failure) {
       if (started === epoch.current) setPickerError(failure);
@@ -141,11 +173,7 @@ export function useRootEditor(
         JSON.stringify(rootInputFromView(savedRoot)),
   );
   async function persist(scanAfter: boolean) {
-    if (
-      operationLock.current ||
-      pickerLock.current ||
-      (adult && !unlockedAdult)
-    )
+    if (operationLock.current || pickerLock.current || !permitted.current)
       return;
     const input = normalizedForm();
     if (!input) return;
@@ -157,21 +185,22 @@ export function useRootEditor(
       const root =
         savedVersion && savedRoot ? savedRoot : await save.mutateAsync(input);
       void client.invalidateQueries({
-        queryKey: adult ? ["adult", "roots"] : ["roots"],
+        queryKey: root.kind === "adult_video" ? ["adult", "roots"] : ["roots"],
       });
-      if (started !== epoch.current) return;
+      if (started !== epoch.current || !permitted.current) return;
       setSavedRoot(root);
       setForm(rootInputFromView(root));
       setExcludes(root.exclude_patterns.join("\n"));
       if (scanAfter) {
         const task = await scan.mutateAsync(root.id);
         void client.invalidateQueries({
-          queryKey: adult ? ["adult", "scan-tasks"] : ["tasks"],
+          queryKey:
+            root.kind === "adult_video" ? ["adult", "scan-tasks"] : ["tasks"],
         });
-        if (started !== epoch.current) return;
+        if (started !== epoch.current || !permitted.current) return;
         setCompleted({ root, task });
         setForm(null);
-        onScanStarted?.(root.id, task.id);
+        onScanStarted?.(root.id, task.id, root.kind);
       } else {
         setCompleted({ root });
         setForm(null);
@@ -187,7 +216,8 @@ export function useRootEditor(
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    void persist(false);
+    // The backend chooses the isolated workflow and rechecks any adult grant.
+    void persist(Boolean(form?.enabled));
   }
   return {
     form,
@@ -200,6 +230,8 @@ export function useRootEditor(
     advanced,
     setAdvanced,
     roots,
+    adultAvailable,
+    adultVisible,
     save,
     scan,
     deletion,

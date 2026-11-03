@@ -12,3 +12,4 @@ apps/desktop/src-tauri/gen/
 Thumbs.db
 
 /work/
+__pycache__/

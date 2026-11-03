@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { defaultBrowse, libraryApi } from "../../api/library";
+import { useLibraryActivity } from "../library/use-library-activity";
 import { ordinaryCards } from "./media-model";
 
 export function useHomeLibrary() {
+  const activity = useLibraryActivity();
   const summary = useQuery({
     queryKey: ["summary", false],
     queryFn: () => libraryApi.summary(defaultBrowse(false)),
@@ -19,5 +21,5 @@ export function useHomeLibrary() {
     queryFn: () => libraryApi.detail(featured?.media.id ?? "", false),
     enabled: Boolean(featured),
   });
-  return { summary, media, cards, featured, detail };
+  return { summary, media, cards, featured, detail, activity };
 }

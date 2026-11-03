@@ -20,7 +20,7 @@ import {
   TOOLS_HEALTH,
   TOOLS_KINDS,
   TOOLS_SORTS,
-  type ToolsSearch,
+  type ToolsRouteSearch,
 } from "./search";
 import { useCandidateBrowser } from "./use-candidate-browser";
 
@@ -29,9 +29,13 @@ export function OrdinaryCandidates({
   onSearch,
   renderDetail,
 }: {
-  search?: ToolsSearch;
-  onSearch?: (search: ToolsSearch, replace?: boolean) => void;
-  renderDetail: (mediaId: string, close: () => void) => ReactNode;
+  search?: ToolsRouteSearch;
+  onSearch?: (search: ToolsRouteSearch, replace?: boolean) => void;
+  renderDetail: (
+    mediaId: string,
+    close: () => void,
+    adult: boolean,
+  ) => ReactNode;
 }) {
   const { t } = useTranslation();
   const browser = useCandidateBrowser(search, onSearch);
@@ -76,7 +80,11 @@ export function OrdinaryCandidates({
             >
               <option value="">{t("allRoots")}</option>
               {browser.roots.data
-                ?.filter((root) => root.kind !== "adult_video")
+                ?.filter((root) =>
+                  browser.adult
+                    ? root.kind === "adult_video"
+                    : root.kind !== "adult_video",
+                )
                 .map((root) => (
                   <option key={root.id} value={root.id}>
                     {root.name}
@@ -91,13 +99,22 @@ export function OrdinaryCandidates({
               onChange={(event) =>
                 browser.filter({
                   kind: (event.target.value ||
-                    undefined) as ToolsSearch["kind"],
+                    undefined) as ToolsRouteSearch["kind"],
                 })
               }
             >
               <option value="">{t("allKinds")}</option>
-              {TOOLS_KINDS.map((kind) => (
-                <option key={kind} value={kind}>
+              {[
+                ...TOOLS_KINDS,
+                ...(browser.adultEnabled || browser.adult
+                  ? ["adult_video"]
+                  : []),
+              ].map((kind) => (
+                <option
+                  key={kind}
+                  value={kind}
+                  disabled={kind === "adult_video" && !browser.adultEnabled}
+                >
                   {t(`kind_${kind}`)}
                 </option>
               ))}
@@ -110,7 +127,7 @@ export function OrdinaryCandidates({
               onChange={(event) =>
                 browser.filter({
                   health: (event.target.value ||
-                    undefined) as ToolsSearch["health"],
+                    undefined) as ToolsRouteSearch["health"],
                 })
               }
             >
@@ -128,7 +145,7 @@ export function OrdinaryCandidates({
               value={browser.search.sort ?? "updated_desc"}
               onChange={(event) =>
                 browser.filter({
-                  sort: event.target.value as ToolsSearch["sort"],
+                  sort: event.target.value as ToolsRouteSearch["sort"],
                 })
               }
             >
@@ -150,66 +167,84 @@ export function OrdinaryCandidates({
           />
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={showSelection}
-            aria-controls={selectionId}
-            disabled={browser.selected.length === 0}
-            onClick={() => setShowSelection(!showSelection)}
-          >
-            {t("toolsSelected", { count: browser.selected.length })}
-            <ChevronDown size={16} aria-hidden="true" />
-          </Button>
-          {browser.selected.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={browser.clearSelection}>
-              {t("toolsClearSelection")}
-            </Button>
-          )}
-        </div>
-        {selectedIds.length > 0 ? (
-          <Button asChild>
-            <Link
-              to="/scraper"
-              search={{ media: selectedIds[0], queue: selectedIds }}
-            >
-              {t("toolsScrapeSelected")}
-            </Link>
-          </Button>
-        ) : (
-          <Button disabled>{t("toolsScrapeSelected")}</Button>
-        )}
-      </div>
-      <p className="text-sm text-muted-foreground">
-        {t("toolsBatchHelp", { limit: MAX_SCRAPE_QUEUE })}
-      </p>
-      {browser.limitReached && (
-        <p role="alert" className="notice">
-          {t("toolsSelectionLimit", { limit: MAX_SCRAPE_QUEUE })}
-        </p>
-      )}
-      {showSelection && browser.selected.length > 0 && (
-        <ul id={selectionId} className="flex flex-wrap gap-2">
-          {browser.selected.map((card) => (
-            <li key={card.media.id}>
+      {!browser.adult && (
+        <>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <Button
-                variant="outline"
+                variant="ghost"
                 size="sm"
-                aria-label={t("toolsRemoveSelection", {
-                  title: card.media.title,
-                })}
-                onClick={() => browser.removeSelected(card.media.id)}
+                aria-expanded={showSelection}
+                aria-controls={selectionId}
+                disabled={browser.selected.length === 0}
+                onClick={() => setShowSelection(!showSelection)}
               >
-                <span className="max-w-48 truncate">{card.media.title}</span>
-                <X size={14} aria-hidden="true" />
+                {t("toolsSelected", { count: browser.selected.length })}
+                <ChevronDown size={16} aria-hidden="true" />
               </Button>
-            </li>
-          ))}
-        </ul>
+              {browser.selected.length > 0 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={browser.clearSelection}
+                >
+                  {t("toolsClearSelection")}
+                </Button>
+              )}
+            </div>
+            {selectedIds.length > 0 ? (
+              <Button asChild>
+                <Link
+                  to="/scraper"
+                  search={{ media: selectedIds[0], queue: selectedIds }}
+                >
+                  {t("toolsScrapeSelected")}
+                </Link>
+              </Button>
+            ) : (
+              <Button disabled>{t("toolsScrapeSelected")}</Button>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {t("toolsBatchHelp", { limit: MAX_SCRAPE_QUEUE })}
+          </p>
+          {browser.limitReached && (
+            <p role="alert" className="notice">
+              {t("toolsSelectionLimit", { limit: MAX_SCRAPE_QUEUE })}
+            </p>
+          )}
+          {showSelection && browser.selected.length > 0 && (
+            <ul id={selectionId} className="flex flex-wrap gap-2">
+              {browser.selected.map((card) => (
+                <li key={card.media.id}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={t("toolsRemoveSelection", {
+                      title: card.media.title,
+                    })}
+                    onClick={() => browser.removeSelected(card.media.id)}
+                  >
+                    <span className="max-w-48 truncate">
+                      {card.media.title}
+                    </span>
+                    <X size={14} aria-hidden="true" />
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </>
       )}
-      {browser.media.isPending ? (
+      {!browser.allowed ? (
+        browser.privacyError ? (
+          <ErrorNotice error={browser.privacyError} />
+        ) : browser.privacyLoading || browser.adultEnabled ? (
+          <Loading />
+        ) : (
+          <Empty title={t("privacyHidden")} />
+        )
+      ) : browser.media.isPending ? (
         <Loading />
       ) : browser.media.isError ? (
         <ErrorNotice
@@ -223,17 +258,19 @@ export function OrdinaryCandidates({
           <table className="min-w-[620px]">
             <thead>
               <tr>
-                <th>
-                  <Checkbox
-                    ref={selectPage}
-                    checked={allSelected}
-                    disabled={eligible.length === 0}
-                    aria-label={t("toolsSelectPage")}
-                    onChange={(event) =>
-                      browser.select(eligible, event.target.checked)
-                    }
-                  />
-                </th>
+                {!browser.adult && (
+                  <th>
+                    <Checkbox
+                      ref={selectPage}
+                      checked={allSelected}
+                      disabled={eligible.length === 0}
+                      aria-label={t("toolsSelectPage")}
+                      onChange={(event) =>
+                        browser.select(eligible, event.target.checked)
+                      }
+                    />
+                  </th>
+                )}
                 <th>{t("titleLabel")}</th>
                 <th>{t("year")}</th>
                 <th>{t("type")}</th>
@@ -251,18 +288,20 @@ export function OrdinaryCandidates({
                       : undefined
                   }
                 >
-                  <td>
-                    <Checkbox
-                      checked={selectedIds.includes(card.media.id)}
-                      disabled={!isSelectableCandidate(card)}
-                      aria-label={t("toolsSelectForScrape", {
-                        title: card.media.title,
-                      })}
-                      onChange={(event) =>
-                        browser.select([card], event.target.checked)
-                      }
-                    />
-                  </td>
+                  {!browser.adult && (
+                    <td>
+                      <Checkbox
+                        checked={selectedIds.includes(card.media.id)}
+                        disabled={!isSelectableCandidate(card)}
+                        aria-label={t("toolsSelectForScrape", {
+                          title: card.media.title,
+                        })}
+                        onChange={(event) =>
+                          browser.select([card], event.target.checked)
+                        }
+                      />
+                    </td>
+                  )}
                   <td className="font-medium">{card.media.title}</td>
                   <td>{card.media.year ?? t("unknownYear")}</td>
                   <td>{t(`kind_${card.media.kind}`)}</td>
@@ -277,13 +316,22 @@ export function OrdinaryCandidates({
                     <Button
                       variant="outline"
                       size="sm"
-                      aria-label={t("toolsViewResource", {
-                        title: card.media.title,
-                      })}
+                      aria-label={
+                        browser.adult
+                          ? `${t("scraperThisMedia")}: ${card.media.title}`
+                          : t("toolsViewResource", { title: card.media.title })
+                      }
                       onClick={() => browser.view(card.media.id)}
                     >
-                      {t("toolsView")}
+                      {t(browser.adult ? "scraperThisMedia" : "toolsView")}
                     </Button>
+                    {!browser.adult && isSelectableCandidate(card) ? (
+                      <Button asChild variant="ghost" size="sm">
+                        <Link to="/scraper" search={{ media: card.media.id }}>
+                          {t("scraperThisMedia")}
+                        </Link>
+                      </Button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -294,7 +342,9 @@ export function OrdinaryCandidates({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button
           variant="outline"
-          disabled={browser.page <= 1 || browser.media.isPending}
+          disabled={
+            !browser.allowed || browser.page <= 1 || browser.media.isPending
+          }
           onClick={browser.previous}
         >
           {t("toolsBack")}
@@ -304,14 +354,19 @@ export function OrdinaryCandidates({
         </span>
         <Button
           variant="outline"
-          disabled={browser.media.isPending || !browser.media.data?.next_cursor}
+          disabled={
+            !browser.allowed ||
+            browser.media.isPending ||
+            !browser.media.data?.next_cursor
+          }
           onClick={browser.next}
         >
           {t("toolsMore")}
         </Button>
       </div>
-      {browser.search.media &&
-        renderDetail(browser.search.media, browser.closeDetail)}
+      {browser.allowed &&
+        browser.search.media &&
+        renderDetail(browser.search.media, browser.closeDetail, browser.adult)}
     </section>
   );
 }

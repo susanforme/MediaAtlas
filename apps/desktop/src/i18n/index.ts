@@ -72,7 +72,7 @@ export const resources = {
       incompleteMetadata: "元数据不完整",
 
       emptyLibrary: "媒体库还是空的",
-      emptyLibraryBody: "添加本地目录并确认扫描候选后，媒体会显示在这里。",
+      emptyLibraryBody: "添加媒体目录后，自动扫描并获取影片资料。",
       noResults: "没有符合条件的媒体",
       clearFilters: "清除筛选",
       search: "搜索标题",
@@ -279,7 +279,7 @@ export const resources = {
 
       emptyLibrary: "Your library is empty",
       emptyLibraryBody:
-        "Media appears here after you add a local root and confirm scan candidates.",
+        "Add a media folder to scan files and fetch metadata automatically.",
       noResults: "No matching media",
       clearFilters: "Clear filters",
       search: "Search titles",

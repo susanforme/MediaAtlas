@@ -2,11 +2,11 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust，复用系统 WebView，不捆绑 Chromium：Windows 使用系统 WebView2（安装器可下载官方 bootstrapper），macOS 使用系统 WKWebView，Linux deb 依赖系统 WebKitGTK/GTK。
 
-当前候选 **0.1.0-beta.2 / Phase 8 发布与维护**，增加完整数据库 Preview/确认备份、下次启动独占恢复、安全诊断与缓存清理。维护说明见 [数据维护与升级](docs/maintenance.md)，原生包状态见 [发布矩阵](docs/release-matrix.md)。已实现的文件整理与高级媒体库：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，仅生成只读扫描候选；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读消费有可信元数据来源的本地资源，点击资源请求系统关联应用打开，多版本/Part 明确选择。远端音乐版本与尚未刮削资源保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
+最新发布 tag 为 **0.1.0-beta.3**，只包含 Windows 安装包提取修复与版本更新；以下自动媒体库与统一分类改动在 main，未纳入该 tag。Phase 8 发布与维护增加完整数据库 Preview/确认备份、下次启动独占恢复、安全诊断与缓存清理。维护说明见 [数据维护与升级](docs/maintenance.md)，原生包状态见 [发布矩阵](docs/release-matrix.md)。已实现的文件整理与高级媒体库：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，普通目录复用后台自动更新；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读浏览本地资源，尚未补全资料也可见，点击资源请求系统关联应用打开，多版本/Part 明确选择。没有本地文件的远端音乐版本保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
 
-在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；成人区解锁后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
+在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；启用成人资源类型后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
 
-成人入口默认隐藏，可在 Settings 保存“始终显示成人媒体入口”。该选项重启后仍保留，锁定时入口继续显示，内容需重新解锁；封面与最近访问偏好单独设置。普通海报墙、统计、查询、任务及 Network Inspector 始终排除成人数据。UI 仅 `zh-CN` / `en-US`，网页预览需要桌面后端，详情见 [P5 与视频 MVP 验收](docs/acceptance/phase-5.md)。
+成人资源类型默认关闭，可在 Settings 保存“启用成人资源类型”，之后在统一媒体界面选择该类型。偏好重启后保留，应用自动建立后台会话授权，不需要额外解锁；前端复用浏览、详情与工具。普通“全部”列表、首页、统计、查询、任务及 Network Inspector 排除成人数据。UI 支持 `zh-CN` / `en-US`，网页预览需要桌面后端。
 
 ## 开发环境
 
@@ -39,9 +39,9 @@ pnpm build           # 前端生产构建
 pnpm build:desktop   # 本平台桌面可执行文件，不生成安装包、不发布
 ```
 
-桌面启动后在 Root 页面输入本地目录、名称和媒体类型，再进入扫描页。扫描完成先显示候选，勾选并再次确认后写入本地工具索引；只有实际本地 NFO/标签或明确刮削确认等可信来源的本地资源才进入只读媒体库，裸文件名推断仍在工具区。诊断页提供真实数据库备份/恢复、诊断与缓存维护；网页模式无法调用后端，不伪造媒体记录。
+桌面启动后添加媒体目录，通过系统文件夹选择器选择目录及类型。目录自动在后台扫描、建立索引并补全可靠匹配的资料，本地媒体先显示，无需手动“入库”；只需处理未识别或失败项目。媒体仍由系统关联应用打开，源文件保持只读。诊断页提供数据库备份/恢复与缓存维护；网页模式无法调用后端，不伪造媒体记录。完整行为见 [自动媒体库](docs/automatic-library.md)。
 
-默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读；视频输出仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。P6 音频标签修改和恢复各自要求 Preview 与明确确认，备份原字节保留，外部改动或来源关联变化时拒绝旧计划。海报使用本地缓存缩略图，远程图片仅由受控后端按所选候选获取。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
+默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读；视频输出仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。P6 音频标签修改和恢复各自要求 Preview 与明确确认，备份原字节保留，外部改动或来源关联变化时拒绝旧计划。海报使用本地缓存缩略图，远程图片由受控后端获取。成人资源使用统一前端及独立后台授权，关闭开关会清除相关查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
 
 ## 检查
 
@@ -105,6 +105,7 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 - [Phase 1 验收记录](docs/acceptance/phase-1.md)
 - [扫描工作流](docs/library-workflow.md)
 - [社区刮削实践与后续优化](docs/community-scraper-best-practices.md)
+- [自动媒体库与首屏加载](docs/automatic-library.md)
 - [界面规范](docs/ui-spec.md)
 - [Phase 2 验收记录](docs/acceptance/phase-2.md)
 

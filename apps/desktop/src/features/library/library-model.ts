@@ -27,7 +27,18 @@ export const ALL_KINDS: MediaKind[] = [
   "concert",
   "adult_video",
 ];
+export const LIBRARY_CATEGORIES: MediaKind[] = [
+  "movie",
+  "tv_series",
+  "anime",
+  "music_release",
+  "adult_video",
+];
 export const HEALTH = [
+  "metadata_pending",
+  "metadata_needs_review",
+  "metadata_failed",
+  "metadata_unconfigured",
   "missing_poster",
   "missing_backdrop",
   "missing_nfo",
