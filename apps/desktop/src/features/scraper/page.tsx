@@ -233,8 +233,7 @@ export function ScraperPage() {
   };
   return (
     <>
-      <PageHeading title={t("scraper")} description={t("scraperDescription")} />
-      <p className="notice mb-5">{t("scraperAvailability")}</p>
+      <PageHeading title={t("scraper")} />
       {snapshot.isPending && <Loading />}
       {snapshot.error && <ErrorNotice error={snapshot.error} />}
       <form
@@ -383,10 +382,7 @@ export function ScraperPage() {
             </p>
           ))}
           {search.candidates.length === 0 && (
-            <Empty
-              title={t("scraperNoResults")}
-              body={t("scraperNoResultsBody")}
-            />
+            <Empty title={t("scraperNoResults")} />
           )}
           <div className="scraper-candidates">
             {search.candidates.map((c, index) => (
@@ -578,9 +574,6 @@ export function ScraperPage() {
                 ))}
               </select>
             </label>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {t("scraperTargetHelp")}
-            </p>
             {local.error && <ErrorNotice error={local.error} />}
             <Button
               className="mt-4"
@@ -702,10 +695,6 @@ export function ScraperPage() {
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
             {t("scraperOutputHelp")}
-          </p>
-          <p className="badge mt-3">{t("scraperPreserve")}</p>
-          <p className="mt-3 text-sm text-muted-foreground">
-            {t("scraperOutputExpiry")}
           </p>
           {output.files.map((file, index) => (
             <article key={index} className="scraper-output-file">

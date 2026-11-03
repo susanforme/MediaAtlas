@@ -229,15 +229,6 @@ function AuthEditor({ providerId }: { providerId: string }) {
               ))}
           </select>
         </label>
-        <p className="text-sm text-muted-foreground">
-          {t(
-            method === "affiliate"
-              ? "providerAuthAffiliateHelp"
-              : method === "api_key"
-                ? "providerAuthApiKeyHelp"
-                : "providerAuthBearerHelp",
-          )}
-        </p>
         <label className="filter-field">
           <span>{t("providerAuthStorage")}</span>
           <select
@@ -253,13 +244,6 @@ function AuthEditor({ providerId }: { providerId: string }) {
             <option value="session_only">{t("providerAuthSession")}</option>
           </select>
         </label>
-        <p className="text-sm text-muted-foreground">
-          {t(
-            storage === "system"
-              ? "providerAuthSystemHelp"
-              : "providerAuthSessionHelp",
-          )}
-        </p>
         <label className="filter-field">
           <span>
             {t(
@@ -300,9 +284,11 @@ function AuthEditor({ providerId }: { providerId: string }) {
             />
           </label>
         )}
-        <p className="text-sm text-muted-foreground">
-          {t("providerAuthNoEcho")}
-        </p>
+        {status.data.configured && (
+          <p className="text-sm text-muted-foreground">
+            {t("providerAuthNoEcho")}
+          </p>
+        )}
         {invalid && (
           <p className="notice error-notice" role="alert">
             {t("providerAuthInvalid")}
@@ -371,9 +357,6 @@ export function ProviderAuthSettings() {
       <h2 id="provider-auth-title" className="section-title">
         {t("providerAuthTitle")}
       </h2>
-      <p className="mb-4 text-sm text-muted-foreground">
-        {t("providerAuthHelp")}
-      </p>
       <label className="filter-field">
         <span>{t("providerAuthProvider")}</span>
         <select

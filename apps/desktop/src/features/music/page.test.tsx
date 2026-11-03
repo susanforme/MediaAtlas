@@ -225,7 +225,7 @@ it("renders readonly album discs, sources and persisted cover without provider a
   await screen.findAllByText("Bonus track");
   expect(await screen.findByText(/保护标题/)).toBeVisible();
   expect(
-    screen.queryByRole("button", { name: "Load cover through backend" }),
+    screen.queryByRole("button", { name: "Load cover" }),
   ).not.toBeInTheDocument();
   expect(await screen.findByRole("img")).toHaveAttribute(
     "src",
@@ -315,9 +315,7 @@ it("loads and saves provider covers only in the separate Music tools", async () 
     license: "Original image rights apply",
   });
   show(<MusicAlbumTools releaseId="release-1" />);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Load cover through backend" }),
-  );
+  fireEvent.click(await screen.findByRole("button", { name: "Load cover" }));
   expect(await screen.findByRole("img")).toHaveAttribute(
     "src",
     "data:image/png;base64,aGVsbG8=",

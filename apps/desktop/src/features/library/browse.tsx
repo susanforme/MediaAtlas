@@ -178,7 +178,6 @@ export function LibraryPage({
               onChange={(event) =>
                 filter({ q: event.target.value || undefined })
               }
-              placeholder={t("search")}
             />
           </label>
           <label className="filter-field">

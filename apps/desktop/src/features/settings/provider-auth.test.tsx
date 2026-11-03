@@ -92,14 +92,15 @@ it("requires an explicit session-only selection and supports the TMDB v3 key met
   fireEvent.change(screen.getByLabelText("Authentication method"), {
     target: { value: "api_key" },
   });
-  expect(screen.getByText(/Enter your TMDB v3 API key/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Authentication method")).toHaveValue("api_key");
   fireEvent.change(screen.getByLabelText("Credential storage"), {
     target: { value: "session_only" },
   });
+  expect(screen.getByLabelText("Credential storage")).toHaveValue(
+    "session_only",
+  );
   expect(
-    screen.getByText(
-      "You explicitly selected temporary memory storage. The credential disappears when the application exits.",
-    ),
+    screen.getByRole("option", { name: "This session only (cleared on exit)" }),
   ).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Credential"), {
     target: { value: "synthetic-v3-key" },

@@ -90,12 +90,6 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
             </label>
           ))}
         </div>
-        <p className="mt-4 text-sm text-muted-foreground">
-          {t("providerAuthSettingsHint")}{" "}
-          <Link className="text-primary" to="/settings">
-            {t("providerAuthOpenSettings")}
-          </Link>
-        </p>
         <Button className="mt-4" type="submit" disabled={save.isPending}>
           {t("providerSaveConfig")}
         </Button>
@@ -108,7 +102,6 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
 }
 function ProviderCard({ provider }: { provider: ProviderView }) {
   const { t, i18n } = useTranslation();
-  const { number } = useFormat();
   const client = useQueryClient();
   const [query, setQuery] = useState("");
   const refresh = () => {
@@ -146,15 +139,9 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
         <p className="notice mb-4">{t("providerFixtureNotice")}</p>
       )}
       <p className="mb-3 text-sm">
-        {t("providerCapabilities")}:{" "}
         {provider.descriptor.capabilities
           .map((cap) => t(`providerCapability_${cap}`, { defaultValue: cap }))
           .join(" · ")}
-      </p>
-      <p className="mb-4 text-xs text-muted-foreground">
-        {t("providerRevision")}: {number(provider.config.revision)} ·{" "}
-        {t("providerTimeout")}: {number(provider.config.timeout_ms)} ms ·{" "}
-        {t("providerConcurrency")}: {number(provider.config.concurrency)}
       </p>
       <label className="mb-4 flex items-center gap-2">
         <input
@@ -276,11 +263,7 @@ export function ProvidersPage() {
   const snapshot = useSnapshot();
   return (
     <>
-      <PageHeading
-        title={t("providers")}
-        description={t("providersDescription")}
-      />
-      <p className="notice mb-5">{t("providerCredentialsNotice")}</p>
+      <PageHeading title={t("providers")} />
       {snapshot.isPending ? (
         <Loading />
       ) : snapshot.isError ? (
@@ -371,10 +354,7 @@ export function NetworkInspectorPage() {
   const snapshot = useSnapshot();
   return (
     <>
-      <PageHeading
-        title={t("networkInspector")}
-        description={t("networkInspectorDescription")}
-      />
+      <PageHeading title={t("networkInspector")} />
       {snapshot.isPending ? (
         <Loading />
       ) : snapshot.isError ? (

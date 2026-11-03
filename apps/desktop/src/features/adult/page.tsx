@@ -92,10 +92,7 @@ function AdultWorkspace() {
   const [scanSearch, setScanSearch] = useState<ScannerSearch>({});
   return (
     <>
-      <PageHeading
-        title={t("adultWorkspace")}
-        description={t("adultSettingsHelp")}
-      >
+      <PageHeading title={t("adultWorkspace")}>
         <Button variant="outline" onClick={() => void lock()}>
           {t("adultLock")}
         </Button>
@@ -206,9 +203,6 @@ export function AdultMetadata({ detail }: { detail: AdultDetail }) {
           </ul>
         </div>
       ))}
-      <p className="mt-3 text-xs text-muted-foreground">
-        {t("adultPeopleHelp")}
-      </p>
     </section>
   );
 }
@@ -610,7 +604,6 @@ export function AdultScraper() {
   }
   return (
     <div className="space-y-5">
-      <p className="notice">{t("adultLivePending")}</p>
       <section className="panel">
         <h2 className="section-title">{t("adultProviders")}</h2>
         <Link className="action-link mb-4 inline-block" to="/settings">
@@ -661,7 +654,7 @@ export function AdultScraper() {
                 </Button>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">
-                {p.descriptor.attribution} · {p.descriptor.rate_limit_policy}
+                {p.descriptor.attribution}
               </p>
             </div>
           ))

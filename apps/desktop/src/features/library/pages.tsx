@@ -32,7 +32,7 @@ export function DashboardPage() {
   });
   return (
     <>
-      <PageHeading title={t("dashboard")} description={t("firstSteps")}>
+      <PageHeading title={t("dashboard")}>
         <Link to="/roots" className="action-link">
           {t("addRoot")}
         </Link>
@@ -163,7 +163,7 @@ export function RootsPage({
   }
   return (
     <>
-      <PageHeading title={t("roots")} description={t("pathHelp")}>
+      <PageHeading title={t("roots")}>
         <Button onClick={() => edit()}>{t("addRoot")}</Button>
       </PageHeading>
       {form && (
@@ -270,7 +270,7 @@ export function RootsPage({
       ) : roots.isError ? (
         <ErrorNotice error={roots.error} retry={() => void roots.refetch()} />
       ) : !roots.data.length ? (
-        <Empty title={t("noRoots")} body={t("firstSteps")} />
+        <Empty title={t("noRoots")} />
       ) : (
         <div className="space-y-4">
           {roots.data.map((root) => (
@@ -357,10 +357,6 @@ export function SettingsPage() {
           <ProviderAuthSettings />
         </Suspense>
         <section className="panel">
-          <h2 className="section-title">{t("languageSettings")}</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            {t("languageHelp")}
-          </p>
           <label className="filter-field">
             <span>{t("language")}</span>
             <select
@@ -374,9 +370,6 @@ export function SettingsPage() {
         </section>
         <section className="panel">
           <h2 className="section-title">{t("adultSettings")}</h2>
-          <p className="mb-4 text-sm text-muted-foreground">
-            {t("adultSettingsHelp")}
-          </p>
           {(
             ["entry_visible", "covers_visible", "remember_recent"] as const
           ).map((key) => (

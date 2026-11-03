@@ -107,9 +107,6 @@ export function LibraryVideoSourceDetail({ mediaId }: { mediaId: string }) {
       <h2 id="video-source-title" className="section-title">
         {t("scraperLibrarySourceTitle")}
       </h2>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {t("scraperLibrarySourceHelp")}
-      </p>
       {detail.isPending ? (
         <Loading />
       ) : detail.error ? (

@@ -220,7 +220,6 @@ export function OrganizationPanel({
       </Button>
       {plan && (
         <section className="space-y-3">
-          <p>{t("organizeWarning")}</p>
           <p>
             {t("organizeSpace")}: {plan.estimated_bytes} · {t("organizeFiles")}:{" "}
             {plan.file_count}
@@ -537,7 +536,6 @@ function Maintenance() {
       </section>
       <section className="panel space-y-4">
         <h2>{t("healthIssues")}</h2>
-        <p>{t("healthHelp")}</p>
         <Button
           disabled={health.isPending}
           onClick={() => {
@@ -587,7 +585,7 @@ export function MediaToolsPage() {
   const [tab, setTab] = useState<"local" | "scraper" | "health">("local");
   return (
     <>
-      <PageHeading title={t("videoTools")} description={t("videoToolsHelp")}>
+      <PageHeading title={t("videoTools")}>
         <Link to="/library" className="action-link">
           {t("library")}
         </Link>

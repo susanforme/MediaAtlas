@@ -94,7 +94,6 @@ export function MaintenancePage() {
       <PageHeading title={t("maintenanceTitle")} />
       <div className="space-y-6">
         <section className="panel space-y-4">
-          <p>{t("maintenanceHelp")}</p>
           {status.isPending && <Loading />}
           {status.error && (
             <ErrorNotice
@@ -219,7 +218,6 @@ export function MaintenancePage() {
               className="w-full"
             />
           )}
-          <p>{t("maintenanceCacheHelp")}</p>
           <Button
             variant="outline"
             disabled={working}
@@ -245,7 +243,6 @@ export function MaintenancePage() {
           </p>
         )}
         {error !== undefined && <ErrorNotice error={error} />}
-        <p className="notice">{t("maintenanceManualUpdate")}</p>
       </div>
     </>
   );

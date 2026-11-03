@@ -1,11 +1,9 @@
 import i18n from "../../i18n";
 export const musicTranslations = {
   "en-US": {
-    musicNoCover: "No saved cover. Choose one in Music tools.",
+    musicNoCover: "No saved cover",
     musicState_cancelled: "Cancelled; retained backup available for review",
     musicTools: "Music tools",
-    musicLibraryHelp:
-      "Browse confirmed artists, editions and tracks. Open local audio in your default system application.",
     musicSelectAlbum: "Select an imported release",
     musicOpenNative: "Open in system app",
     musicOpenRequested: "Requested opening in system app",
@@ -37,14 +35,10 @@ export const musicTranslations = {
     musicReadOnly: "Read only",
     musicPictureCount: "{{count}} embedded pictures",
     music: "Music",
-    musicHelp:
-      "Choose an exact release edition, inspect its discs and tracks, then link local audio files.",
     musicEmpty: "No music releases yet",
     musicSearch: "Search MusicBrainz",
     musicSearchHint: "Artist or album",
     musicEditions: "Release editions",
-    musicEditionHelp:
-      "Country, date, edition and disc differences require your selection. Matching titles never merge releases automatically.",
     musicSelect: "Inspect this edition",
     musicImport: "Import selected release",
     musicImported: "Release imported",
@@ -73,11 +67,9 @@ export const musicTranslations = {
     musicChooseTrack: "Select a track",
     musicChooseFile: "Select an audio file",
     musicLink: "Link file to track",
-    musicLinkHelp:
-      "Import local audio with Scanner first. Link each track explicitly; this does not change its audio tags.",
+    musicLinkHelp: "Linking does not change audio tags.",
     musicRead: "Read tags",
-    musicFieldsHelp:
-      "Only selected fields are written. Existing artwork and other tags are retained. Locked or manually edited library fields remain protected.",
+    musicFieldsHelp: "Existing artwork and unselected tags are retained.",
     musicField: "Field",
     musicBefore: "Before",
     musicAfter: "After",
@@ -92,16 +84,13 @@ export const musicTranslations = {
       "I confirm restoring the saved bytes after reviewing this preview",
     musicRestoreExecute: "Confirm restore",
     musicWritten: "Tag operation recorded: {{state}}",
-    musicBackupHelp:
-      "A byte backup is retained. Restore needs a new preview and explicit confirmation; changes since preview cause a conflict.",
     musicNoFiles: "No linked audio files",
     musicArtwork: "Cover art",
-    musicLoadCover: "Load cover through backend",
+    musicLoadCover: "Load cover",
     musicRights: "Image rights",
     musicProtected: "Protected library fields",
     musicNoProtected: "No protected fields",
     musicFetched: "Fetched",
-    musicLocalOnly: "Local first · audio tag changes require confirmation",
     musicField_title: "Title",
     musicField_artist: "Artist",
     musicField_album: "Album",
@@ -113,11 +102,9 @@ export const musicTranslations = {
     musicHistory: "Retained tag backups",
   },
   "zh-CN": {
-    musicNoCover: "暂无已保存封面，请在音乐工具中选择。",
+    musicNoCover: "暂无封面",
     musicState_cancelled: "已取消；可检查保留的备份",
     musicTools: "音乐工具",
-    musicLibraryHelp:
-      "只读浏览已确认的艺人、发行版本及曲目，使用系统默认应用打开本地音频。",
     musicSelectAlbum: "选择已导入发行版本",
     musicOpenNative: "使用系统应用打开",
     musicOpenRequested: "已请求使用系统应用打开",
@@ -148,13 +135,10 @@ export const musicTranslations = {
     musicReadOnly: "只读",
     musicPictureCount: "{{count}} 张内嵌图片",
     music: "音乐",
-    musicHelp: "选择具体发行版本，查看多碟曲目后关联本地音频。",
     musicEmpty: "尚无音乐专辑",
     musicSearch: "搜索 MusicBrainz",
     musicSearchHint: "艺人或专辑",
     musicEditions: "发行版本",
-    musicEditionHelp:
-      "地区、日期、版本和碟数差异需由您选择。同名不会自动合并发行版本。",
     musicSelect: "查看此版本",
     musicImport: "导入所选发行版本",
     musicImported: "发行版本已导入",
@@ -183,11 +167,9 @@ export const musicTranslations = {
     musicChooseTrack: "选择曲目",
     musicChooseFile: "选择音频文件",
     musicLink: "关联文件到曲目",
-    musicLinkHelp:
-      "先通过文件扫描导入本地音频。每个曲目需明确关联；关联不会修改音频标签。",
+    musicLinkHelp: "关联不会修改音频标签。",
     musicRead: "读取标签",
-    musicFieldsHelp:
-      "仅写入勾选的字段，保留现有封面及其他标签。媒体库中锁定或手工编辑的字段仍受保护。",
+    musicFieldsHelp: "保留现有封面和未勾选的标签。",
     musicField: "字段",
     musicBefore: "修改前",
     musicAfter: "修改后",
@@ -200,16 +182,13 @@ export const musicTranslations = {
     musicRestoreConfirm: "我已检查预览并确认还原保存的文件字节",
     musicRestoreExecute: "确认还原",
     musicWritten: "标签操作已记录：{{state}}",
-    musicBackupHelp:
-      "原始字节备份将保留。还原需重新预览并明确确认，预览后的变更会导致冲突。",
     musicNoFiles: "尚未关联音频文件",
     musicArtwork: "专辑封面",
-    musicLoadCover: "通过后端加载封面",
+    musicLoadCover: "加载封面",
     musicRights: "图片权利",
     musicProtected: "受保护的媒体库字段",
     musicNoProtected: "无受保护字段",
     musicFetched: "获取时间",
-    musicLocalOnly: "本地优先 · 音频标签修改需明确确认",
     musicField_title: "标题",
     musicField_artist: "艺人",
     musicField_album: "专辑",

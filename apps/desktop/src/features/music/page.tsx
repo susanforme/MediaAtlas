@@ -44,7 +44,7 @@ export function MusicPage() {
   });
   return (
     <div className="space-y-6">
-      <PageHeading title={t("music")} description={t("musicLibraryHelp")}>
+      <PageHeading title={t("music")}>
         <a href="/music/tools" className="underline">
           {t("musicTools")}
         </a>
@@ -92,7 +92,7 @@ export function MusicToolsPage() {
   });
   return (
     <div className="space-y-6">
-      <PageHeading title={t("musicTools")} description={t("musicHelp")} />
+      <PageHeading title={t("musicTools")} />
       <section className="panel space-y-4">
         <h2 className="font-semibold">{t("musicSearch")}</h2>
         <form
@@ -126,7 +126,6 @@ export function MusicToolsPage() {
             {t("musicSearch")}
           </Button>
         </form>
-        <p className="text-sm text-muted-foreground">{t("musicEditionHelp")}</p>
         {search.isPending && <Loading />}
         {search.error && <ErrorNotice error={search.error} />}
         {search.data && (
@@ -957,7 +956,6 @@ export function TagEditor({
           ))}
         {history.error && <ErrorNotice error={history.error} />}
       </section>
-      <p className="text-sm text-muted-foreground">{t("musicBackupHelp")}</p>
       {[plan.error, write.error, restorePlan.error]
         .filter(Boolean)
         .map((e, i) => (

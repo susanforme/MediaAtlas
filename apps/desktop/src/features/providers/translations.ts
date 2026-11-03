@@ -1,26 +1,22 @@
 export const providerTranslations = {
   "zh-CN": {
-    providers: "Provider 管理",
-    providersDescription:
-      "管理 TMDB、AniList、Wikipedia 与离线 Fixture 的配置和运行状态。实时来源默认停用，授权与连通性需独立验收。",
-    providerFixtureName: "离线双引擎 Fixture",
-    providerFixtureNotice:
-      "开发 Fixture：组合 JSON 与 HTML 解析，不代表真实站点搜索结果。",
-    providerCredentialsNotice:
-      "请在设置中保存认证，再另行启用来源。默认使用系统凭据存储，可明确选择仅本次会话存储。保存不会验证实时授权，Fixture 无需凭据。",
-    providerEnabled: "启用 Provider",
+    providers: "数据来源",
+
+    providerFixtureName: "离线演示",
+    providerFixtureNotice: "仅使用离线演示数据。",
+
+    providerEnabled: "启用来源",
     providerQuery: "测试检索文本（请勿输入凭据）",
-    providerRun: "运行离线 Fixture",
+    providerRun: "运行离线演示",
     providerOpenScraper: "在刮削工作台搜索",
     providerOpenAuthSettings: "在设置保存认证",
-    providerAuthSettingsHint: "请前往设置页面管理认证，此处只编辑请求限制。",
+
     providerCapability_details: "详情",
     providerCapability_images: "图片",
     providerCapability_external_ids: "外部标识",
     providerCapability_article_lookup: "条目查询",
     providerJobStarted: "任务已提交，可在任务中心查看结果。",
-    providerCapabilities: "支持能力",
-    providerRevision: "配置版本",
+
     providerTimeout: "超时",
     providerConcurrency: "并发上限",
     providerInterval: "请求间隔",
@@ -32,7 +28,7 @@ export const providerTranslations = {
     providerConfigSaved: "配置已保存，新任务使用新快照。",
     providerConfigInvalid:
       "请输入有效的正整数配置；重试次数为 0–3，间隔为 0–60000 毫秒。凭据引用仅允许 1–128 个字母、数字、点、短横线或下划线。",
-    providerConfig: "运行配置",
+    providerConfig: "请求限制",
     providerDocumentation: "文档",
     providerTerms: "服务条款",
     providerPrivacy: "隐私政策",
@@ -64,8 +60,7 @@ export const providerTranslations = {
     providerResult_fixture_complete:
       "离线 JSON 与 HTML 组合验证完成。未更改媒体。",
     networkInspector: "网络检查器",
-    networkInspectorDescription:
-      "仅显示脱敏请求摘要和最近 100 条持久化记录。URL 只保留来源，不包含路径、查询参数、请求体或鉴权信息。Fixture 记录不代表实际网络请求。",
+
     noNetworkRequests: "尚无请求记录",
     providerLabel: "Provider / 任务",
     providerRequest: "请求摘要",
@@ -101,27 +96,22 @@ export const providerTranslations = {
   },
   "en-US": {
     providers: "Providers",
-    providersDescription:
-      "Manage TMDB, AniList, Wikipedia and offline fixture configuration and runtime health. Live providers start disabled; authorization and connectivity require separate acceptance.",
-    providerFixtureName: "Offline dual-engine fixture",
-    providerFixtureNotice:
-      "Development fixture: combines JSON and HTML parsing. These are not live provider search results.",
-    providerCredentialsNotice:
-      "Save authentication in Settings, then enable providers separately. System credential storage is the default; session-only storage requires an explicit choice. Saving does not verify live authorization. The fixture needs no credentials.",
+
+    providerFixtureName: "Offline demo",
+    providerFixtureNotice: "Uses offline demo data only.",
+
     providerEnabled: "Enable provider",
     providerQuery: "Test search text (do not enter credentials)",
     providerRun: "Run offline fixture",
     providerOpenScraper: "Search in Scraper",
     providerOpenAuthSettings: "Save authentication in Settings",
-    providerAuthSettingsHint:
-      "Manage authentication in Settings. Only request limits are edited here.",
+
     providerCapability_details: "Details",
     providerCapability_images: "Images",
     providerCapability_external_ids: "External IDs",
     providerCapability_article_lookup: "Article lookup",
     providerJobStarted: "Task submitted. View its result in the task center.",
-    providerCapabilities: "Capabilities",
-    providerRevision: "Configuration revision",
+
     providerTimeout: "Timeout",
     providerConcurrency: "Concurrent requests",
     providerInterval: "Request interval",
@@ -133,7 +123,7 @@ export const providerTranslations = {
     providerConfigSaved: "Configuration saved. New tasks use the new snapshot.",
     providerConfigInvalid:
       "Enter valid positive integer limits; retries must be 0–3 and interval 0–60000 ms. Credential references allow 1–128 letters, digits, dots, hyphens or underscores.",
-    providerConfig: "Runtime configuration",
+    providerConfig: "Request limits",
     providerDocumentation: "Documentation",
     providerTerms: "Terms of service",
     providerPrivacy: "Privacy policy",
@@ -165,8 +155,7 @@ export const providerTranslations = {
     providerResult_fixture_complete:
       "Offline JSON and HTML combination passed. No media was changed.",
     networkInspector: "Network inspector",
-    networkInspectorDescription:
-      "Shows redacted request summaries and the latest 100 persisted records. URLs contain only the origin, without paths, queries, request bodies or credentials. Fixture records are not network requests.",
+
     noNetworkRequests: "No request records yet",
     providerLabel: "Provider / task",
     providerRequest: "Request summary",

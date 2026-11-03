@@ -4,8 +4,7 @@ export const authTranslations = {
     providerAuthTitle: "Provider authentication",
     providerAuthAffiliate: "DMM affiliate API",
     providerAuthWikidata: "Wikidata (adult supplement)",
-    providerAuthAffiliateHelp:
-      "Enter the approved DMM API ID and affiliate ID. Both are stored together in the selected secure store; the backend adds them only to protected original-origin requests.",
+
     providerAuthApiId: "DMM API ID",
     providerAuthAffiliateId: "DMM affiliate ID",
     providerAuthCleanupPending:
@@ -13,26 +12,18 @@ export const authTranslations = {
     providerAuthCleanupDisabled:
       "Authentication is disabled; old credentials are awaiting secure cleanup. Refresh the status to retry.",
     providerAuthRefresh: "Refresh authentication status",
-    providerAuthHelp:
-      "Save credentials here, then enable the provider separately in Providers. Saving does not test live account authorization or start a request.",
+
     providerAuthProvider: "Authentication provider",
     providerAuthMethod: "Authentication method",
     providerAuthStorage: "Credential storage",
     providerAuthBearer: "TMDB v4 Read Access Token (Bearer)",
     providerAuthApiKey: "TMDB v3 API key",
-    providerAuthBearerHelp:
-      "Enter the API Read Access Token from your TMDB API settings. It is sent as a Bearer credential by the protected backend.",
-    providerAuthApiKeyHelp:
-      "Enter your TMDB v3 API key. The protected backend adds it only to requests for the original TMDB origin and removes it from diagnostics.",
+
     providerAuthSystem: "System credential store (persistent)",
     providerAuthSession: "This session only (cleared on exit)",
-    providerAuthSystemHelp:
-      "Uses the operating system credential store. A storage failure is reported; credentials are never silently saved as plaintext or switched to session storage.",
-    providerAuthSessionHelp:
-      "You explicitly selected temporary memory storage. The credential disappears when the application exits.",
+
     providerAuthSecret: "Credential",
-    providerAuthNoEcho:
-      "Saved credentials are never displayed. Enter a new value only to replace the credential.",
+    providerAuthNoEcho: "Enter a new value to replace the saved credential.",
     providerAuthSave: "Save authentication",
     providerAuthClear: "Delete saved authentication",
     providerAuthSaved:
@@ -57,8 +48,7 @@ export const authTranslations = {
     providerAuthTitle: "来源认证",
     providerAuthAffiliate: "DMM 联盟 API",
     providerAuthWikidata: "Wikidata（成人补充来源）",
-    providerAuthAffiliateHelp:
-      "请填写已批准的 DMM API ID 与联盟 ID。两字段共同保存在所选安全存储中，后端仅向受保护的原始站点请求添加。",
+
     providerAuthApiId: "DMM API ID",
     providerAuthAffiliateId: "DMM 联盟 ID",
     providerAuthCleanupPending:
@@ -66,24 +56,18 @@ export const authTranslations = {
     providerAuthCleanupDisabled:
       "认证已停用；旧凭据等待安全清理，可刷新状态重试。",
     providerAuthRefresh: "刷新认证状态",
-    providerAuthHelp:
-      "在此保存凭据后，请另行在来源页面启用对应来源。保存不会验证实时账户授权或发起站点请求。",
+
     providerAuthProvider: "认证来源",
     providerAuthMethod: "认证方式",
     providerAuthStorage: "凭据存储方式",
     providerAuthBearer: "TMDB v4 Read Access Token（Bearer）",
     providerAuthApiKey: "TMDB v3 API Key",
-    providerAuthBearerHelp:
-      "请填写 TMDB API 设置中的 API Read Access Token，由受控后端作为 Bearer 凭据发送。",
-    providerAuthApiKeyHelp:
-      "请填写 TMDB v3 API Key，受控后端仅向原始 TMDB 站点请求添加此密钥，诊断记录不会显示密钥。",
+
     providerAuthSystem: "系统凭据存储（持久保存）",
     providerAuthSession: "仅本次会话（退出后失效）",
-    providerAuthSystemHelp:
-      "使用操作系统凭据存储。存储失败会明确提示，不会自动以明文保存或切换为会话存储。",
-    providerAuthSessionHelp: "你已明确选择临时内存存储，退出应用后凭据失效。",
+
     providerAuthSecret: "凭据",
-    providerAuthNoEcho: "已保存凭据不会回显，仅在需要替换时填写新值。",
+    providerAuthNoEcho: "填写新值以替换已保存的凭据。",
     providerAuthSave: "保存认证",
     providerAuthClear: "删除已保存认证",
     providerAuthSaved: "认证已保存，来源启用状态保持不变。",

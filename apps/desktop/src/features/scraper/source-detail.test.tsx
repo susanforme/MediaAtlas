@@ -87,9 +87,7 @@ it("adds confirmed Movie source details without replacing the protected library 
 it("shows an explicit empty state for un-enriched local video", async () => {
   vi.mocked(scraperApi.mediaDetail).mockResolvedValue(null);
   show(<LibraryVideoSourceDetail mediaId="media-1" />);
-  await screen.findByText(
-    "No confirmed video source details yet. Choose and confirm a match in Scraper to add them.",
-  );
+  await screen.findByText("No confirmed source details");
   expect(screen.queryByText("Runtime (minutes)")).not.toBeInTheDocument();
 });
 it("renders confirmed TV seasons and their numbering scheme", () => {

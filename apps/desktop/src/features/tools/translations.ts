@@ -3,8 +3,6 @@ import i18n from "../../i18n";
 const values = {
   "en-US": {
     videoTools: "Media tools",
-    videoToolsHelp:
-      "Review unfinished local candidates, scrape metadata, and explicitly preview file changes. The library shows confirmed local resources.",
     nativeOpen: "Open in system app",
     nativeClose: "Close selection",
     nativeRequested: "Submitted system opening request",
@@ -51,8 +49,6 @@ const values = {
     organizeSpace: "Estimated additional bytes",
     organizeFiles: "Files and associated attachments",
     organizeConflict: "Conflict",
-    organizeWarning:
-      "Review every source, destination and warning before confirming.",
     mode_preserve: "Preserve",
     mode_move: "Move",
     mode_copy: "Copy",
@@ -65,8 +61,6 @@ const values = {
     watcherInactive: "Watcher inactive",
     watcherPending: "Rescan pending",
     healthCheck: "Check library health",
-    healthHelp:
-      "Read-only checks. Review repairs in tools and explicitly preview any changes.",
     healthIssues: "Health findings",
     toolsSelect: "Choose a local resource",
     toolsSearch: "Search local candidates",
@@ -92,8 +86,6 @@ const values = {
   },
   "zh-CN": {
     videoTools: "媒体工具",
-    videoToolsHelp:
-      "查看尚未完成的本地候选、刮削元数据，并明确预览文件变更。媒体库仅展示已确认的本地资源。",
     nativeOpen: "使用系统应用打开",
     nativeClose: "关闭选择",
     nativeRequested: "已提交系统打开请求",
@@ -137,7 +129,6 @@ const values = {
     organizeSpace: "预计新增字节数",
     organizeFiles: "文件及关联附件",
     organizeConflict: "冲突",
-    organizeWarning: "确认前请核对每个源文件、目标文件和提示。",
     mode_preserve: "保留",
     mode_move: "移动",
     mode_copy: "复制",
@@ -149,7 +140,6 @@ const values = {
     watcherInactive: "监控未运行",
     watcherPending: "等待补充扫描",
     healthCheck: "检测媒体库健康状态",
-    healthHelp: "仅检查数据；请在工具区审阅修复，并明确预览任何变更。",
     healthIssues: "健康检查结果",
     toolsSelect: "选择本地资源",
     toolsSearch: "搜索本地候选",

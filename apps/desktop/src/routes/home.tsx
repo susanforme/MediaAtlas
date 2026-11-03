@@ -3,6 +3,7 @@ import { CircleCheck, CircleHelp, LoaderCircle, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { DesktopError, getAppInfo } from "../api/desktop";
 import { Button } from "../components/ui/button";
+import { PageHeading } from "../features/library/shared";
 
 export function HomePage() {
   const { t } = useTranslation();
@@ -26,27 +27,11 @@ export function HomePage() {
           : t("requestFailed");
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-14 sm:px-12 sm:py-20">
-      <p className="mb-4 text-sm font-medium tracking-wide text-primary">
-        {t("phase")}
-      </p>
-      <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-        {t("title")}
-      </h1>
-      <p className="mt-4 text-base text-muted-foreground">{t("subtitle")}</p>
-
-      <section
-        className="mt-10 rounded-2xl border border-border bg-white p-6 shadow-sm sm:p-8"
-        aria-labelledby="connection-title"
-      >
-        <h2 id="connection-title" className="text-lg font-semibold">
-          {t("cardTitle")}
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {t("cardDescription")}
-        </p>
+    <>
+      <PageHeading title={t("diagnostics")} />
+      <section className="panel max-w-3xl">
         <div
-          className="mt-7 flex items-start gap-3 rounded-xl bg-muted p-4"
+          className="flex items-start gap-3 rounded-xl bg-muted p-4"
           role="status"
           aria-live="polite"
         >
@@ -68,11 +53,6 @@ export function HomePage() {
           )}
           <div>
             <p className="text-sm font-medium">{status}</p>
-            {desktopRequired && (
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {t("desktopDescription")}
-              </p>
-            )}
             {info.isSuccess && (
               <p className="mt-2 text-sm text-muted-foreground">
                 {t("version")} {info.data.app_version}
@@ -95,9 +75,6 @@ export function HomePage() {
           {info.isFetching ? t("checking") : t("retry")}
         </Button>
       </section>
-      <p className="mt-6 max-w-2xl text-sm leading-6 text-muted-foreground">
-        {t("scope")}
-      </p>
-    </main>
+    </>
   );
 }

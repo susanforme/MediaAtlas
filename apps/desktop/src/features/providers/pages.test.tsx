@@ -54,7 +54,7 @@ beforeEach(async () => {
 });
 it("requires an explicit user action to run and disable the fixture", async () => {
   show(<ProvidersPage />);
-  await screen.findByText("Offline dual-engine fixture");
+  await screen.findByText("Offline demo");
   expect(providerApi.start).not.toHaveBeenCalled();
   expect(
     screen.getByRole("button", { name: "Run offline fixture" }),
@@ -84,8 +84,8 @@ it("requires an explicit user action to run and disable the fixture", async () =
 });
 it("validates editable limits before updating an immutable configuration snapshot", async () => {
   show(<ProvidersPage />);
-  await screen.findByText("Offline dual-engine fixture");
-  fireEvent.click(screen.getByText("Runtime configuration"));
+  await screen.findByText("Offline demo");
+  fireEvent.click(screen.getByText("Request limits"));
   fireEvent.change(screen.getByLabelText("Concurrent requests"), {
     target: { value: "0" },
   });
@@ -201,11 +201,11 @@ it("localizes provider states and failure explanations in Simplified Chinese", a
 it("snapshots the selected Chinese UI language when starting a provider task", async () => {
   await i18n.changeLanguage("zh-CN");
   show(<ProvidersPage />);
-  await screen.findByText("离线双引擎 Fixture");
+  await screen.findByText("离线演示");
   fireEvent.change(screen.getByLabelText("测试检索文本（请勿输入凭据）"), {
     target: { value: "中文检索" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "运行离线 Fixture" }));
+  fireEvent.click(screen.getByRole("button", { name: "运行离线演示" }));
   await waitFor(() =>
     expect(providerApi.start).toHaveBeenCalledWith(
       "fixture.offline",
@@ -239,16 +239,11 @@ it("routes real providers to Scraper and Settings without an offline fixture sea
     screen.getByRole("link", { name: "Save authentication in Settings" }),
   ).toHaveAttribute("href", "/settings");
   expect(
-    screen.getByText(
-      "Capabilities: Details · Images · External IDs · Article lookup",
-    ),
+    screen.getByText("Details · Images · External IDs · Article lookup"),
   ).toBeInTheDocument();
   expect(
     screen.queryByLabelText("Credential reference (not a secret)"),
   ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("link", { name: "Open authentication settings" }),
-  ).toHaveAttribute("href", "/settings");
   expect(providerApi.start).not.toHaveBeenCalled();
 });
 
@@ -257,17 +252,14 @@ it("never displays an opaque credential reference while editing limits", async (
   data.providers[0].config.credential_ref = "opaque-backend-owned-reference";
   vi.mocked(providerApi.snapshot).mockResolvedValue(data);
   show(<ProvidersPage />);
-  await screen.findByText("Offline dual-engine fixture");
-  fireEvent.click(screen.getByText("Runtime configuration"));
+  await screen.findByText("Offline demo");
+  fireEvent.click(screen.getByText("Request limits"));
   expect(
     screen.queryByDisplayValue("opaque-backend-owned-reference"),
   ).not.toBeInTheDocument();
   expect(
     screen.queryByText("opaque-backend-owned-reference"),
   ).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("link", { name: "Open authentication settings" }),
-  ).toHaveAttribute("href", "/settings");
   fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
   await waitFor(() =>
     expect(providerApi.updateConfig).toHaveBeenCalledWith(

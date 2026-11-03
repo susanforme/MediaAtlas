@@ -167,10 +167,8 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
 });
 it("loads only an explicitly requested validated thumbnail without changing artwork selection", async () => {
   await searchAndChoose();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Load validated thumbnail" }),
-  );
-  await screen.findByRole("img", { name: "Validated poster thumbnail" });
+  fireEvent.click(screen.getByRole("button", { name: "Preview image" }));
+  await screen.findByRole("img", { name: "poster preview" });
   expect(scraperApi.artworkPreview).toHaveBeenCalledWith("run-1", 0, 0);
   fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
   await waitFor(() =>

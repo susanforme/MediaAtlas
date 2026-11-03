@@ -62,7 +62,6 @@ export function ErrorNotice({
                   : t("operationFailed"),
             })}
       </p>
-      {desktop && <p className="mt-1">{t("desktopDescription")}</p>}
       {retry && !desktop && (
         <Button className="mt-3" variant="outline" size="sm" onClick={retry}>
           {t("retry")}

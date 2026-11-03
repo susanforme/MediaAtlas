@@ -36,23 +36,20 @@ export const resources = {
           ]),
       ),
       language: "语言",
-      phase: "本地媒体库",
+
       title: "MediaAtlas 工作区",
-      subtitle: "本地优先的媒体管理，从这里开始。",
-      cardTitle: "桌面连接",
-      cardDescription: "检查应用与本地核心的连接状态。",
+
       loading: "正在加载…",
       connected: "本地核心已连接",
       desktopRequired: "请在桌面应用中打开",
-      desktopDescription:
-        "当前为网页预览。请启动 MediaAtlas 桌面应用来管理本地媒体库。",
+
       invalidResponse: "应用与核心版本不兼容，请更新并重启应用。",
       requestFailed: "无法连接本地核心，请重试。",
       retry: "重新检查",
       checking: "检查中…",
       version: "应用版本",
       reference: "诊断编号",
-      scope: "连接诊断不会扫描或更改媒体文件。",
+
       local: "本地工作区",
       dashboard: "概览",
       library: "媒体库",
@@ -61,7 +58,7 @@ export const resources = {
       tasks: "任务中心",
       settings: "设置",
       diagnostics: "连接诊断",
-      localOnly: "本地扫描 · 原文件保持不变",
+
       browseLibrary: "浏览媒体库",
       addRoot: "添加目录",
       totalMedia: "媒体条目",
@@ -72,8 +69,7 @@ export const resources = {
       missingPoster: "缺少海报",
       missingNfo: "缺少 NFO",
       incompleteMetadata: "元数据不完整",
-      firstSteps:
-        "添加本地目录，扫描后预览候选，再明确确认入库。扫描不会自动访问网络或改写源文件。",
+
       emptyLibrary: "媒体库还是空的",
       emptyLibraryBody: "添加本地目录并确认扫描候选后，媒体会显示在这里。",
       noResults: "没有符合条件的媒体",
@@ -127,7 +123,7 @@ export const resources = {
       fileCount: "{{count}} 个文件",
       rootName: "目录名称",
       rootPath: "绝对路径",
-      pathHelp: "输入本机目录的绝对路径。媒体文件只读；移除目录仅移除索引。",
+
       rootType: "目录媒体类型",
       mixed: "混合类型（显式选择）",
       excludePatterns: "排除规则（每行一条 glob）",
@@ -151,8 +147,7 @@ export const resources = {
       chooseType: "请选择类型",
       startScan: "开始扫描",
       scanRoot: "扫描目录",
-      scanReadOnly:
-        "扫描仅生成本地候选。勾选并确认后才正式入库，原文件始终保持不变。",
+
       chooseRoot: "选择已启用的目录",
       scanStarted: "扫描任务已创建",
       preview: "候选预览",
@@ -168,7 +163,7 @@ export const resources = {
       imported: "已入库",
       pending: "待入库",
       noCandidates: "当前没有候选文件",
-      scanInProgress: "正在扫描，完成后可确认候选。",
+
       chooseTask: "选择任务查看候选",
       cancelTask: "取消任务",
       visited: "已检查文件",
@@ -190,9 +185,7 @@ export const resources = {
       confirmExplanation:
         "仅导入已勾选的 {{count}} 个候选。此操作写入本地媒体库索引，不会移动、重命名或改写媒体文件。",
       applyImport: "确认入库",
-      languageSettings: "界面语言",
-      languageHelp:
-        "仅支持简体中文和美式英语。选择会在重启后保留；媒体原始标题不会被翻译或覆盖。",
+
       adultSettings: "成人媒体独立分区",
       adultHelp:
         "默认隐藏。启用后，可访问独立成人媒体目录与结果；关闭时清除已显示的详情和缓存。",
@@ -247,17 +240,13 @@ export const resources = {
           ]),
       ),
       language: "Language",
-      phase: "Local media library",
+
       title: "MediaAtlas workspace",
-      subtitle: "Your local-first media workspace starts here.",
-      cardTitle: "Desktop connection",
-      cardDescription:
-        "Check the connection between the app and its local core.",
+
       loading: "Loading…",
       connected: "Local core connected",
       desktopRequired: "Open in the desktop app",
-      desktopDescription:
-        "This is a web preview. Start the MediaAtlas desktop app to manage your local media library.",
+
       invalidResponse:
         "The app and core versions are incompatible. Update and restart the app.",
       requestFailed: "Could not connect to the local core. Please try again.",
@@ -265,7 +254,7 @@ export const resources = {
       checking: "Checking…",
       version: "App version",
       reference: "Diagnostic reference",
-      scope: "Connection diagnostics do not scan or modify media files.",
+
       local: "Local workspace",
       dashboard: "Dashboard",
       library: "Media library",
@@ -274,7 +263,7 @@ export const resources = {
       tasks: "Task center",
       settings: "Settings",
       diagnostics: "Diagnostics",
-      localOnly: "Local scanning · Source files preserved",
+
       browseLibrary: "Browse library",
       addRoot: "Add root",
       totalMedia: "Media items",
@@ -285,8 +274,7 @@ export const resources = {
       missingPoster: "Missing poster",
       missingNfo: "Missing NFO",
       incompleteMetadata: "Incomplete metadata",
-      firstSteps:
-        "Add a local root, scan its files, review the candidates, then confirm the selection to import. Scanning does not access the network or rewrite source files.",
+
       emptyLibrary: "Your library is empty",
       emptyLibraryBody:
         "Media appears here after you add a local root and confirm scan candidates.",
@@ -341,8 +329,7 @@ export const resources = {
       fileCount: "{{count}} files",
       rootName: "Root name",
       rootPath: "Absolute path",
-      pathHelp:
-        "Enter an absolute local directory path. Media files are read only; removing a root only removes its index.",
+
       rootType: "Root media type",
       mixed: "Mixed types (explicit selection)",
       excludePatterns: "Exclude patterns (one glob per line)",
@@ -367,8 +354,7 @@ export const resources = {
       chooseType: "Choose a type",
       startScan: "Start scan",
       scanRoot: "Scan root",
-      scanReadOnly:
-        "Scanning only creates local candidates. Media enters the library after you select and confirm candidates; source files are preserved.",
+
       chooseRoot: "Choose an enabled root",
       scanStarted: "Scan task created",
       preview: "Candidate preview",
@@ -384,8 +370,7 @@ export const resources = {
       imported: "Imported",
       pending: "Pending",
       noCandidates: "No candidates available",
-      scanInProgress:
-        "Scanning is in progress. Candidates can be confirmed when scanning finishes.",
+
       chooseTask: "Select a task to review candidates",
       cancelTask: "Cancel task",
       visited: "Files visited",
@@ -408,9 +393,7 @@ export const resources = {
       confirmExplanation:
         "Import only the {{count}} selected candidates. This writes the local library index and does not move, rename or rewrite media files.",
       applyImport: "Import selected",
-      languageSettings: "Interface language",
-      languageHelp:
-        "Simplified Chinese and US English are supported. Your choice persists after restart; original media titles are not translated or overwritten.",
+
       adultSettings: "Separate adult media section",
       adultHelp:
         "Hidden by default. Enable to access separate adult roots and results; disabling clears displayed details and cached queries.",

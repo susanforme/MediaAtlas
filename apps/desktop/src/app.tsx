@@ -102,9 +102,6 @@ function Layout() {
             <Layers3 className="size-5" aria-hidden="true" />
           </span>
           <span className="font-semibold tracking-tight">MediaAtlas</span>
-          <span className="hidden text-xs text-muted-foreground md:block">
-            {t("musicLocalOnly")}
-          </span>
         </div>
         <select
           aria-label={t("language")}

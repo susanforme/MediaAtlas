@@ -197,7 +197,7 @@ export function ScannerPage({
       .map((candidate) => candidate.id) ?? [];
   return (
     <>
-      <PageHeading title={t("scanner")} description={t("scanReadOnly")} />
+      <PageHeading title={t("scanner")} />
       <div className="panel mb-6">
         <div className="flex flex-wrap items-end gap-4">
           <label className="filter-field min-w-64 flex-1">
@@ -260,10 +260,6 @@ export function ScannerPage({
                   {t("candidates")}: {number(task.candidate_count)} ·{" "}
                   {t("warnings")}: {number(task.warnings)}
                 </p>
-                {!canImport &&
-                  (task.state === "queued" || task.state === "running") && (
-                    <p className="mt-2 text-sm">{t("scanInProgress")}</p>
-                  )}
               </div>
               {active(task) && (
                 <Button
