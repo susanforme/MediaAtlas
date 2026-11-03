@@ -26,6 +26,7 @@ static DATABASE_LEASE: std::sync::OnceLock<mediaatlas_infrastructure::maintenanc
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let log_dir = app.path().app_log_dir().map_err(|_| {
                 io::Error::other("Application log directory could not be resolved.")
@@ -76,8 +77,6 @@ pub fn run() {
                 let credentials = std::sync::Arc::new(
                     mediaatlas_infrastructure::credentials::CredentialStore::new(),
                 );
-                // An injected cloud binding is session-only and never copied into native key storage.
-                // It does not authorize trusting an inherited proxy or relaxing NetworkEngine policy.
                 let auth = mediaatlas_infrastructure::provider_auth::ProviderAuthService::new(
                     repository.clone(),
                     credentials.clone(),
@@ -87,18 +86,6 @@ pub fn run() {
                     credentials.clone(),
                 )
                 .with_auth_service(auth.clone());
-                // Preserve the user's existing cloud variable name; never persist an injected proxy secret.
-                if let Ok(value) = std::env::var("TMDB_PRIVATE_TOKEN")
-                    .or_else(|_| std::env::var("TMDB_READ_ACCESS_TOKEN"))
-                {
-                    if !value.is_empty() {
-                        auth.configure_session_binding(
-                            "tmdb",
-                            mediaatlas_infrastructure::network::SecretString::new(value),
-                        )
-                        .await?;
-                    }
-                }
                 for descriptor in
                     mediaatlas_infrastructure::video_providers::VideoProviderHub::descriptors()
                 {
