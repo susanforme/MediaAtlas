@@ -17,22 +17,44 @@ import {
   useFormat,
 } from "../library/shared";
 import "./translations";
+import { ScraperQueueNavigation } from "./queue-navigation";
 import {
   providerChoices,
   providerNames,
   scrapeKind,
   value,
 } from "./scraper-model";
+import { validateScraperSearch } from "./search";
 import { VideoSourceDetails } from "./source-detail";
 import { useScraper } from "./use-scraper";
 
-export function ScraperPage({ mediaId }: { mediaId?: string } = {}) {
+interface ScraperPageProps {
+  mediaId?: string;
+  queue?: string[];
+  onQueueNavigate?: (mediaId: string) => void;
+}
+
+export function ScraperPage({
+  mediaId,
+  queue,
+  onQueueNavigate,
+}: ScraperPageProps = {}) {
+  const context = validateScraperSearch({ media: mediaId, queue });
   return (
-    <ScraperWorkspace key={mediaId ?? "local-selection"} mediaId={mediaId} />
+    <ScraperWorkspace
+      key={context.media ?? "local-selection"}
+      mediaId={context.media}
+      queue={context.queue}
+      onQueueNavigate={onQueueNavigate}
+    />
   );
 }
 
-function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
+function ScraperWorkspace({
+  mediaId,
+  queue,
+  onQueueNavigate,
+}: ScraperPageProps) {
   const { t } = useTranslation();
   const format = useFormat();
   const {
@@ -95,6 +117,14 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
     <>
       <PageHeading title={t("scraper")} />
       <section className="panel mb-6 space-y-4">
+        {queue && mediaId && (
+          <ScraperQueueNavigation
+            mediaId={mediaId}
+            queue={queue}
+            busy={busy}
+            onNavigate={onQueueNavigate}
+          />
+        )}
         {mediaId ? (
           targetDetail.isPending ? (
             <Loading />
@@ -291,7 +321,7 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
             <Button asChild variant="outline" size="sm">
               <Link
                 to="/providers"
-                search={{ from: "scraper", media: target || undefined }}
+                search={{ from: "scraper", media: target || undefined, queue }}
               >
                 {t("scraperConfigureProviders")}
               </Link>
@@ -299,7 +329,7 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
             <Button asChild variant="outline" size="sm">
               <Link
                 to="/settings"
-                search={{ from: "scraper", media: target || undefined }}
+                search={{ from: "scraper", media: target || undefined, queue }}
               >
                 {t("scraperConfigureAuth")}
               </Link>

@@ -18,9 +18,11 @@ const ProviderAuthSettings = lazy(() =>
 
 export function SettingsPage({
   returnMediaId,
+  returnQueue,
   returnToScraper = false,
 }: {
   returnMediaId?: string;
+  returnQueue?: string[];
   returnToScraper?: boolean;
 } = {}) {
   const { t, i18n } = useTranslation();
@@ -29,7 +31,10 @@ export function SettingsPage({
       <PageHeading title={t("settings")}>
         {returnToScraper && (
           <Button asChild variant="outline">
-            <Link to="/scraper" search={{ media: returnMediaId }}>
+            <Link
+              to="/scraper"
+              search={{ media: returnMediaId, queue: returnQueue }}
+            >
               {t("scraperReturn")}
             </Link>
           </Button>

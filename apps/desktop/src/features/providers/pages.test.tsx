@@ -16,13 +16,15 @@ vi.mock("@tanstack/react-router", () => ({
     className,
   }: {
     to: string;
-    search?: Record<string, string | undefined>;
+    search?: Record<string, string | string[] | undefined>;
     children: React.ReactNode;
     className?: string;
   }) => {
     const query = new URLSearchParams(
-      Object.entries(search ?? {}).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
+      Object.entries(search ?? {}).flatMap(([key, value]) =>
+        value === undefined
+          ? []
+          : [[key, typeof value === "string" ? value : JSON.stringify(value)]],
       ),
     ).toString();
     return (
@@ -300,4 +302,36 @@ it("keeps scraper context when continuing from providers to authentication setti
   expect(
     screen.getByRole("link", { name: "Search in Scraper" }),
   ).toHaveAttribute("href", "/scraper?media=media-1");
+});
+
+it("preserves review order in provider return and authentication continuation links", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor.fixture = false;
+  snapshot.providers[0].descriptor.id = "tmdb";
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  show(
+    <ProvidersPage
+      returnToScraper
+      returnMediaId="media-2"
+      returnQueue={["media-1", "media-2"]}
+    />,
+  );
+  await screen.findByRole("link", { name: "Save authentication in Settings" });
+  for (const name of [
+    "Return to scraper",
+    "Search in Scraper",
+    "Save authentication in Settings",
+  ]) {
+    const url = new URL(
+      screen.getByRole("link", { name }).getAttribute("href") ?? "",
+      "https://example.test",
+    );
+    expect(url.searchParams.get("media")).toBe("media-2");
+    expect(JSON.parse(url.searchParams.get("queue") ?? "null")).toEqual([
+      "media-1",
+      "media-2",
+    ]);
+    if (name === "Save authentication in Settings")
+      expect(url.searchParams.get("from")).toBe("scraper");
+  }
 });

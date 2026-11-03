@@ -45,8 +45,7 @@ export function useScraper(mediaId?: string) {
       generation.current += 1;
     };
   }, []);
-  async function guarded<T>(action: () => Promise<T>) {
-    const epoch = generation.current;
+  async function guarded<T>(action: () => Promise<T>, epoch: number) {
     return { value: await action(), epoch };
   }
   const current = (epoch: number) =>
@@ -144,20 +143,22 @@ export function useScraper(mediaId?: string) {
     }
   }
   const run = useMutation({
-    mutationFn: () =>
-      guarded(() =>
-        scraperApi.search({
-          query: {
-            kind,
-            title: title.trim(),
-            year: year === "" ? null : Number(year),
-            external_ids: externalId.trim()
-              ? [{ namespace: namespace.trim(), value: externalId.trim() }]
-              : [],
-            language: i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
-          },
-          providers: selectedProviders,
-        }),
+    mutationFn: (epoch: number) =>
+      guarded(
+        () =>
+          scraperApi.search({
+            query: {
+              kind,
+              title: title.trim(),
+              year: year === "" ? null : Number(year),
+              external_ids: externalId.trim()
+                ? [{ namespace: namespace.trim(), value: externalId.trim() }]
+                : [],
+              language: i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
+            },
+            providers: selectedProviders,
+          }),
+        epoch,
       ),
     onSuccess: ({ value: result, epoch }) => {
       if (!current(epoch)) return;
@@ -166,9 +167,9 @@ export function useScraper(mediaId?: string) {
     },
   });
   const restore = useMutation({
-    mutationFn: (runId: string) =>
-      guarded(() => scraperApi.searchPreview(runId)),
-    onSuccess: ({ value: result, epoch }, runId) => {
+    mutationFn: ({ runId, epoch }: { runId: string; epoch: number }) =>
+      guarded(() => scraperApi.searchPreview(runId), epoch),
+    onSuccess: ({ value: result, epoch }, { runId }) => {
       if (!current(epoch)) return;
       clearDetail();
       setSearch(result);
@@ -190,8 +191,15 @@ export function useScraper(mediaId?: string) {
     },
   });
   const detail = useMutation({
-    mutationFn: ({ runId, index }: { runId: string; index: number }) =>
-      guarded(() => scraperApi.detail(runId, index)),
+    mutationFn: ({
+      runId,
+      index,
+      epoch,
+    }: {
+      runId: string;
+      index: number;
+      epoch: number;
+    }) => guarded(() => scraperApi.detail(runId, index), epoch),
     onSuccess: ({ value: result, epoch }) => {
       if (!current(epoch)) return;
       setMetadata(result);
@@ -200,29 +208,33 @@ export function useScraper(mediaId?: string) {
     },
   });
   const artworkLoad = useMutation({
-    mutationFn: (index: number) =>
-      guarded(() =>
-        scraperApi.artworkPreview(
-          search?.run_id ?? "",
-          candidateIndex ?? 0,
-          index,
-        ),
+    mutationFn: ({ index, epoch }: { index: number; epoch: number }) =>
+      guarded(
+        () =>
+          scraperApi.artworkPreview(
+            search?.run_id ?? "",
+            candidateIndex ?? 0,
+            index,
+          ),
+        epoch,
       ),
-    onSuccess: ({ value: result, epoch }, index) => {
+    onSuccess: ({ value: result, epoch }, { index }) => {
       if (current(epoch))
         setThumbnails((old) => ({ ...old, [index]: result.thumbnail }));
     },
   });
   const merge = useMutation({
-    mutationFn: () =>
-      guarded(() =>
-        scraperApi.preview({
-          run_id: search?.run_id ?? "",
-          candidate_index: candidateIndex ?? 0,
-          media_item_id: target,
-          selected_fields: selectedFields,
-          selected_artwork: selectedArtwork,
-        }),
+    mutationFn: (epoch: number) =>
+      guarded(
+        () =>
+          scraperApi.preview({
+            run_id: search?.run_id ?? "",
+            candidate_index: candidateIndex ?? 0,
+            media_item_id: target,
+            selected_fields: selectedFields,
+            selected_artwork: selectedArtwork,
+          }),
+        epoch,
       ),
     onSuccess: ({ value, epoch }) => {
       if (current(epoch)) setPreview(value);
@@ -238,15 +250,16 @@ export function useScraper(mediaId?: string) {
     },
   });
   const outputPlan = useMutation({
-    mutationFn: () => guarded(() => scraperOutputApi.preview(target)),
+    mutationFn: (epoch: number) =>
+      guarded(() => scraperOutputApi.preview(target), epoch),
     onSuccess: ({ value, epoch }) => {
       if (current(epoch)) setOutput(value);
       else void scraperOutputApi.discard(value.preview_id).catch(() => {});
     },
   });
   const discard = useMutation({
-    mutationFn: () =>
-      guarded(() => scraperOutputApi.discard(output?.preview_id ?? "")),
+    mutationFn: (epoch: number) =>
+      guarded(() => scraperOutputApi.discard(output?.preview_id ?? ""), epoch),
     onSuccess: ({ epoch }) => {
       if (!current(epoch)) return;
       setOutput(undefined);
@@ -341,7 +354,7 @@ export function useScraper(mediaId?: string) {
     if (!search) return;
     clearDetail();
     setCandidateIndex(index);
-    detail.mutate({ runId: search.run_id, index });
+    detail.mutate({ runId: search.run_id, index, epoch: generation.current });
   };
   return {
     kind,
@@ -382,14 +395,25 @@ export function useScraper(mediaId?: string) {
     snapshot,
     history,
     local,
-    run,
-    restore,
+    run: { ...run, mutate: () => run.mutate(generation.current) },
+    restore: {
+      ...restore,
+      mutate: (runId: string) =>
+        restore.mutate({ runId, epoch: generation.current }),
+    },
     detail,
-    artworkLoad,
-    merge,
+    artworkLoad: {
+      ...artworkLoad,
+      mutate: (index: number) =>
+        artworkLoad.mutate({ index, epoch: generation.current }),
+    },
+    merge: { ...merge, mutate: () => merge.mutate(generation.current) },
     confirm,
-    outputPlan,
-    discard,
+    outputPlan: {
+      ...outputPlan,
+      mutate: () => outputPlan.mutate(generation.current),
+    },
+    discard: { ...discard, mutate: () => discard.mutate(generation.current) },
     write,
     busy,
     error,

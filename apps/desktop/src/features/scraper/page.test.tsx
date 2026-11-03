@@ -30,12 +30,14 @@ vi.mock("@tanstack/react-router", () => ({
     children,
   }: {
     to: string;
-    search?: Record<string, string | undefined>;
+    search?: Record<string, string | string[] | undefined>;
     children: React.ReactNode;
   }) => {
     const query = new URLSearchParams(
-      Object.entries(search ?? {}).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
+      Object.entries(search ?? {}).flatMap(([key, value]) =>
+        value === undefined
+          ? []
+          : [[key, typeof value === "string" ? value : JSON.stringify(value)]],
       ),
     ).toString();
     return <a href={to + (query ? `?${query}` : "")}>{children}</a>;
@@ -69,14 +71,22 @@ vi.mock("../../api/scraper", async (original) => ({
     discard: vi.fn(),
   },
 }));
-function show(mediaId?: string) {
+function show(
+  mediaId?: string,
+  queue?: string[],
+  onQueueNavigate?: (mediaId: string) => void,
+) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const content = (id?: string) => (
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={client}>
-        <ScraperPage mediaId={id} />
+        <ScraperPage
+          mediaId={id}
+          queue={queue}
+          onQueueNavigate={onQueueNavigate}
+        />
       </QueryClientProvider>
     </I18nextProvider>
   );
@@ -724,4 +734,150 @@ it("cancels a pending candidate selection and ignores its late response", async 
     screen.queryByText("Selected metadata: Synthetic film"),
   ).not.toBeInTheDocument();
   expect(scraperApi.preview).not.toHaveBeenCalled();
+});
+
+async function chooseQueueCandidate(onNavigate = vi.fn()) {
+  const view = show("media-1", ["media-1", "media-2"], onNavigate);
+  onNavigate.mockImplementation(view.changeTarget);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Search providers" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Choose this candidate" }),
+  );
+  await screen.findByText("Selected metadata: Synthetic film");
+  return view;
+}
+it("navigates the real queue boundaries without searching, choosing or writing automatically", async () => {
+  const navigate = vi.fn();
+  const view = show(undefined, ["media-1", "media-2"], navigate);
+  navigate.mockImplementation(view.changeTarget);
+  await screen.findByText("Review queue · Item 1 of 2");
+  expect(screen.getByRole("button", { name: "Previous item" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Skip current item" }));
+  await screen.findByText("Review queue · Item 2 of 2");
+  expect(navigate).toHaveBeenCalledWith("media-2");
+  expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Skip current item" }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Previous item" }));
+  await screen.findByText("Review queue · Item 1 of 2");
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(scraperApi.detail).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+it("disables queue navigation during a mutation and ignores the cancelled item's late search", async () => {
+  let finish!: (value: typeof syntheticSearch) => void;
+  vi.mocked(scraperApi.search).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const navigate = vi.fn();
+  show("media-1", ["media-1", "media-2"], navigate);
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Search providers" }),
+    ).toBeEnabled(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Skip current item" }),
+  ).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Next item" }));
+  expect(navigate).not.toHaveBeenCalled();
+  await waitFor(() => expect(scraperApi.search).toHaveBeenCalled());
+  fireEvent.click(screen.getByRole("button", { name: "Stop waiting" }));
+  expect(screen.getByRole("button", { name: "Next item" })).toBeEnabled();
+  await act(async () => {
+    finish(syntheticSearch);
+  });
+  expect(
+    screen.queryByRole("button", { name: "Choose this candidate" }),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+});
+it("releases an unexecuted sidecar preview before leaving a queue item", async () => {
+  await chooseQueueCandidate();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Preview NFO and poster output",
+    }),
+  );
+  await screen.findByText("/synthetic/library/film.nfo");
+  fireEvent.click(screen.getByRole("button", { name: "Skip current item" }));
+  await screen.findByText("Review queue · Item 2 of 2");
+  await waitFor(() =>
+    expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
+  );
+  expect(
+    screen.queryByText("/synthetic/library/film.nfo"),
+  ).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).toHaveBeenCalledTimes(1);
+});
+it("discards a late output preview from a queue item after an external route change", async () => {
+  const view = await chooseQueueCandidate();
+  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  let finish!: (value: typeof syntheticOutput) => void;
+  vi.mocked(scraperOutputApi.preview).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Preview NFO and poster output",
+    }),
+  );
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalled());
+  expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled();
+  view.changeTarget("media-2");
+  await act(async () => {
+    finish(syntheticOutput);
+  });
+  await waitFor(() =>
+    expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
+  );
+  expect(
+    screen.queryByText("/synthetic/library/film.nfo"),
+  ).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+it("preserves the whole review queue in both manual provider setup links", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor.id = "tmdb";
+  snapshot.providers[0].config.enabled = false;
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  show("media-2", ["media-1", "media-2"], vi.fn());
+  await screen.findByRole("link", { name: "Configure providers" });
+  for (const [name, path] of [
+    ["Configure providers", "/providers"],
+    ["Configure credentials", "/settings"],
+  ]) {
+    const href = screen.getByRole("link", { name }).getAttribute("href") ?? "";
+    const url = new URL(href, "https://example.test");
+    expect(url.pathname).toBe(path);
+    expect(url.searchParams.get("from")).toBe("scraper");
+    expect(url.searchParams.get("media")).toBe("media-2");
+    expect(JSON.parse(url.searchParams.get("queue") ?? "null")).toEqual([
+      "media-1",
+      "media-2",
+    ]);
+  }
 });

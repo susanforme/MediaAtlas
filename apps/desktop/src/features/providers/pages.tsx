@@ -110,10 +110,12 @@ function ProviderCard({
   provider,
   returnToScraper = false,
   returnMediaId,
+  returnQueue,
 }: {
   provider: ProviderView;
   returnToScraper?: boolean;
   returnMediaId?: string;
+  returnQueue?: string[];
 }) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
@@ -196,7 +198,10 @@ function ProviderCard({
           <Button asChild variant="outline">
             <Link
               to="/scraper"
-              search={{ media: returnToScraper ? returnMediaId : undefined }}
+              search={{
+                media: returnToScraper ? returnMediaId : undefined,
+                queue: returnToScraper ? returnQueue : undefined,
+              }}
             >
               {t("providerOpenScraper")}
             </Link>
@@ -205,7 +210,13 @@ function ProviderCard({
             <Link
               to="/settings"
               search={
-                returnToScraper ? { from: "scraper", media: returnMediaId } : {}
+                returnToScraper
+                  ? {
+                      from: "scraper",
+                      media: returnMediaId,
+                      queue: returnQueue,
+                    }
+                  : {}
               }
             >
               {t("providerOpenAuthSettings")}
@@ -287,9 +298,11 @@ function ProviderCard({
 }
 export function ProvidersPage({
   returnMediaId,
+  returnQueue,
   returnToScraper = false,
 }: {
   returnMediaId?: string;
+  returnQueue?: string[];
   returnToScraper?: boolean;
 } = {}) {
   const { t } = useTranslation();
@@ -299,7 +312,10 @@ export function ProvidersPage({
       <PageHeading title={t("providers")}>
         {returnToScraper && (
           <Button asChild variant="outline">
-            <Link to="/scraper" search={{ media: returnMediaId }}>
+            <Link
+              to="/scraper"
+              search={{ media: returnMediaId, queue: returnQueue }}
+            >
               {t("scraperReturn")}
             </Link>
           </Button>
@@ -320,6 +336,7 @@ export function ProvidersPage({
               provider={provider}
               returnToScraper={returnToScraper}
               returnMediaId={returnMediaId}
+              returnQueue={returnQueue}
             />
           ))}
         </div>
