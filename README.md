@@ -2,7 +2,7 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust，复用系统 WebView，不捆绑 Chromium：Windows 使用系统 WebView2（安装器可下载官方 bootstrapper），macOS 使用系统 WKWebView，Linux deb 依赖系统 WebKitGTK/GTK。
 
-当前候选 **0.1.0-beta.1 / Phase 8 发布与维护**，增加完整数据库 Preview/确认备份、下次启动独占恢复、安全诊断与缓存清理。维护说明见 [数据维护与升级](docs/maintenance.md)，原生包状态见 [发布矩阵](docs/release-matrix.md)。已实现的文件整理与高级媒体库：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，仅生成只读扫描候选；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读消费有可信元数据来源的本地资源，点击资源请求系统关联应用打开，多版本/Part 明确选择。远端音乐版本与尚未刮削资源保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
+当前候选 **0.1.0-beta.2 / Phase 8 发布与维护**，增加完整数据库 Preview/确认备份、下次启动独占恢复、安全诊断与缓存清理。维护说明见 [数据维护与升级](docs/maintenance.md)，原生包状态见 [发布矩阵](docs/release-matrix.md)。已实现的文件整理与高级媒体库：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，仅生成只读扫描候选；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读消费有可信元数据来源的本地资源，点击资源请求系统关联应用打开，多版本/Part 明确选择。远端音乐版本与尚未刮削资源保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
 
 在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；成人区解锁后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
 

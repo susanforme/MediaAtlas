@@ -1,6 +1,6 @@
 # Phase 8 验收：维护与 beta 分发
 
-状态：本地实现及独立维护安全审查已通过；实际 Release 构建和下载验证待执行。本文不以工作流存在、tag 或本地编译替代发布完成。候选版本 `0.1.0-beta.1`；阶段契约见 [phase-8-contract.md](../phase-8-contract.md)，升级和故障恢复见 [maintenance.md](../maintenance.md)，原生构建矩阵见 [release-matrix.md](../release-matrix.md)。
+状态：本地实现及独立维护安全审查已通过；实际 Release 构建和下载验证待执行。本文不以工作流存在、tag 或本地编译替代发布完成。当前候选版本 `0.1.0-beta.2`；阶段契约见 [phase-8-contract.md](../phase-8-contract.md)，升级和故障恢复见 [maintenance.md](../maintenance.md)，原生构建矩阵见 [release-matrix.md](../release-matrix.md)。
 
 ## 交付范围
 
@@ -53,3 +53,7 @@ Linux 本地候选实际验证：标准 Ubuntu 22.04 内使用自身 `/usr` WebK
 LF/CRLF 专项兼容仅允许官方精确 SHA384、完整成功前缀及官方实际 schema；事前一致内部快照与事务 CAS 保全，不接受额外索引/触发器或未知历史，不修改原备份。由独立 reviewer 针对 history 表、快照置换、manifest 与候选绑定反例复核；不泛化为任意 checksum 修复。
 
 界面精简与规则已提交为候选 A `d50b4dd`：删除重复产品介绍/次级标签，保留字段名称、反馈、真实元数据及影响决策的备份/恢复/缓存/会话说明；根 `AGENTS.md` 固定六条规则。完整 `pnpm check` 仍为 156 tests / 25 files、Biome/typecheck/build 通过。P8 source `6db616a` 的 main run [41615154922](https://github.com/susanforme/MediaAtlas/actions/runs/41615154922) 已获得 Windows/macOS/Linux 全部成功；最终截图提交后的新 main CI 与 clean tag 原生分发仍须实际执行。
+
+`v0.1.0-beta.1` 正式构建中 Windows 许可验证器将本机 Path 字符串误作 POSIX 前缀，导致校验提前失败；该 tag 保留，不发布不完整矩阵。beta.2 只修复跨平台清单路径校验并同步版本，原版权材料不变。截图继续准确保留 A/beta.1 候选及其二进制哈希，界面源码没有变化，不把原图标成 beta.2 新构建。正式发布结果以新 tag 的实际完整 native CI 为准。
+
+beta.2 最小修复本地门槛：许可路径 14 项（含 PureWindowsPath、真实祖先 symlink/Windows reparse/junction 分支及 byte/hash/lock 反例）与真实 971 项材料验证通过；release verifier 24、CI helper 7、版本预检通过。同步版本后的 pnpm 156、完整 Rust 303、fmt 与全 workspace/all-target Clippy 0 warnings 均通过，原许可/源码归档 bytes 没有改变。主 CI 使用明确 Python 3.12 并执行该回归；不在普通 main 打包。

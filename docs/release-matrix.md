@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持原有前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 仍使用 `--no-bundle`。首次候选版本是 `0.1.0-beta.1`，实际发布前应重新核对远端 tag 未碰撞及全部版本字段一致；本文不表示 tag 已建立或安装包已产出。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持原有前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 仍使用 `--no-bundle`。当前候选版本是 `0.1.0-beta.2`。`v0.1.0-beta.1` 保留不移动：首次正式构建在 Windows 许可路径检查中暴露跨平台分隔符错误，未发布。beta.2 修复验证器并同步版本；正式产物仍须该新 tag 的实际构建与下载验证。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |
@@ -56,7 +56,7 @@
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 actionlint .github/workflows/release.yml
-python3 scripts/release/release.py preflight --tag v0.1.0-beta.1
+python3 scripts/release/release.py preflight --tag v0.1.0-beta.2
 ```
 
 首次准备时 24 个 verifier 测试与 actionlint 1.7.12 已在本地通过，合并 Tauri release 配置通过官方 JSON schema 验证；preflight 需 P8 的版本统一及真实许可文件齐全。模拟 fixture 测试验证发布校验器的拒绝路径和完整汇总，不把 fixture 当作 MediaAtlas 安装包通过证据。

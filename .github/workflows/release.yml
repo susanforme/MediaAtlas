@@ -31,6 +31,7 @@ jobs:
           python-version: "3.12"
       - run: python -m unittest discover -s scripts/release -p 'test_*.py' -v
       - run: python -m unittest discover -s scripts/ci -p 'test_*.py' -v
+      - run: python -m unittest discover -s scripts/licenses -p 'test_*.py' -v
       - name: Verify complete locked dependency license materials
         run: python scripts/licenses/verify.py
       - id: preflight

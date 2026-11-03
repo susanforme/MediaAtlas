@@ -2750,7 +2750,7 @@ dependencies = [
 
 [[package]]
 name = "mediaatlas-application"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "chrono",
  "mediaatlas-domain",
@@ -2761,7 +2761,7 @@ dependencies = [
 
 [[package]]
 name = "mediaatlas-desktop"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "mediaatlas-application",
  "mediaatlas-desktop-bridge",
@@ -2776,7 +2776,7 @@ dependencies = [
 
 [[package]]
 name = "mediaatlas-desktop-bridge"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "mediaatlas-application",
  "mediaatlas-domain",
@@ -2787,7 +2787,7 @@ dependencies = [
 
 [[package]]
 name = "mediaatlas-domain"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "chrono",
  "serde",
@@ -2797,7 +2797,7 @@ dependencies = [
 
 [[package]]
 name = "mediaatlas-infrastructure"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "atomicwrites",
  "base64 0.22.1",
@@ -2836,7 +2836,7 @@ dependencies = [
 
 [[package]]
 name = "mediaatlas-media-scanner"
-version = "0.1.0-beta.1"
+version = "0.1.0-beta.2"
 dependencies = [
  "chrono",
  "globset",
