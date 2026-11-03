@@ -166,10 +166,10 @@ async fn graph_roundtrip_has_distinct_discs_recordings_aliases_credits_and_ident
         imported.release_disambiguation.as_deref(),
         Some("Deluxe remaster")
     );
-    assert_eq!(music.list().await.unwrap()[0].track_count, 2);
+    assert_eq!(music.list_tools().await.unwrap()[0].track_count, 2);
     assert_eq!(
         music
-            .artist(graph.artists[0].media_item_id)
+            .artist_tools(graph.artists[0].media_item_id)
             .await
             .unwrap()
             .releases
@@ -217,7 +217,7 @@ async fn equal_titles_group_and_barcode_never_merge_releases_or_rebind_file() {
     }
     music.import_release(first.clone()).await.unwrap();
     music.import_release(second.clone()).await.unwrap();
-    assert_eq!(music.list().await.unwrap().len(), 2);
+    assert_eq!(music.list_tools().await.unwrap().len(), 2);
     let file = local_file(&repo, &dir).await;
     music
         .link_track(first.tracks[0].media_item_id, file.id)
@@ -235,7 +235,7 @@ async fn equal_titles_group_and_barcode_never_merge_releases_or_rebind_file() {
     );
     assert_eq!(
         music
-            .album(first.release.media_item_id)
+            .album_tools(first.release.media_item_id)
             .await
             .unwrap()
             .files[0]
@@ -287,7 +287,7 @@ async fn invalid_graph_and_identity_collisions_are_atomic() {
         music.import_release(invalid).await,
         Err(RepositoryError::InvalidInput)
     );
-    assert!(music.list().await.unwrap().is_empty());
+    assert!(music.list_tools().await.unwrap().is_empty());
     music.import_release(graph.clone()).await.unwrap();
     let mut other = graph.clone();
     other.release.media_item_id = Uuid::new_v4();
@@ -303,7 +303,7 @@ async fn invalid_graph_and_identity_collisions_are_atomic() {
         music.import_release(other).await,
         Err(RepositoryError::Conflict)
     );
-    assert_eq!(music.list().await.unwrap().len(), 1);
+    assert_eq!(music.list_tools().await.unwrap().len(), 1);
     let count: i64 = sqlx::query_scalar("SELECT count(*) FROM music_releases")
         .fetch_one(repo.pool())
         .await
@@ -330,10 +330,10 @@ async fn linked_files_recheck_adult_root_and_persistent_isolation_after_reclassi
         ensure_music_file(&repo, file.id).await,
         Err(RepositoryError::InvalidInput)
     );
-    assert!(music.list().await.unwrap().is_empty());
+    assert!(music.list_tools().await.unwrap().is_empty());
     assert!(music.available_files().await.unwrap().is_empty());
     assert_eq!(
-        music.album(graph.release.media_item_id).await,
+        music.album_tools(graph.release.media_item_id).await,
         Err(RepositoryError::InvalidInput)
     );
     sqlx::query("UPDATE library_roots SET kind='music_track' WHERE id=?")
@@ -443,7 +443,7 @@ async fn release_mbid_cannot_be_imported_under_a_different_local_identity() {
         music.import_release(second).await,
         Err(RepositoryError::Conflict)
     );
-    assert_eq!(music.list().await.unwrap().len(), 1);
+    assert_eq!(music.list_tools().await.unwrap().len(), 1);
 }
 #[tokio::test]
 async fn artist_hides_when_associated_album_is_reclassified_and_bad_payload_is_reported() {
@@ -461,7 +461,7 @@ async fn artist_hides_when_associated_album_is_reclassified_and_bad_payload_is_r
         .await
         .unwrap();
     assert_eq!(
-        music.artist(graph.artists[0].media_item_id).await,
+        music.artist_tools(graph.artists[0].media_item_id).await,
         Err(RepositoryError::InvalidInput)
     );
     sqlx::query("UPDATE media_items SET adult_isolated=0 WHERE id=?")
@@ -474,7 +474,7 @@ async fn artist_hides_when_associated_album_is_reclassified_and_bad_payload_is_r
         .execute(repo.pool())
         .await
         .unwrap();
-    assert_eq!(music.list().await, Err(RepositoryError::CorruptData));
+    assert_eq!(music.list_tools().await, Err(RepositoryError::CorruptData));
     assert_eq!(
         music.available_files().await,
         Err(RepositoryError::CorruptData)
@@ -518,4 +518,51 @@ async fn protected_release_date_and_disambiguation_keep_raw_and_typed_values_con
         loaded.release_disambiguation.as_deref(),
         Some("Local edition")
     );
+}
+
+#[tokio::test]
+async fn remote_saved_graphs_stay_in_tools_until_a_current_authorized_local_file_is_linked() {
+    let (dir, repo, music) = database().await;
+    let graph = graph();
+    music.import_release(graph.clone()).await.unwrap();
+    assert!(music.list().await.unwrap().is_empty());
+    assert_eq!(music.list_tools().await.unwrap().len(), 1);
+    assert_eq!(
+        music.album(graph.release.media_item_id).await,
+        Err(RepositoryError::NotFound)
+    );
+    assert_eq!(
+        music.artist(graph.artists[0].media_item_id).await,
+        Err(RepositoryError::NotFound)
+    );
+    let file = local_file(&repo, &dir).await;
+    std::fs::write(dir.path().join("song.flac"), b"temporary fixture bytes").unwrap();
+    music
+        .link_track(graph.tracks[0].media_item_id, file.id)
+        .await
+        .unwrap();
+    assert_eq!(music.list().await.unwrap().len(), 1);
+    assert_eq!(
+        music
+            .album(graph.release.media_item_id)
+            .await
+            .unwrap()
+            .files[0]
+            .file_id,
+        file.id
+    );
+    assert_eq!(
+        music
+            .artist(graph.artists[0].media_item_id)
+            .await
+            .unwrap()
+            .releases
+            .len(),
+        1
+    );
+    sqlx::query("UPDATE library_roots SET enabled=0")
+        .execute(repo.pool())
+        .await
+        .unwrap();
+    assert!(music.list().await.unwrap().is_empty());
 }

@@ -63,8 +63,8 @@ export function MusicToolsPage() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const albums = useQuery({
-    queryKey: ["music-library"],
-    queryFn: musicApi.library,
+    queryKey: ["music-tools-library"],
+    queryFn: musicApi.toolsLibrary,
   });
   const [albumId, setAlbumId] = useState("");
   const [query, setQuery] = useState("");
@@ -87,6 +87,7 @@ export function MusicToolsPage() {
       setSelected(graph);
       setAlbumId(graph.release.media_item_id);
       void client.invalidateQueries({ queryKey: ["music-library"] });
+      void client.invalidateQueries({ queryKey: ["music-tools-library"] });
     },
   });
   return (
@@ -493,8 +494,8 @@ function LocalAudioFiles({ graph }: { graph: MusicReleaseGraph }) {
 export function MusicAlbumTools({ releaseId }: { releaseId: string }) {
   const { t } = useTranslation();
   const album = useQuery({
-    queryKey: ["music-album", releaseId],
-    queryFn: () => musicApi.album(releaseId),
+    queryKey: ["music-tools-album", releaseId],
+    queryFn: () => musicApi.toolsAlbum(releaseId),
   });
   const [file, setFile] = useState("");
   if (album.isPending) return <Loading />;
@@ -600,6 +601,10 @@ function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
       void client.invalidateQueries({
         queryKey: ["music-album", graph.release.media_item_id],
       });
+      void client.invalidateQueries({
+        queryKey: ["music-tools-album", graph.release.media_item_id],
+      });
+      void client.invalidateQueries({ queryKey: ["music-library"] });
     },
   });
   return (

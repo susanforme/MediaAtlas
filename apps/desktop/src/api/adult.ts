@@ -290,6 +290,10 @@ function mediaDetail(v: unknown): v is MediaDetail {
   return mediaDetailGuard(v) && v.media.kind === "adult_video";
 }
 export const adultApi = {
+  toolsMedia: (value: BrowseQuery) =>
+    request("adult_tools_media", value, mediaPage),
+  toolsDetail: (mediaId: string) =>
+    request("adult_tools_detail", { media_id: mediaId }, mediaDetail),
   tasks: () =>
     request("adult_tasks", {}, (v): v is ScanTask[] => list(v, scanTaskGuard)),
   recent: () =>

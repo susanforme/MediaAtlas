@@ -858,6 +858,8 @@ JAV：`adult_video_metadata`、`adult_catalog_numbers`、`adult_series`、`adult
 
 ### Phase 7 — File Organizer & Advanced Library
 
+P7 实施、自动化证据与平台边界见 [P7 验收](acceptance/phase-7.md)；下面保留原始规划任务，完成状态以验收记录为准。
+
 **目标：** 完成可控的文件整理能力。
 
 任务：
@@ -872,6 +874,8 @@ JAV：`adult_video_metadata`、`adult_catalog_numbers`、`adult_series`、`adult
 验收：所有文件操作先 Preview；异常中断后可恢复；不会误删源文件；同一文件不会重复执行相同整理操作。
 
 ### Phase 8 — Release & Cross-platform
+
+用户最新授权：完成 P7/P8 实现及必要检查后创建 beta tag、生成 Release 可用包。由 P8/主代理按 Tauri/社区成熟平台支持并行构建 Windows/Linux/macOS x86/ARM 组合，不强求未成熟组合；不把配置存在视作平台运行已验收。
 
 **目标：** 形成可发布产品。
 

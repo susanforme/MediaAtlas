@@ -820,7 +820,11 @@ mod tests {
                     let count = stream.read(&mut request).await.unwrap();
                     let request = String::from_utf8_lossy(&request[..count]);
                     let path = request.lines().next().unwrap_or("").to_owned();
-                    let body = if path.contains("/search/movie") {
+                    let body = if path.contains("/search/tv") {
+                        r#"{"results":[{"id":52,"name":"Example Show","original_name":"Example Show","first_air_date":"2020-01-01","adult":false}]}"#
+                    } else if path.contains("/tv/52") {
+                        r#"{"id":52,"name":"Confirmed show","original_name":"Example Show","first_air_date":"2020-01-01","adult":false,"overview":"Provider TV overview","genres":[{"name":"Drama"}],"production_companies":[],"credits":{"cast":[]},"images":{"posters":[],"backdrops":[]},"external_ids":{"tvdb_id":52},"seasons":[]}"#
+                    } else if path.contains("/search/movie") {
                         r#"{"results":[{"id":42,"title":"Example","original_title":"Example","release_date":"2020-01-01","adult":false},{"id":43,"title":"Example","release_date":"1980-01-01","adult":false}]}"#
                     } else if path.contains("/movie/42") {
                         if delayed.load(Ordering::SeqCst) {
@@ -1593,6 +1597,247 @@ mod tests {
             .unwrap()
             .credential_ref
             .is_none());
+        s.server.abort();
+    }
+    #[tokio::test]
+    async fn confirmed_tmdb_series_completes_only_typed_local_episode_hierarchy() {
+        use mediaatlas_application::library::{
+            BrowseQuery, ConfirmInput, MediaDetailInput, PreviewInput, RootInput,
+        };
+        let s = setup().await;
+        let media_path = s.dir.path().join("tv");
+        std::fs::create_dir(&media_path).unwrap();
+        for name in [
+            "Example.Show.S01E01.mkv",
+            "Example.Show.S02E01.mkv",
+            "Other.Show.S01E01.mkv",
+        ] {
+            std::fs::write(media_path.join(name), b"temporary episode fixture").unwrap();
+        }
+        let browse = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("thumbs"));
+        let root = browse
+            .save_root(&RootInput {
+                id: None,
+                name: "TV".into(),
+                path: media_path.to_str().unwrap().into(),
+                kind: Some(MediaKind::TvSeries),
+                enabled: true,
+                exclude_patterns: vec![],
+            })
+            .await
+            .unwrap();
+        let scans = crate::scan_service::ScanService::new(s.repo.clone());
+        let scan = scans.start(root.root.id).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if scans
+                    .list_tasks(false)
+                    .await
+                    .unwrap()
+                    .iter()
+                    .any(|t| t.id == scan.id && t.state == TaskState::WaitingForUser)
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let preview = scans
+            .preview(&PreviewInput {
+                task_id: scan.id,
+                cursor: None,
+                limit: 100,
+                include_adult: false,
+            })
+            .await
+            .unwrap();
+        scans
+            .confirm(&ConfirmInput {
+                task_id: scan.id,
+                candidate_ids: preview.items.iter().map(|c| c.id).collect(),
+            })
+            .await
+            .unwrap();
+        assert!(browse
+            .list_media(&Default::default())
+            .await
+            .unwrap()
+            .items
+            .is_empty());
+        let series = browse
+            .tools_list_media(&BrowseQuery {
+                kind: Some(MediaKind::TvSeries),
+                root_id: Some(root.root.id),
+                ..Default::default()
+            })
+            .await
+            .unwrap()
+            .items
+            .into_iter()
+            .find(|i| i.media.title == "Example Show")
+            .unwrap()
+            .media;
+        let search = s
+            .service
+            .search(ScraperSearchRequest {
+                query: VideoQuery::Tv {
+                    title: "Example Show".into(),
+                    year: Some(2020),
+                    external_ids: vec![],
+                    language: "en-US".into(),
+                },
+                providers: vec!["tmdb".into()],
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            s.service.detail(search.run_id, 0).await.unwrap(),
+            VideoMetadata::Tv(_)
+        ));
+        let mut selected = selection(search.run_id, series.id);
+        selected.selected_fields.push("genres".into());
+        let plan = s.service.preview(selected).await.unwrap();
+        s.service.confirm(plan.preview_id).await.unwrap();
+        let query = BrowseQuery {
+            root_id: Some(root.root.id),
+            kind: Some(MediaKind::TvSeries),
+            ..Default::default()
+        };
+        let ready = browse.list_media(&query).await.unwrap();
+        assert_eq!(ready.items.len(), 1);
+        assert_eq!(ready.items[0].media.title, "Confirmed show");
+        assert_eq!(
+            browse.facets(&query).await.unwrap().genres[0].value,
+            "Drama"
+        );
+        let detail = browse
+            .get_media(&MediaDetailInput {
+                media_id: series.id,
+                include_adult: false,
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            detail.files.len(),
+            2,
+            "series exposes exact explicitly selectable local episodes"
+        );
+        struct StubVideoOpener(std::sync::atomic::AtomicUsize);
+        impl crate::video_open::NativeVideoOpener for StubVideoOpener {
+            fn open(&self, path: &std::path::Path) -> std::io::Result<()> {
+                assert!(path.is_file());
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+        let opener = Arc::new(StubVideoOpener(std::sync::atomic::AtomicUsize::new(0)));
+        let native =
+            crate::video_open::VideoOpenService::with_opener(s.repo.clone(), opener.clone());
+        for file in &detail.files {
+            assert!(native.open(file.id).await.unwrap().requested);
+        }
+        assert_eq!(opener.0.load(Ordering::SeqCst), 2);
+        for file in &detail.files {
+            assert!(browse
+                .get_media(&MediaDetailInput {
+                    media_id: file.media_item_id,
+                    include_adult: false
+                })
+                .await
+                .is_ok());
+        }
+        // A confirmed parent associated with an adult Root cannot authorize an
+        // ordinary episode, even when a legacy low-level update omitted its marker.
+        let adult_path = s.dir.path().join("private-root");
+        std::fs::create_dir(&adult_path).unwrap();
+        let adult_root = LibraryRoot {
+            id: Uuid::new_v4(),
+            name: "Private".into(),
+            path: adult_path.to_str().unwrap().into(),
+            path_style: PathStyle::Posix,
+            kind: Some(MediaKind::AdultVideo),
+            enabled: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        s.repo.save_root(&adult_root).await.unwrap();
+        let private_file = MediaFile {
+            id: Uuid::new_v4(),
+            media_item_id: series.id,
+            root_id: adult_root.id,
+            relative_path: "private.nfo".into(),
+            size_bytes: 0,
+            modified_at: None,
+            part: None,
+        };
+        s.repo.save_file(&private_file).await.unwrap();
+        // Even independently saved leaf metadata cannot expose an adult-associated
+        // hierarchy through ordinary consumption.
+        sqlx::query("INSERT INTO local_metadata_provenance(media_item_id,source_kind,source_reference,confirmed_at) VALUES(?,'nfo','previously confirmed leaf fixture',0)").bind(detail.files[0].media_item_id.to_string()).execute(s.repo.pool()).await.unwrap();
+        for file in &detail.files {
+            assert!(browse
+                .get_media(&MediaDetailInput {
+                    media_id: file.media_item_id,
+                    include_adult: false
+                })
+                .await
+                .is_err());
+            assert!(native.open(file.id).await.is_err());
+        }
+        sqlx::query("DELETE FROM local_metadata_provenance WHERE media_item_id=?")
+            .bind(detail.files[0].media_item_id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM media_files WHERE id=?")
+            .bind(private_file.id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        // Intermediate Season scope is checked too, not just source Series and leaf.
+        let season: String = sqlx::query_scalar(
+            "SELECT parent_id FROM media_relations WHERE child_id=? AND relation_type='episode'",
+        )
+        .bind(detail.files[0].media_item_id.to_string())
+        .fetch_one(s.repo.pool())
+        .await
+        .unwrap();
+        sqlx::query("UPDATE media_items SET adult_isolated=1 WHERE id=?")
+            .bind(&season)
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        assert!(browse
+            .get_media(&MediaDetailInput {
+                media_id: detail.files[0].media_item_id,
+                include_adult: false
+            })
+            .await
+            .is_err());
+        assert!(native.open(detail.files[0].id).await.is_err());
+        sqlx::query("UPDATE media_items SET adult_isolated=0 WHERE id=?")
+            .bind(&season)
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        // An arbitrary relation cannot transfer provider completion to a different work.
+        sqlx::query("UPDATE media_relations SET relation_type='anime_base' WHERE parent_id=?")
+            .bind(series.id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        assert!(browse.list_media(&query).await.unwrap().items.is_empty());
+        for file in &detail.files {
+            assert!(browse
+                .get_media(&MediaDetailInput {
+                    media_id: file.media_item_id,
+                    include_adult: false
+                })
+                .await
+                .is_err());
+        }
         s.server.abort();
     }
 }

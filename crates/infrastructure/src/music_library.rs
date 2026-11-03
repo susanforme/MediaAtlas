@@ -22,6 +22,13 @@ impl MusicLibraryService {
     }
 
     pub async fn list(&self) -> Result<Vec<MusicAlbumView>, RepositoryError> {
+        self.list_scope(false).await
+    }
+    /// Saved remote releases remain available to explicit import/link tools.
+    pub async fn list_tools(&self) -> Result<Vec<MusicAlbumView>, RepositoryError> {
+        self.list_scope(true).await
+    }
+    async fn list_scope(&self, tools: bool) -> Result<Vec<MusicAlbumView>, RepositoryError> {
         let ids: Vec<String> =
             sqlx::query_scalar("SELECT media_item_id FROM music_releases ORDER BY media_item_id")
                 .fetch_all(self.repo.pool())
@@ -29,7 +36,7 @@ impl MusicLibraryService {
         let mut albums = Vec::new();
         for id in ids {
             let id = uuid(&id)?;
-            match self.album(id).await {
+            match self.album_scope(id, tools).await {
                 Ok(graph) => albums.push(album_view(&graph)),
                 Err(RepositoryError::InvalidInput | RepositoryError::NotFound) => {}
                 Err(error) => return Err(error),
@@ -38,13 +45,39 @@ impl MusicLibraryService {
         Ok(albums)
     }
     pub async fn album(&self, release_id: Uuid) -> Result<MusicReleaseGraph, RepositoryError> {
+        self.album_scope(release_id, false).await
+    }
+    pub async fn album_tools(
+        &self,
+        release_id: Uuid,
+    ) -> Result<MusicReleaseGraph, RepositoryError> {
+        self.album_scope(release_id, true).await
+    }
+    async fn album_scope(
+        &self,
+        release_id: Uuid,
+        tools: bool,
+    ) -> Result<MusicReleaseGraph, RepositoryError> {
         let mut tx = self.repo.pool().begin().await?;
         let graph = load_graph(&mut tx, release_id).await?;
         ensure_graph_access(&mut tx, &graph).await?;
+        if !tools {
+            ensure_release_local(&mut tx, release_id).await?;
+        }
         tx.commit().await?;
         Ok(graph)
     }
     pub async fn artist(&self, artist_id: Uuid) -> Result<MusicArtistView, RepositoryError> {
+        self.artist_scope(artist_id, false).await
+    }
+    pub async fn artist_tools(&self, artist_id: Uuid) -> Result<MusicArtistView, RepositoryError> {
+        self.artist_scope(artist_id, true).await
+    }
+    async fn artist_scope(
+        &self,
+        artist_id: Uuid,
+        tools: bool,
+    ) -> Result<MusicArtistView, RepositoryError> {
         let mut tx = self.repo.pool().begin().await?;
         ensure_item(&mut tx, artist_id, MediaKind::MusicArtist).await?;
         let artist = load_entity(&mut tx, "music_artists", artist_id).await?;
@@ -55,8 +88,8 @@ impl MusicLibraryService {
         }
         tx.commit().await?;
         let mut releases = Vec::new();
-        for album in self.list().await? {
-            let graph = self.album(album.release_id).await?;
+        for album in self.list_scope(tools).await? {
+            let graph = self.album_scope(album.release_id, tools).await?;
             if graph
                 .artists
                 .iter()
@@ -64,6 +97,9 @@ impl MusicLibraryService {
             {
                 releases.push(album);
             }
+        }
+        if !tools && releases.is_empty() {
+            return Err(RepositoryError::NotFound);
         }
         Ok(MusicArtistView { artist, releases })
     }
@@ -689,6 +725,33 @@ pub(crate) async fn ensure_graph_access(
         ensure_file_tx(tx, file.file_id).await?;
     }
     Ok(())
+}
+
+async fn ensure_release_local(
+    tx: &mut Transaction<'_, Sqlite>,
+    release_id: Uuid,
+) -> Result<(), RepositoryError> {
+    let files: Vec<String> = sqlx::query_scalar("SELECT tf.file_id FROM music_track_files tf JOIN music_tracks t ON t.media_item_id=tf.track_id JOIN music_media mm ON mm.id=t.medium_id JOIN media_files f ON f.id=tf.file_id WHERE mm.release_id=? AND (lower(f.relative_path) LIKE '%.mp3' OR lower(f.relative_path) LIKE '%.flac' OR lower(f.relative_path) LIKE '%.m4a' OR lower(f.relative_path) LIKE '%.ogg' OR lower(f.relative_path) LIKE '%.opus' OR lower(f.relative_path) LIKE '%.wav')").bind(release_id.to_string()).fetch_all(&mut **tx).await?;
+    if files.is_empty() {
+        return Err(RepositoryError::NotFound);
+    }
+    for file in files {
+        ensure_file_tx(tx, uuid(&file)?).await?;
+    }
+    Ok(())
+}
+
+/// Consumption opening additionally requires a selected, imported concrete release.
+pub(crate) async fn ensure_ready_music_file_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    file_id: Uuid,
+) -> Result<(MediaFile, LibraryRoot), RepositoryError> {
+    let current = ensure_music_file_tx(tx, file_id).await?;
+    let linked: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM music_track_files tf JOIN music_tracks t ON t.media_item_id=tf.track_id JOIN music_media mm ON mm.id=t.medium_id JOIN music_releases r ON r.media_item_id=mm.release_id JOIN music_identifiers i ON i.media_item_id=r.media_item_id AND i.kind='music_brainz' AND i.namespace='release' WHERE tf.file_id=?)").bind(file_id.to_string()).fetch_one(&mut **tx).await?;
+    if !linked {
+        return Err(RepositoryError::InvalidInput);
+    }
+    Ok(current)
 }
 
 /// Resolve a scanned audio file only after checking current ordinary-lane authority.

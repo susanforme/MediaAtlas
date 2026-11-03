@@ -72,7 +72,7 @@ export function ScraperPage() {
     queryKey: ["scraper-local", metadata?.kind, localQuery],
     enabled: Boolean(metadata),
     queryFn: () =>
-      libraryApi.media({
+      libraryApi.toolsMedia({
         ...defaultBrowse(false),
         kind: metadata?.kind === "tv" ? "tv_series" : (metadata?.kind ?? null),
         query: localQuery || null,

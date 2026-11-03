@@ -131,12 +131,19 @@ pub(super) async fn import_file(
         Uuid::new_v4()
     };
     let now = Utc::now().timestamp_millis();
+    let established: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM local_metadata_provenance WHERE media_item_id=?) OR EXISTS(SELECT 1 FROM video_metadata_sources WHERE media_item_id=?) OR EXISTS(SELECT 1 FROM adult_metadata_sources WHERE media_item_id=?)").bind(id.to_string()).bind(id.to_string()).bind(id.to_string()).fetch_one(&mut **tx).await?;
+    let preserve_title = established && !file.local_metadata.fields.contains_key("title");
+    let preserve_year = established && !file.local_metadata.fields.contains_key("year");
     sqlx::query("INSERT INTO media_items(id,kind,title,original_title,year,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING")
         .bind(id.to_string()).bind(file.parsed.kind.as_str()).bind(title).bind(file.local_metadata.fields.get("original_title").and_then(Value::as_str)).bind(year).bind(now).bind(now).execute(&mut **tx).await?;
-    // Existing manual/locked title and year fields retain their values.
-    sqlx::query("UPDATE media_items SET title=?,updated_at=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM metadata_values WHERE media_item_id=? AND field_key='title' AND (is_locked=1 OR is_user_modified=1))")
+    // A bare rescan updates file associations without replacing previously
+    // confirmed provider/NFO metadata with a filename guess.
+    if !preserve_title {
+        // Existing manual/locked title and year fields retain their values.
+        sqlx::query("UPDATE media_items SET title=?,updated_at=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM metadata_values WHERE media_item_id=? AND field_key='title' AND (is_locked=1 OR is_user_modified=1))")
         .bind(title).bind(now).bind(id.to_string()).bind(id.to_string()).execute(&mut **tx).await?;
-    if year.is_some() {
+    }
+    if !preserve_year && year.is_some() {
         sqlx::query("UPDATE media_items SET year=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM metadata_values WHERE media_item_id=? AND field_key='year' AND (is_locked=1 OR is_user_modified=1))")
         .bind(year).bind(id.to_string()).bind(id.to_string()).execute(&mut **tx).await?;
     }
@@ -186,11 +193,15 @@ pub(super) async fn import_file(
     }
     let source = format!("library://{}/{}", root.id, file.relative_path);
     let mut fields = file.local_metadata.fields.clone();
-    fields
-        .entry("title".into())
-        .or_insert_with(|| Value::String(title.to_owned()));
-    if let Some(year) = year {
-        fields.entry("year".into()).or_insert(Value::from(year));
+    if !preserve_title {
+        fields
+            .entry("title".into())
+            .or_insert_with(|| Value::String(title.to_owned()));
+    }
+    if !preserve_year {
+        if let Some(year) = year {
+            fields.entry("year".into()).or_insert(Value::from(year));
+        }
     }
     if let Some(value) = &file.parsed.series_title {
         fields
@@ -234,6 +245,26 @@ pub(super) async fn import_file(
         let uri = format!("library://{}/{}", root.id, artwork.relative_path);
         sqlx::query("INSERT INTO artworks(id,media_item_id,kind,cache_path,source_url,provider_id,width,height,content_hash,created_at) SELECT ?,?,?,NULL,?,'local',NULL,NULL,NULL,? WHERE NOT EXISTS(SELECT 1 FROM artworks WHERE media_item_id=? AND kind=? AND source_url=?)")
             .bind(Uuid::new_v4().to_string()).bind(id.to_string()).bind(artwork.kind.as_str()).bind(&uri).bind(now).bind(id.to_string()).bind(artwork.kind.as_str()).bind(&uri).execute(&mut **tx).await?;
+    }
+    // This map contains only parsed local NFO/audio tags. Inferred filename
+    // fields are added to a separate copy above and do not authorize readiness.
+    if file
+        .local_metadata
+        .fields
+        .get("title")
+        .and_then(Value::as_str)
+        .is_some_and(|t| !t.trim().is_empty())
+    {
+        let source_kind = if file
+            .associated_files
+            .iter()
+            .any(|p| p.to_ascii_lowercase().ends_with(".nfo"))
+        {
+            "nfo"
+        } else {
+            "audio_tags"
+        };
+        crate::library_ready::record_local(tx, id, source_kind, &source).await?;
     }
     prune_stale_companion_indexes(tx, root, id).await?;
     add_hierarchy(tx, root, file, id, now).await?;

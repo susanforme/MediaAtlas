@@ -416,6 +416,15 @@ export const defaultBrowse = (includeAdult = false): BrowseQuery => ({
   include_adult: includeAdult,
 });
 export const libraryApi = {
+  toolsMedia: (input: BrowseQuery) =>
+    request(
+      "library_tools_media",
+      input,
+      (v): v is MediaPage =>
+        record(v) && arrayOf(card)(v.items) && optionalText(v.next_cursor),
+    ),
+  toolsDetail: (mediaId: string) =>
+    request("library_tools_detail", { media_id: mediaId }, detail),
   roots: (includeAdult: boolean) =>
     request(
       "library_list_roots",

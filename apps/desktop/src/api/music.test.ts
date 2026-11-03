@@ -114,3 +114,14 @@ it("loads saved covers through local IPC and accepts a missing cover", async () 
     code: "invalid_response",
   });
 });
+
+it("separates saved remote Music tool graphs from local consumption", async () => {
+  reply([]);
+  await musicApi.toolsLibrary();
+  expect(invoke).toHaveBeenLastCalledWith("music_tools_library", { input: {} });
+  reply(syntheticMusicGraph);
+  await musicApi.toolsAlbum("release-1");
+  expect(invoke).toHaveBeenLastCalledWith("music_tools_album", {
+    input: { release_id: "release-1" },
+  });
+});

@@ -34,6 +34,7 @@ pub fn run() {
                 .map_err(|_| io::Error::other("Application data directory is unavailable."))?;
             let desktop = tauri::async_runtime::block_on(async {
                 let repository = LibraryRepository::open(&data_dir.join("library.sqlite")).await?;
+                mediaatlas_infrastructure::library_ready::backfill_local_nfo(&repository).await?;
                 let scans = ScanService::new(repository.clone());
                 let providers =
                     mediaatlas_infrastructure::providers::ProviderService::new(repository.clone())
@@ -148,8 +149,27 @@ pub fn run() {
                         providers.clone(),
                     );
                 scans.recover_interrupted().await?;
+                let organization =
+                    mediaatlas_infrastructure::organization::OrganizationService::new(
+                        repository.clone(),
+                    );
+                organization.recover_interrupted().await?;
+                let watcher = mediaatlas_infrastructure::watcher::WatcherService::new(
+                    repository.clone(),
+                    scans.clone(),
+                );
+                watcher.restore().await?;
                 Ok::<_, mediaatlas_infrastructure::library::RepositoryError>(state::DesktopState {
                     repository: repository.clone(),
+                    organization,
+                    watcher,
+                    health: mediaatlas_infrastructure::health::HealthService::new(
+                        repository.clone(),
+                    )
+                    .with_artwork_cache(data_dir.join("artwork-cache").join("general")),
+                    video_open: mediaatlas_infrastructure::video_open::VideoOpenService::new(
+                        repository.clone(),
+                    ),
                     music,
                     music_artwork,
                     music_open: mediaatlas_infrastructure::music_open::MusicOpenService::new(
@@ -226,6 +246,35 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
+            commands::music_tools_library,
+            commands::music_tools_album,
+            commands::organization_plan,
+            commands::organization_logs,
+            commands::adult_organization_plan,
+            commands::adult_organization_logs,
+            commands::organization_preview,
+            commands::organization_execute,
+            commands::organization_cancel,
+            commands::organization_rollback_preview,
+            commands::organization_rollback_execute,
+            commands::organization_discard,
+            commands::organization_history,
+            commands::library_open,
+            commands::library_tools_media,
+            commands::library_tools_detail,
+            commands::adult_organization_preview,
+            commands::adult_organization_execute,
+            commands::adult_organization_cancel,
+            commands::adult_organization_rollback_preview,
+            commands::adult_organization_rollback_execute,
+            commands::adult_organization_discard,
+            commands::adult_organization_history,
+            commands::adult_open,
+            commands::adult_tools_media,
+            commands::adult_tools_detail,
+            commands::watcher_list,
+            commands::watcher_configure,
+            commands::health_check,
             commands::music_open_file,
             commands::music_library,
             commands::music_album,

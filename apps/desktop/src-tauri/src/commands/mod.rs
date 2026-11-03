@@ -1,7 +1,9 @@
 mod adult;
 mod music;
+mod organization;
 pub use adult::*;
 pub use music::*;
+pub use organization::*;
 
 use crate::state::DesktopState;
 use mediaatlas_application::library::*;
@@ -42,7 +44,7 @@ pub async fn library_list_roots(
     input: RootListInput,
 ) -> Result<ApiResponse<Vec<RootView>>, ErrorDto> {
     if input.include_adult {
-        state.adult_privacy.access().await.map_err(storage_error)?;
+        return Err(storage_error(RepositoryError::ProtectedMetadata));
     }
     state
         .browse
@@ -67,12 +69,13 @@ pub async fn library_save_root(
             .await
             .map_err(storage_error)?;
     }
-    state
+    let result = state
         .browse
         .save_root(&input)
         .await
-        .map(ApiResponse::new)
-        .map_err(storage_error)
+        .map_err(storage_error)?;
+    state.watcher.reconcile().await.map_err(storage_error)?;
+    Ok(ApiResponse::new(result))
 }
 
 #[tauri::command]
@@ -85,12 +88,13 @@ pub async fn library_remove_root(
         .authorize_root(input.root_id)
         .await
         .map_err(storage_error)?;
-    state
+    let result = state
         .browse
         .remove_root(input.root_id)
         .await
-        .map(ApiResponse::new)
-        .map_err(storage_error)
+        .map_err(storage_error)?;
+    state.watcher.reconcile().await.map_err(storage_error)?;
+    Ok(ApiResponse::new(result))
 }
 
 #[tauri::command]

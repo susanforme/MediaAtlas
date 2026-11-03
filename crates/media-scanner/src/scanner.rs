@@ -37,6 +37,17 @@ fn relative(root: &Path, path: &Path) -> Result<String, ScanError> {
         .ok_or(ScanError::Io)
 }
 
+// Reserved application staging/quarantine prefixes are never media candidates.
+// Hidden user files and Git ignore files retain the configured exclusion semantics.
+fn private_name(path: &Path) -> bool {
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| {
+            let name = name.to_ascii_lowercase();
+            name.starts_with(".mediaatlas-") || name.starts_with(".mediaatlas_")
+        })
+}
+
 fn is_audio(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
@@ -113,7 +124,7 @@ impl DirectorySidecars {
                 continue;
             }
             let rel = relative(root, &path)?;
-            if excludes.is_match(&rel) {
+            if private_name(&path) || excludes.is_match(&rel) {
                 continue;
             }
             let info = fs::symlink_metadata(&path).map_err(|_| ScanError::Io)?;
@@ -309,9 +320,10 @@ pub fn run_scan(
         .into_iter()
         .filter_entry(|entry| {
             entry.depth() == 0
-                || !relative(root, entry.path()).is_ok_and(|path| {
-                    excludes.is_match(&path) || excludes.is_match(format!("{path}/"))
-                })
+                || (!private_name(entry.path())
+                    && !relative(root, entry.path()).is_ok_and(|path| {
+                        excludes.is_match(&path) || excludes.is_match(format!("{path}/"))
+                    }))
         });
     for next in walker {
         if cancel.load(Ordering::Relaxed) {

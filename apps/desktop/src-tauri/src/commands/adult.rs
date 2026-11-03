@@ -385,13 +385,25 @@ pub async fn adult_list_media(
     mut input: BrowseQuery,
 ) -> Result<ApiResponse<MediaPageView>, ErrorDto> {
     let access = state.adult_privacy.access().await.map_err(storage_error)?;
+    mediaatlas_infrastructure::library_ready::backfill_adult_local_nfo(
+        &state.repository,
+        access.clone(),
+    )
+    .await
+    .map_err(storage_error)?;
     input.include_adult = true;
     input.kind = Some(MediaKind::AdultVideo);
-    let mut page = state
-        .adult_browse
-        .list_media(&input)
+    let covers = state
+        .adult_privacy
+        .settings()
         .await
-        .map_err(storage_error)?;
+        .map_err(storage_error)?
+        .covers_visible;
+    let browse = state
+        .adult_browse
+        .clone()
+        .with_adult_access(access.clone(), covers);
+    let mut page = browse.list_media(&input).await.map_err(storage_error)?;
     if !state
         .adult_privacy
         .settings()
@@ -412,8 +424,23 @@ pub async fn adult_get_media(
     input: MediaInput,
 ) -> Result<ApiResponse<MediaDetailView>, ErrorDto> {
     let access = state.adult_privacy.access().await.map_err(storage_error)?;
-    let mut detail = state
+    mediaatlas_infrastructure::library_ready::backfill_adult_local_nfo(
+        &state.repository,
+        access.clone(),
+    )
+    .await
+    .map_err(storage_error)?;
+    let covers = state
+        .adult_privacy
+        .settings()
+        .await
+        .map_err(storage_error)?
+        .covers_visible;
+    let browse = state
         .adult_browse
+        .clone()
+        .with_adult_access(access.clone(), covers);
+    let mut detail = browse
         .get_media(&MediaDetailInput {
             media_id: input.media_id,
             include_adult: true,

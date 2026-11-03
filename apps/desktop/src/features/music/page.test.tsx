@@ -28,6 +28,8 @@ vi.mock("../../api/music", async (original) => ({
   ...(await original<typeof import("../../api/music")>()),
   musicApi: {
     library: vi.fn(),
+    toolsLibrary: vi.fn(),
+    toolsAlbum: vi.fn(),
     openFile: vi.fn(),
     search: vi.fn(),
     release: vi.fn(),
@@ -63,7 +65,9 @@ function show(ui: React.ReactNode) {
 beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage("en-US");
+  vi.mocked(musicApi.toolsLibrary).mockResolvedValue([]);
   vi.mocked(musicApi.library).mockResolvedValue([]);
+  vi.mocked(musicApi.toolsAlbum).mockResolvedValue(syntheticMusicGraph);
   vi.mocked(musicApi.cachedCover).mockResolvedValue(null);
   vi.mocked(musicApi.openFile).mockResolvedValue({ requested: true });
   vi.mocked(musicApi.album).mockResolvedValue(syntheticMusicGraph);

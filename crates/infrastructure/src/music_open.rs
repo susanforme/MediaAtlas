@@ -2,7 +2,7 @@
 //! Construction and library reads never launch an application.
 use crate::{
     library::{LibraryRepository, RepositoryError},
-    music_library::{ensure_music_file, ensure_music_file_tx},
+    music_library::ensure_ready_music_file_tx,
 };
 use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
 use cap_std::{
@@ -49,7 +49,9 @@ impl MusicOpenService {
     /// Call only for a user's explicit Open action. The frontend supplies a file ID,
     /// never a pathname, shell command, URL, or guessed edition.
     pub async fn open(&self, file_id: Uuid) -> Result<MusicOpenResult, RepositoryError> {
-        let (file, root) = ensure_music_file(&self.repo, file_id).await?;
+        let mut initial_tx = self.repo.pool().begin().await?;
+        let (file, root) = ensure_ready_music_file_tx(&mut initial_tx, file_id).await?;
+        initial_tx.commit().await?;
         let initial_file = file.clone();
         let initial_root = root.clone();
         let verified = tokio::task::spawn_blocking(move || VerifiedMusicPath::open(&root, &file))
@@ -62,7 +64,7 @@ impl MusicOpenService {
             .bind(file_id.to_string())
             .execute(&mut *tx)
             .await?;
-        let (file, root) = ensure_music_file_tx(&mut tx, file_id).await?;
+        let (file, root) = ensure_ready_music_file_tx(&mut tx, file_id).await?;
         if file != initial_file || root != initial_root {
             return Err(RepositoryError::Conflict);
         }
@@ -240,7 +242,113 @@ fn io_error(error: std::io::Error) -> RepositoryError {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use mediaatlas_domain::{MediaItem, MediaKind, PathStyle};
+    use mediaatlas_domain::*;
+    fn test_graph() -> MusicReleaseGraph {
+        let artist = MusicArtist {
+            media_item_id: Uuid::new_v4(),
+            name: "Artist".into(),
+            sort_name: Some("Artist, The".into()),
+            aliases: vec!["別名".into()],
+        };
+        let credit = ArtistCredit {
+            artist_id: artist.media_item_id,
+            credited_name: "Artist".into(),
+            join_phrase: " feat. ".into(),
+        };
+        let group = MusicReleaseGroup {
+            media_item_id: Uuid::new_v4(),
+            title: "Album".into(),
+            artist_credits: vec![credit.clone()],
+            primary_type: Some("Album".into()),
+            secondary_types: vec![],
+            first_release_date: None,
+        };
+        let release = MusicRelease {
+            media_item_id: Uuid::new_v4(),
+            release_group_id: group.media_item_id,
+            title: "Album".into(),
+            artist_credits: vec![credit.clone()],
+            country: Some("JP".into()),
+            release_date: None,
+            status: Some("Official".into()),
+            labels: vec![],
+        };
+        let mut media = vec![];
+        let mut tracks = vec![];
+        let mut recordings = vec![];
+        for disc in 1..=2 {
+            let medium = MusicMedium {
+                id: Uuid::new_v4(),
+                release_id: release.media_item_id,
+                position: disc,
+                title: Some(format!("Disc {disc}")),
+                format: Some("CD".into()),
+            };
+            let recording = MusicRecording {
+                media_item_id: Uuid::new_v4(),
+                title: format!("Recording {disc}"),
+                length_ms: Some(1500),
+                artist_credits: vec![credit.clone()],
+            };
+            let track = MusicTrack {
+                media_item_id: Uuid::new_v4(),
+                medium_id: medium.id,
+                recording_id: recording.media_item_id,
+                position: 1,
+                number: "1".into(),
+                title: format!("Track {disc}"),
+                length_ms: Some(1500),
+                artist_credits: vec![credit.clone()],
+            };
+            media.push(medium);
+            tracks.push(track);
+            recordings.push(recording);
+        }
+        let identifiers = vec![
+            MusicIdentifier {
+                media_item_id: release.media_item_id,
+                kind: MusicIdentifierKind::MusicBrainz,
+                namespace: "release".into(),
+                value: release.media_item_id.to_string(),
+            },
+            MusicIdentifier {
+                media_item_id: recordings[0].media_item_id,
+                kind: MusicIdentifierKind::Isrc,
+                namespace: "isrc".into(),
+                value: "USABC9912345".into(),
+            },
+            MusicIdentifier {
+                media_item_id: release.media_item_id,
+                kind: MusicIdentifierKind::Ean,
+                namespace: "barcode".into(),
+                value: "1234567890123".into(),
+            },
+            MusicIdentifier {
+                media_item_id: release.media_item_id,
+                kind: MusicIdentifierKind::CatalogNumber,
+                namespace: "label".into(),
+                value: "ABC-123".into(),
+            },
+        ];
+        MusicReleaseGraph {
+            artists: vec![artist],
+            release_group: group,
+            release,
+            media,
+            tracks,
+            recordings,
+            identifiers,
+            source_url: "https://musicbrainz.org/release/test".into(),
+            fetched_at: Utc::now(),
+            locale: Some("en-US".into()),
+            release_date_text: Some("1999-02".into()),
+            group_first_release_date_text: Some("1999".into()),
+            release_disambiguation: Some("Deluxe remaster".into()),
+            files: vec![],
+            field_sources: vec![],
+        }
+    }
+
     use std::sync::Mutex;
     #[derive(Default)]
     struct StubOpener {
@@ -319,6 +427,13 @@ mod tests {
             part: None,
         };
         repo.save_file(&file).await.unwrap();
+        let graph = test_graph();
+        let music = crate::music_library::MusicLibraryService::new(repo.clone());
+        music.import_release(graph.clone()).await.unwrap();
+        music
+            .link_track(graph.tracks[0].media_item_id, file.id)
+            .await
+            .unwrap();
         (dir, repo, file, root, Arc::new(StubOpener::default()))
     }
     #[tokio::test]
@@ -449,6 +564,20 @@ mod tests {
                 Err(RepositoryError::InvalidInput)
             );
         }
+        assert!(opener.calls.lock().unwrap().is_empty());
+    }
+    #[tokio::test]
+    async fn scanned_unlinked_audio_is_tool_candidate_and_cannot_consume_open() {
+        let (_dir, repo, file, _root, opener) = fixture().await;
+        let service = MusicOpenService::with_opener(repo.clone(), opener.clone());
+        sqlx::query("DELETE FROM music_track_files")
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            service.open(file.id).await,
+            Err(RepositoryError::InvalidInput)
+        );
         assert!(opener.calls.lock().unwrap().is_empty());
     }
 }

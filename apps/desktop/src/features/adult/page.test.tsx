@@ -14,7 +14,7 @@ import {
   syntheticAdultOutput,
   syntheticAdultSearch,
 } from "./fixtures";
-import { AdultMediaPage, AdultPage } from "./page";
+import { AdultMediaPage, AdultPage, AdultToolsPage } from "./page";
 
 const privacy = vi.hoisted(() => ({
   settings: {
@@ -39,6 +39,8 @@ vi.mock("../../api/adult", async (original) => ({
   ...(await original<typeof import("../../api/adult")>()),
   adultApi: {
     media: vi.fn(),
+    toolsMedia: vi.fn(),
+    toolsDetail: vi.fn(),
     getMedia: vi.fn(),
     providers: vi.fn(),
     search: vi.fn(),
@@ -95,6 +97,7 @@ beforeEach(async () => {
   };
   privacy.includeAdult = true;
   vi.mocked(adultApi.media).mockResolvedValue(syntheticAdultMedia);
+  vi.mocked(adultApi.toolsMedia).mockResolvedValue(syntheticAdultMedia);
   vi.mocked(adultApi.recent).mockResolvedValue([]);
   vi.mocked(adultApi.roots).mockResolvedValue([]);
   vi.mocked(adultApi.tasks).mockResolvedValue([]);
@@ -157,7 +160,7 @@ beforeEach(async () => {
   });
 });
 async function candidate() {
-  show();
+  show(<AdultToolsPage />);
   fireEvent.click(screen.getByRole("button", { name: "Scraper" }));
   await screen.findByText("DMM / FANZA");
   fireEvent.click(screen.getByRole("checkbox", { name: "DMM / FANZA" }));
@@ -212,9 +215,10 @@ it("keeps local adult searches and images separate from ordinary APIs", async ()
       }),
     ),
   );
-  expect(
-    await screen.findByRole("link", { name: "Synthetic local adult fixture" }),
-  ).toHaveAttribute("href", "/adult/media/$mediaId");
+  expect(await screen.findByRole("link", { name: "Details" })).toHaveAttribute(
+    "href",
+    "/adult/media/$mediaId",
+  );
 });
 it("uses catalog-specific metadata and requires separate merge and output confirmations", async () => {
   await candidate();
@@ -269,9 +273,11 @@ it("downloads only a requested validated thumbnail and keeps artwork selection i
   for (const image of screen.getAllByRole("img"))
     expect(image.getAttribute("src")).toMatch(/^data:image\//);
 });
-it("previews a bounded batch then cancels without executing output", async () => {
-  show();
-  await screen.findByText("Synthetic local adult fixture");
+it("previews a bounded batch in tools then cancels without executing output", async () => {
+  show(<AdultToolsPage />);
+  await screen.findByRole("checkbox", {
+    name: "Select for batch output: Synthetic local adult fixture",
+  });
   fireEvent.click(
     screen.getByRole("checkbox", {
       name: "Select for batch output: Synthetic local adult fixture",
@@ -287,9 +293,11 @@ it("previews a bounded batch then cancels without executing output", async () =>
   expect(adultApi.batchExecute).not.toHaveBeenCalled();
   expect(adultApi.outputExecute).not.toHaveBeenCalled();
 });
-it("executes a batch only after the confirmation button", async () => {
-  show();
-  await screen.findByText("Synthetic local adult fixture");
+it("executes a batch in tools only after the confirmation button", async () => {
+  show(<AdultToolsPage />);
+  await screen.findByRole("checkbox", {
+    name: "Select for batch output: Synthetic local adult fixture",
+  });
   fireEvent.click(
     screen.getByRole("checkbox", {
       name: "Select for batch output: Synthetic local adult fixture",
@@ -304,8 +312,8 @@ it("executes a batch only after the confirmation button", async () => {
   await screen.findByText("Batch results: Completed");
   expect(adultApi.batchExecute).toHaveBeenCalledWith("synthetic-batch");
 });
-it("shows adult roots and scans only through the dedicated workspace", async () => {
-  show();
+it("shows adult roots and scans only through the dedicated tools", async () => {
+  show(<AdultToolsPage />);
   fireEvent.click(screen.getByRole("button", { name: "Library roots" }));
   await screen.findByText("No library roots yet");
   expect(adultApi.roots).toHaveBeenCalled();
@@ -317,7 +325,7 @@ it("shows adult roots and scans only through the dedicated workspace", async () 
 });
 it("renders the independent workflow in simplified Chinese", async () => {
   await i18n.changeLanguage("zh-CN");
-  show();
+  show(<AdultToolsPage />);
   await screen.findByText("成人工作台");
   fireEvent.click(screen.getByRole("button", { name: "刮削工作台" }));
   await screen.findByLabelText("番号");
@@ -344,7 +352,7 @@ it("shows and cancels adult provider tasks in the separate task view", async () 
   ];
   vi.mocked(adultApi.providers).mockResolvedValue(snapshot);
   vi.mocked(providerApi.cancel).mockResolvedValue(true);
-  show();
+  show(<AdultToolsPage />);
   fireEvent.click(screen.getByRole("button", { name: "Task center" }));
   await screen.findByText("dmm · SYNTHETIC-001");
   expect(libraryApi.tasks).not.toHaveBeenCalled();
@@ -365,4 +373,25 @@ it("displays recent visits only when the user enables that setting", async () =>
   show();
   await screen.findByRole("link", { name: "Synthetic recent visit" });
   expect(adultApi.recent).toHaveBeenCalledOnce();
+});
+
+it("keeps adult consumption read-only and links to separate tools", async () => {
+  show();
+  await screen.findByText("Synthetic local adult fixture");
+  expect(
+    screen.getByRole("button", {
+      name: "Open in system app: Synthetic local adult fixture",
+    }),
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Preview|Confirm|Search catalog/ }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Media tools" })).toHaveAttribute(
+    "href",
+    "/adult/tools",
+  );
+  expect(adultApi.batchPreview).not.toHaveBeenCalled();
+  expect(adultApi.outputPreview).not.toHaveBeenCalled();
+  expect(document.querySelector("audio,video")).toBeNull();
 });

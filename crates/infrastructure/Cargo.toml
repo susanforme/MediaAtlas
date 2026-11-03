@@ -31,6 +31,7 @@ cap-std = "3"
 cap-fs-ext = "3"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
 open = "5.4.5"
+notify = "8"
 
 [target.'cfg(any(target_os = "linux", target_os = "android", target_os = "macos", target_os = "ios"))'.dependencies]
 rustix = { version = "1", features = ["fs"] }

@@ -1,6 +1,10 @@
 use mediaatlas_infrastructure::{browse::BrowseService, scan_service::ScanService};
 
 pub struct DesktopState {
+    pub organization: mediaatlas_infrastructure::organization::OrganizationService,
+    pub watcher: mediaatlas_infrastructure::watcher::WatcherService,
+    pub health: mediaatlas_infrastructure::health::HealthService,
+    pub video_open: mediaatlas_infrastructure::video_open::VideoOpenService,
     pub music_artwork: mediaatlas_infrastructure::music_artwork::MusicArtworkService,
     pub music_open: mediaatlas_infrastructure::music_open::MusicOpenService,
     pub music: mediaatlas_infrastructure::music_library::MusicLibraryService,

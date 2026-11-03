@@ -59,3 +59,9 @@ UI 暂时只支持简体中文 `zh-CN` 和美式英语 `en-US`。默认 zh-CN，
 Scraper provides typed Movie/TV/Anime search, independent provider enablement, candidate reasons/year conflicts, explicit selection, type-specific source details and field/locale/protection comparisons. Only individually requested artwork thumbnails load through backend validation. Metadata confirmation and filesystem output confirmation remain separate. Library details show confirmed type-specific source structures alongside authoritative local fields. History restores immutable candidates rather than rebuilding a job from current form inputs.
 
 Settings now supports per-provider authentication with password input, system storage by default, explicit session-only selection, safe status and deletion. TMDB offers v4 Bearer and v3 API Key; public adapters show no credential form. Secret submissions are cleared immediately, never cached as query/mutation variables or localStorage, and late responses cannot affect a different provider editor. Both supported UI languages cover these states. Output Preview cancellation/replacement/unmount discards backend leases; browser-only mode never fabricates provider/library success.
+
+## Phase 7 消费与工具边界（覆盖早期操作位置）
+
+`/library`、普通详情、`/adult`、成人详情及 Music Library/Album/Artist 是只读消费页。视频卡片主操作调用当前系统关联应用，详情为独立次操作；多版本/Part 显式选择具体本地文件。只确认“已提交系统打开请求”，不推断实际播放成功，不嵌入 HTML audio/video 或播放器。
+
+`/tools` 与 `/adult/tools` 接收尚未完成的本地候选、刮削、导出、批量写入、整理预览/明确确认/取消、逐步日志和独立回滚预览；Music 的相同操作位于 `/music/tools`。工具列表保留同一 DTO 与后端全局分页；消费与工具游标分开。Root Watcher 需用户明确开启，健康检查由显式按钮执行，修复仅导航到必须再次预览的工具操作。成人入口持久显示偏好与临时解锁权限保持分离，锁定清除内容状态，旧请求不能重新展示内容。

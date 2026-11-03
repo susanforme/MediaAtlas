@@ -49,7 +49,7 @@ impl MusicArtworkService {
     ) -> Result<MusicCoverPreview, RepositoryError> {
         let mbid = Uuid::parse_str(mbid).map_err(|_| RepositoryError::InvalidInput)?;
         let graph = MusicLibraryService::new(self.repo.clone())
-            .album(release_id)
+            .album_tools(release_id)
             .await?;
         ensure_release_mbid(&graph, mbid)?;
         if cancel.is_cancelled() {
@@ -306,7 +306,7 @@ mod tests {
             .unwrap();
         assert!(expected.thumbnail.starts_with("data:image/png;base64,"));
         let public_graph = MusicLibraryService::new(repo.clone())
-            .album(release_id)
+            .album_tools(release_id)
             .await
             .unwrap();
         let provenance = public_graph

@@ -307,6 +307,12 @@ export const musicApi = {
       (value): value is { requested: boolean } =>
         obj(value) && typeof value.requested === "boolean",
     ),
+  toolsLibrary: () =>
+    request("music_tools_library", {}, (v): v is MusicAlbumView[] =>
+      arr(v, album),
+    ),
+  toolsAlbum: (releaseId: string) =>
+    request("music_tools_album", { release_id: releaseId }, musicGraph),
   library: () =>
     request("music_library", {}, (v): v is MusicAlbumView[] => arr(v, album)),
   album: (releaseId: string) =>

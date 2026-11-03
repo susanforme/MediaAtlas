@@ -614,3 +614,32 @@ async fn unknown_parent_and_oversized_file_fail_with_safe_errors() {
     assert!(!text.contains("fixture"));
     assert!(!text.contains("SELECT"));
 }
+
+#[tokio::test]
+async fn competing_normalized_root_writes_return_conflicts_without_stale_snapshots() {
+    let (_dir, repo) = database().await;
+    let mut writes = tokio::task::JoinSet::new();
+    for index in 0..24 {
+        let repo = repo.clone();
+        let candidate = root(
+            if index % 2 == 0 {
+                "C:/Concurrent"
+            } else {
+                "c:\\CONCURRENT\\"
+            },
+            PathStyle::Windows,
+        );
+        writes.spawn(async move { repo.save_root(&candidate).await });
+    }
+    let mut saved = 0;
+    let mut conflicts = 0;
+    while let Some(result) = writes.join_next().await {
+        match result.unwrap() {
+            Ok(()) => saved += 1,
+            Err(RepositoryError::Conflict) => conflicts += 1,
+            other => panic!("Unexpected Root write result: {other:?}"),
+        }
+    }
+    assert_eq!((saved, conflicts), (1, 23));
+    assert_eq!(repo.list_roots().await.unwrap().len(), 1);
+}

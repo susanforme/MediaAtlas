@@ -5,15 +5,15 @@
 
 ## 当前状态与执行规则
 
-- 当前阶段：Phase 6 独立 Music 图谱、真实音乐 Provider、只读音乐库/系统默认应用打开与独立标签工具已实现，本地 4 项检查通过，见 [acceptance/phase-6.md](acceptance/phase-6.md)；live 与原生跨平台仍 pending。Phase 5 独立成人工作流与视频 MVP 候选实现见 [acceptance/phase-5.md](acceptance/phase-5.md)，实时多站与 Windows 平台门槛明确 pending；P4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
+- 当前阶段：Phase 7 文件整理、独立 Preview/回滚、opt-in Watcher/健康检查、可信 ready 与影视/成人/音乐只读消费及原生打开已实现；完整本地 4 项检查通过（前端 150 tests、Rust 252 tests），见 [acceptance/phase-7.md](acceptance/phase-7.md)。Phase 6 结果保留于 [acceptance/phase-6.md](acceptance/phase-6.md)；live 与原生跨平台仍 pending。Phase 5 独立成人工作流与视频 MVP 候选实现见 [acceptance/phase-5.md](acceptance/phase-5.md)，实时多站与 Windows 平台门槛明确 pending；P4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
 - 执行顺序：P0 → P1 → P2 → P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8。
 - 每个 Phase 为独立 PR/提交单元；下表的任务 ID 用于跟踪，不要求每个 ID 单独创建 PR。
-- 本次会话用户明确授权连续执行 P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8：每阶段验收后立即使用 Codex 身份提交并推送，报告测试结果，再由 subagent 开始下一阶段；用户未要求中止时继续。不得自动创建 tag 或实际发布。
+- 本次会话用户明确授权连续执行 P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8：每阶段验收后立即使用 Codex 身份提交并推送，报告测试结果，再由 subagent 开始下一阶段；用户未要求中止时继续。用户最新明确授权：完成 P7/P8 实现及必要检查后，由 Phase 8/主代理创建 beta 版本 tag，并通过并行 CI 生成 GitHub Release 可用安装包；按 Tauri 与社区成熟支持选择 Windows/Linux/macOS 的 x86/ARM 矩阵，不强求所有组合。此授权覆盖早期“不创建 tag/不实际发布”的限制，P7 不提前打 tag。
 - 本计划中的任务初始均为待办，执行状态以阶段验收记录为准；完成实现、测试和阶段验收后才能标记完成。未验收不进入下一阶段。
 - 每阶段先更新对应设计文档，再实施；DTO 契约冻结后才拆分互不冲突的实现任务。不同时修改公共领域模型。
 - 每阶段保留可运行产物、自动化测试、测试命令和结果、已知问题、设计偏差及下一阶段清单。无法执行的平台验证必须记为未验证，不能视为通过。
 - 开发 Fixture/Demo 必须标记；常规 CI 使用 Fixtures 和 Mock HTTP，不依赖实时站点。不填入虚构媒体、海报或 Provider 成功率。
-- 初次规划仅产出任务文档；随后分别获授权使用 subagent 实施 Phase 0、Phase 1、Phase 2。最新范围为本次会话连续执行 P3 至 P8，各阶段验收后提交推送再继续，按阶段实现真实 Provider 与预览输出；实际源媒体/sidecar写入仍须产品内显式确认，普通开发只操作临时测试文件，不操作用户媒体。测试 CI 与 tag 发布工作流保持独立；不创建或推送 tag，不实际发布应用。
+- 初次规划仅产出任务文档；随后分别获授权使用 subagent 实施 Phase 0、Phase 1、Phase 2。最新范围为本次会话连续执行 P3 至 P8，各阶段验收后提交推送再继续，按阶段实现真实 Provider 与预览输出；实际源媒体/sidecar写入仍须产品内显式确认，普通开发只操作临时测试文件，不操作用户媒体。测试 CI 与 tag 发布工作流保持独立；最终 beta tag 与 Release 依用户后续明确授权，在 P7/P8 检查完成后由 Phase 8/主代理执行，未运行的平台不得记为已验收。
 
 ## 媒体库使用边界（用户补充）
 
@@ -195,9 +195,11 @@ P6 实际结果：独立实体/Release 版本、MB/CAA Mock HTTP、六格式合�
 
 测试与门槛：临时目录验证 Preview→Apply→Rollback；冲突、中断、重复执行、硬链接不支持/跨卷失败、附件关联与源文件保留测试。监控事件不能产生重复任务或条目。
 
+实施完成：P7-01 至 P7-06 已交付并完成本地自动化与独立审查；前端 150 tests、Rust 252 tests、fmt/full workspace Clippy 全过。具体字节安全预算、平台待验、故障注入边界与新 beta 发布授权见 [P7 验收](acceptance/phase-7.md)，不将 Linux Mock 视作 Windows/macOS 实机验收。
+
 ## P8 — 发布与跨平台验收
 
-前置：P7 验收。此阶段规划发布能力；实际发布依用户后续指示执行。
+前置：P7 验收。用户最新已明确授权完成所有任务和必要检查后创建 beta tag 并生成支持平台的 Release 可用包；由 P8/主代理完成，使用并行 CI 构建社区成熟支持的 Windows/Linux/macOS x86/ARM 组合，不强求所有组合。未实际运行的平台验收仍按真实状态记录。
 
 | ID | 待办任务 | 交付与验收依据 |
 | --- | --- | --- |

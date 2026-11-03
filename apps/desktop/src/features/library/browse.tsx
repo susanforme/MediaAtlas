@@ -11,6 +11,7 @@ import {
   type MediaKind,
 } from "../../api/library";
 import { Button } from "../../components/ui/button";
+import { NativeOpen } from "./native-open";
 import {
   ALL_KINDS,
   Empty,
@@ -148,6 +149,9 @@ export function LibraryPage({
     <>
       <PageHeading title={adult ? t("adultLibrary") : t("library")}>
         <div className="flex gap-2">
+          <Link to="/tools" className="action-link">
+            {t("videoTools")}
+          </Link>
           <Button
             variant={search.view !== "list" ? "default" : "outline"}
             aria-label={t("wall")}
@@ -334,12 +338,15 @@ export function LibraryPage({
               {media.data.items.map((card) => (
                 <tr key={card.media.id}>
                   <td>
+                    <NativeOpen mediaId={card.media.id}>
+                      {card.media.title}
+                    </NativeOpen>
                     <Link
                       to="/media/$mediaId"
                       params={{ mediaId: card.media.id }}
                       className="font-medium text-primary"
                     >
-                      {card.media.title}
+                      {t("detailsAction")}
                     </Link>
                   </td>
                   <td>{t(`kind_${card.media.kind}`)}</td>
@@ -357,30 +364,41 @@ export function LibraryPage({
       ) : (
         <div className="poster-grid">
           {media.data.items.map((card) => (
-            <Link
-              to="/media/$mediaId"
-              params={{ mediaId: card.media.id }}
-              key={card.media.id}
-              className="poster-card"
-            >
-              <div className="poster-image">
-                {card.poster_uri?.startsWith("data:image/") ? (
-                  <img
-                    src={card.poster_uri}
-                    alt={card.media.title}
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="poster-placeholder">
-                    <ImageOff size={28} aria-hidden="true" />
-                    <span>{t("noPoster")}</span>
-                  </div>
-                )}
-              </div>
-              <div className="p-4">
-                <h2 className="truncate font-semibold" title={card.media.title}>
+            <article key={card.media.id} className="poster-card">
+              <NativeOpen
+                mediaId={card.media.id}
+                label={card.media.title}
+                className="h-auto w-full flex-col items-stretch overflow-hidden rounded-none bg-transparent p-0 text-left text-foreground hover:bg-muted"
+              >
+                <div className="poster-image">
+                  {card.poster_uri?.startsWith("data:image/") ? (
+                    <img
+                      src={card.poster_uri}
+                      alt={card.media.title}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="poster-placeholder">
+                      <ImageOff size={28} aria-hidden="true" />
+                      <span>{t("noPoster")}</span>
+                    </div>
+                  )}
+                </div>
+                <span
+                  className="block truncate p-4 font-semibold"
+                  title={card.media.title}
+                >
                   {card.media.title}
-                </h2>
+                </span>
+              </NativeOpen>
+              <div className="p-4">
+                <Link
+                  to="/media/$mediaId"
+                  params={{ mediaId: card.media.id }}
+                  className="action-link"
+                >
+                  {t("detailsAction")}
+                </Link>
                 <p className="mt-1 text-xs text-muted-foreground">
                   {card.media.year ? number(card.media.year) : t("unknownYear")}{" "}
                   · {t(`kind_${card.media.kind}`)}
@@ -389,7 +407,7 @@ export function LibraryPage({
                   <HealthBadges health={card.health} />
                 </div>
               </div>
-            </Link>
+            </article>
           ))}
         </div>
       )}

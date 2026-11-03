@@ -27,6 +27,7 @@ import {
 } from "./features/providers/pages";
 import "./features/scraper/navigation";
 import "./features/music/translations";
+import "./features/tools/navigation";
 import { HomePage } from "./routes/home";
 
 const DashboardPage = lazyRouteComponent(
@@ -123,6 +124,7 @@ function Layout() {
               ["/library", "library"],
               ["/roots", "roots"],
               ["/scanner", "scanner"],
+              ["/tools", "videoTools"],
               ["/scraper", "scraper"],
               ["/music", "music"],
               ["/music/tools", "musicTools"],
@@ -189,6 +191,22 @@ const adultRoute = createRoute({
   component: lazyRouteComponent(
     () => import("./features/adult/page"),
     "AdultPage",
+  ),
+});
+const adultToolsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/adult/tools",
+  component: lazyRouteComponent(
+    () => import("./features/adult/page"),
+    "AdultToolsPage",
+  ),
+});
+const toolsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/tools",
+  component: lazyRouteComponent(
+    () => import("./features/tools/page"),
+    "MediaToolsPage",
   ),
 });
 const adultDetailRoute = createRoute({
@@ -310,6 +328,8 @@ const router = createRouter({
     indexRoute,
     libraryRoute,
     adultRoute,
+    adultToolsRoute,
+    toolsRoute,
     adultDetailRoute,
     detailRoute,
     rootsRoute,

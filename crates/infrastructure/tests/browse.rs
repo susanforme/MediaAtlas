@@ -20,7 +20,7 @@ async fn setup() -> (TempDir, LibraryRepository, BrowseService) {
     let repo = LibraryRepository::open(&dir.path().join("test.sqlite"))
         .await
         .unwrap();
-    let service = BrowseService::new(repo.clone(), dir.path().join("cache"));
+    let service = BrowseService::new(repo.clone(), dir.path().join("cache")).for_tools();
     (dir, repo, service)
 }
 fn input(path: &Path, kind: Option<MediaKind>) -> RootInput {

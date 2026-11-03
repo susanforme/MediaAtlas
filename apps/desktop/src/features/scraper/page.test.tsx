@@ -22,7 +22,7 @@ vi.mock("../../api/providers", async (original) => ({
 }));
 vi.mock("../../api/library", async (original) => ({
   ...(await original<typeof import("../../api/library")>()),
-  libraryApi: { media: vi.fn() },
+  libraryApi: { toolsMedia: vi.fn() },
 }));
 vi.mock("../../api/scraper", async (original) => ({
   ...(await original<typeof import("../../api/scraper")>()),
@@ -87,7 +87,7 @@ beforeEach(async () => {
     already_applied: false,
     state: "succeeded",
   });
-  vi.mocked(libraryApi.media).mockResolvedValue({
+  vi.mocked(libraryApi.toolsMedia).mockResolvedValue({
     items: [
       {
         media: {

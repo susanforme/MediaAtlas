@@ -65,19 +65,61 @@ impl ScanService {
     }
 
     pub async fn start(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
+        self.start_inner(root_id, None).await
+    }
+
+    /// Watcher-only read pipeline. Revalidate its exact live Root generation and
+    /// opt-in under the SQLite writer reservation before creating any task.
+    pub async fn start_watched(
+        &self,
+        expected: &LibraryRoot,
+    ) -> Result<ScanTaskView, RepositoryError> {
+        self.start_inner(expected.id, Some(expected)).await
+    }
+
+    async fn start_inner(
+        &self,
+        root_id: Uuid,
+        expected: Option<&LibraryRoot>,
+    ) -> Result<ScanTaskView, RepositoryError> {
         let _gate = self.gate.lock().await;
-        let snapshot = self.snapshot(root_id).await?;
+        let mut tx = self.repo.pool().begin().await?;
+        // Acquire the writer reservation before the Root/settings snapshot. A
+        // reclassification or path change cannot race the final task insertion.
+        sqlx::query("UPDATE library_roots SET updated_at=updated_at WHERE id=?")
+            .bind(root_id.to_string())
+            .execute(&mut *tx)
+            .await?;
+        let snapshot = snapshot_tx(&mut tx, root_id).await?;
         if !snapshot.root.enabled {
             return Err(RepositoryError::InvalidInput);
         }
-        let active: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND t.state IN ('queued','running')")
-            .bind(root_id.to_string()).fetch_one(self.repo.pool()).await?;
+        if let Some(expected) = expected {
+            if &snapshot.root != expected
+                || snapshot.root.kind.is_none()
+                || snapshot.root.kind == Some(MediaKind::AdultVideo)
+            {
+                return Err(RepositoryError::Conflict);
+            }
+            let opted_in: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM watcher_roots WHERE root_id=? AND opted_in=1)",
+            )
+            .bind(root_id.to_string())
+            .fetch_one(&mut *tx)
+            .await?;
+            let isolated:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM media_files f JOIN media_items m ON m.id=f.media_item_id WHERE f.root_id=? AND (m.adult_isolated=1 OR m.kind='adult_video'))")
+                .bind(root_id.to_string()).fetch_one(&mut *tx).await?;
+            if !opted_in || isolated {
+                return Err(RepositoryError::Conflict);
+            }
+        }
+        let active: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND (t.state IN ('queued','running') OR (? AND t.state='waiting_for_user'))")
+            .bind(root_id.to_string()).bind(expected.is_some()).fetch_one(&mut *tx).await?;
         if active > 0 {
             return Err(RepositoryError::Conflict);
         }
         let id = Uuid::new_v4();
         let now = Utc::now().timestamp_millis();
-        let mut tx = self.repo.pool().begin().await?;
         sqlx::query("INSERT INTO scrape_tasks (id,kind,state,input_snapshot,created_at,updated_at) VALUES (?,'scan_library','queued',?,?,?)")
             .bind(id.to_string()).bind(serde_json::json!({"root_id":root_id,"schema_version":1}).to_string()).bind(now).bind(now).execute(&mut *tx).await?;
         sqlx::query(
@@ -508,6 +550,45 @@ fn same_config(a: &RootSnapshot, b: &RootSnapshot) -> bool {
         && a.root.path_style == b.root.path_style
         && a.root.kind == b.root.kind
         && a.exclude_patterns == b.exclude_patterns
+}
+
+async fn snapshot_tx(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    root_id: Uuid,
+) -> Result<RootSnapshot, RepositoryError> {
+    let row = sqlx::query("SELECT * FROM library_roots WHERE id=?")
+        .bind(root_id.to_string())
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or(RepositoryError::NotFound)?;
+    let kind: Option<String> = row.try_get("kind")?;
+    let root = LibraryRoot {
+        id: uuid(&row, "id")?,
+        name: text(&row, "name")?,
+        path: text(&row, "path")?,
+        path_style: serde_json::from_value(serde_json::Value::String(text(&row, "path_style")?))
+            .map_err(|_| RepositoryError::CorruptData)?,
+        kind: kind
+            .map(|kind| {
+                serde_json::from_value(serde_json::Value::String(kind))
+                    .map_err(|_| RepositoryError::CorruptData)
+            })
+            .transpose()?,
+        enabled: row.try_get("enabled")?,
+        created_at: time(&row, "created_at")?,
+        updated_at: time(&row, "updated_at")?,
+    };
+    let settings: Option<String> =
+        sqlx::query_scalar("SELECT exclude_patterns_json FROM root_settings WHERE root_id=?")
+            .bind(root_id.to_string())
+            .fetch_optional(&mut **tx)
+            .await?;
+    let exclude_patterns = serde_json::from_str(settings.as_deref().unwrap_or("[]"))
+        .map_err(|_| RepositoryError::CorruptData)?;
+    Ok(RootSnapshot {
+        root,
+        exclude_patterns,
+    })
 }
 
 fn task_from_row(row: &SqliteRow) -> Result<ScanTaskView, RepositoryError> {

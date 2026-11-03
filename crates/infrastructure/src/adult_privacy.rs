@@ -94,6 +94,7 @@ impl AdultPrivacyService {
         }
         self.providers.cancel_adult_requests().await?;
         crate::media_output::release_revoked_adult_leases().await;
+        crate::organization::release_revoked_adult_sessions().await;
         sqlx::query("INSERT OR IGNORE INTO adult_revoked_output_previews(preview_id) SELECT p.id FROM output_previews p JOIN file_operations o ON o.id=p.id WHERE json_extract(p.snapshot,'$.channel')='adult' AND o.state<>'succeeded'").execute(self.repo.pool()).await?;
         let ids=sqlx::query_scalar::<_,String>("SELECT t.id FROM scrape_tasks t JOIN adult_scrape_sessions a ON a.task_id=t.id WHERE t.state IN('queued','running','waiting_for_user')").fetch_all(self.repo.pool()).await?;
         for id in ids {

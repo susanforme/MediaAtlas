@@ -215,7 +215,7 @@ pub async fn music_match(
 ) -> Result<ApiResponse<MusicMatchAssessment>, ErrorDto> {
     let graph = state
         .music
-        .album(input.release_id)
+        .album_tools(input.release_id)
         .await
         .map_err(storage_error)?;
     Ok(ApiResponse::new(assess_music_release(&input.input, &graph)))
@@ -346,6 +346,32 @@ pub async fn music_open_file(
     state
         .music_open
         .open(input.file_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+
+#[tauri::command]
+pub async fn music_tools_library(
+    state: State<'_, DesktopState>,
+    input: MusicEmptyInput,
+) -> Result<ApiResponse<Vec<MusicAlbumView>>, ErrorDto> {
+    let _ = input;
+    state
+        .music
+        .list_tools()
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn music_tools_album(
+    state: State<'_, DesktopState>,
+    input: MusicReleaseInput,
+) -> Result<ApiResponse<MusicReleaseGraph>, ErrorDto> {
+    state
+        .music
+        .album_tools(input.release_id)
         .await
         .map(ApiResponse::new)
         .map_err(storage_error)

@@ -134,6 +134,13 @@ impl LibraryRepository {
         let normalized = normalize_root_path(&root.path, root.path_style)
             .map_err(|_| RepositoryError::InvalidInput)?;
         let mut tx = self.pool.begin().await?;
+        // Reserve the SQLite writer before taking a Root before-image. A
+        // deferred read snapshot cannot safely be upgraded after another
+        // connection commits, including an asynchronously dropped failed write.
+        sqlx::query("UPDATE library_roots SET enabled=enabled WHERE id=?")
+            .bind(root.id.to_string())
+            .execute(&mut *tx)
+            .await?;
         let previous = sqlx::query("SELECT path_style FROM library_roots WHERE id = ?")
             .bind(root.id.to_string())
             .fetch_optional(&mut *tx)
@@ -146,15 +153,22 @@ impl LibraryRepository {
                         .fetch_one(&mut *tx)
                         .await?;
                 if count > 0 {
+                    tx.rollback().await?;
                     return Err(RepositoryError::Conflict);
                 }
             }
         }
-        sqlx::query("INSERT INTO library_roots (id,name,path,normalized_path,path_style,kind,enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,path=excluded.path,normalized_path=excluded.normalized_path,path_style=excluded.path_style,kind=excluded.kind,enabled=excluded.enabled,updated_at=excluded.updated_at")
+        let saved = sqlx::query("INSERT INTO library_roots (id,name,path,normalized_path,path_style,kind,enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,path=excluded.path,normalized_path=excluded.normalized_path,path_style=excluded.path_style,kind=excluded.kind,enabled=excluded.enabled,updated_at=excluded.updated_at")
             .bind(root.id.to_string()).bind(&root.name).bind(&root.path).bind(normalized)
             .bind(enum_string(&root.path_style)?).bind(optional_enum(root.kind.as_ref())?)
             .bind(root.enabled).bind(root.created_at.timestamp_millis()).bind(root.updated_at.timestamp_millis())
-            .execute(&mut *tx).await?;
+            .execute(&mut *tx).await;
+        if let Err(error) = saved {
+            // Await rollback before returning a constraint conflict so the next
+            // request does not inherit an outstanding writer reservation.
+            tx.rollback().await?;
+            return Err(error.into());
+        }
         tx.commit().await?;
         Ok(())
     }

@@ -35,6 +35,7 @@ pub struct BrowseService {
     approved_artwork_cache: Option<PathBuf>,
     adult_access: Option<crate::media_output::AdultOutputAccess>,
     render_posters: bool,
+    tools: bool,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -53,6 +54,40 @@ impl BrowseService {
             approved_artwork_cache: None,
             adult_access: None,
             render_posters: true,
+            tools: false,
+        }
+    }
+
+    /// Explicit tools read scope includes unfinished scan/import candidates.
+    /// It never grants adult access; typed callers must still supply that grant.
+    pub fn for_tools(mut self) -> Self {
+        self.tools = true;
+        self
+    }
+
+    pub async fn tools_list_media(&self, input: &BrowseQuery) -> Result<MediaPageView> {
+        self.clone().for_tools().list_media(input).await
+    }
+
+    pub async fn tools_media_detail(
+        &self,
+        id: Uuid,
+        include_adult: bool,
+    ) -> Result<MediaDetailView> {
+        self.clone()
+            .for_tools()
+            .get_media(&MediaDetailInput {
+                media_id: id,
+                include_adult,
+            })
+            .await
+    }
+
+    fn completion_filter(&self, sql: &mut QueryBuilder<'_, Sqlite>) {
+        if !self.tools {
+            sql.push(" AND (")
+                .push(crate::library_ready::ready_predicate())
+                .push(")");
         }
     }
 
@@ -239,7 +274,11 @@ impl BrowseService {
 
     pub async fn list_media(&self, input: &BrowseQuery) -> Result<MediaPageView> {
         validate_query(input)?;
-        let scope = scope(input)?;
+        let scope = format!(
+            "{}:{}",
+            if self.tools { "tools" } else { "library" },
+            scope(input)?
+        );
         let cursor = input
             .cursor
             .as_ref()
@@ -257,6 +296,7 @@ impl BrowseService {
             .transpose()?;
         let mut sql = QueryBuilder::new(select_media());
         filter(&mut sql, input)?;
+        self.completion_filter(&mut sql);
         if let Some(cursor) = &cursor {
             match input.sort.as_str() {
                 "title_asc" => {
@@ -335,6 +375,7 @@ impl BrowseService {
                 ..Default::default()
             },
         )?;
+        self.completion_filter(&mut sql);
         sql.push(" AND m.id=").push_bind(input.media_id.to_string());
         let row = sql
             .build()
@@ -349,6 +390,7 @@ impl BrowseService {
             .push_bind(input.media_id.to_string())
             .push(" AND r.parent_id=m.id))");
         visibility(&mut relation_sql, input.include_adult);
+        self.completion_filter(&mut relation_sql);
         relation_sql.push(" ORDER BY m.title,m.id");
         let relation_rows = relation_sql.build().fetch_all(self.repo.pool()).await?;
         let relations = relation_rows
@@ -361,11 +403,12 @@ impl BrowseService {
                 })
             })
             .collect::<Result<Vec<_>>>()?;
+        let files = self.detail_files(&media, input.include_adult).await?;
         Ok(MediaDetailView {
             poster_uri: self.poster(&media).await?,
             health: health(&row)?,
             media,
-            files: self.repo.list_files(input.media_id).await?,
+            files,
             artworks: self.repo.list_artworks(input.media_id).await?,
             external_ids: self.repo.list_external_ids(input.media_id).await?,
             metadata_values: self.repo.list_metadata_values(input.media_id).await?,
@@ -373,10 +416,38 @@ impl BrowseService {
         })
     }
 
+    async fn detail_files(
+        &self,
+        item: &MediaItem,
+        include_adult: bool,
+    ) -> Result<Vec<mediaatlas_domain::MediaFile>> {
+        let mut files = self.repo.list_files(item.id).await?;
+        if matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason) {
+            let typed = crate::library_ready::typed_descendant("parent", "m");
+            let mut sql = QueryBuilder::new(
+                "SELECT m.id FROM media_items m JOIN media_items parent ON parent.id=",
+            );
+            sql.push_bind(item.id.to_string())
+                .push(format!(" WHERE ({typed})"));
+            visibility(&mut sql, include_adult);
+            self.completion_filter(&mut sql);
+            sql.push(" ORDER BY m.title,m.id");
+            for row in sql.build().fetch_all(self.repo.pool()).await? {
+                files.extend(self.repo.list_files(uuid(&row, "id")?).await?);
+            }
+        }
+        files.sort_by(|a, b| {
+            (&a.part, &a.relative_path, &a.id).cmp(&(&b.part, &b.relative_path, &b.id))
+        });
+        files.dedup_by_key(|f| f.id);
+        Ok(files)
+    }
+
     pub async fn summary(&self, input: &BrowseQuery) -> Result<LibrarySummaryView> {
         validate_query(input)?;
         let mut sql = QueryBuilder::new(format!("SELECT count(*) total,sum(NOT ({POSTER})) missing_poster,sum(NOT ({NFO})) missing_nfo,sum(NOT ({METADATA})) incomplete_metadata FROM media_items m WHERE 1=1"));
         filter(&mut sql, input)?;
+        self.completion_filter(&mut sql);
         let row = sql.build().fetch_one(self.repo.pool()).await?;
         let roots = self.list_roots(input.include_adult).await?;
         let total_roots = roots
@@ -428,6 +499,7 @@ impl BrowseService {
             .await?;
         let mut years=QueryBuilder::new("SELECT CAST(m.year AS TEXT) value,count(DISTINCT m.id) count FROM media_items m WHERE m.year IS NOT NULL");
         filter(&mut years, &input)?;
+        self.completion_filter(&mut years);
         years.push(" GROUP BY m.year ORDER BY m.year DESC");
         let yearrows = years.build().fetch_all(self.repo.pool()).await?;
         Ok(LibraryFacetsView {
@@ -446,6 +518,7 @@ impl BrowseService {
         }
         separated.push_unseparated(")");
         filter(&mut sql, input)?;
+        self.completion_filter(&mut sql);
         sql.push(" GROUP BY CAST(j.value AS TEXT) ORDER BY value COLLATE NOCASE LIMIT 500");
         facet_rows(&sql.build().fetch_all(self.repo.pool()).await?)
     }
@@ -469,7 +542,10 @@ fn select_media() -> String {
 
 fn visibility(sql: &mut QueryBuilder<'_, Sqlite>, include_adult: bool) {
     if !include_adult {
-        sql.push(" AND m.kind<>'adult_video' AND m.adult_isolated=0 AND NOT EXISTS(SELECT 1 FROM media_files vf JOIN library_roots vr ON vr.id=vf.root_id WHERE vf.media_item_id=m.id AND vr.kind='adult_video') AND NOT EXISTS(SELECT 1 FROM media_relations vr JOIN media_items vm ON vm.id=vr.child_id WHERE vr.parent_id=m.id AND (vm.kind='adult_video' OR vm.adult_isolated=1)) AND NOT EXISTS(SELECT 1 FROM media_relations pr JOIN media_files f ON f.media_item_id=pr.child_id JOIN library_roots r ON r.id=f.root_id WHERE pr.parent_id=m.id AND r.kind='adult_video') AND NOT EXISTS(SELECT 1 FROM media_relations pr JOIN media_relations cr ON cr.parent_id=pr.child_id JOIN media_items vm ON vm.id=cr.child_id WHERE pr.parent_id=m.id AND (vm.kind='adult_video' OR vm.adult_isolated=1))");
+        sql.push(" AND (")
+            .push(crate::library_ready::ancestor_isolation("m"))
+            .push(")");
+        sql.push(" AND m.kind<>'adult_video' AND m.adult_isolated=0 AND NOT EXISTS(SELECT 1 FROM media_files vf JOIN library_roots vr ON vr.id=vf.root_id WHERE vf.media_item_id=m.id AND vr.kind='adult_video') AND NOT EXISTS(SELECT 1 FROM media_relations vr JOIN media_items vm ON vm.id=vr.child_id WHERE vr.parent_id=m.id AND (vm.kind='adult_video' OR vm.adult_isolated=1)) AND NOT EXISTS(SELECT 1 FROM media_relations pr JOIN media_files f ON f.media_item_id=pr.child_id JOIN library_roots r ON r.id=f.root_id WHERE pr.parent_id=m.id AND r.kind='adult_video') AND NOT EXISTS(SELECT 1 FROM media_relations pr JOIN media_relations cr ON cr.parent_id=pr.child_id JOIN media_items vm ON vm.id=cr.child_id WHERE pr.parent_id=m.id AND (vm.kind='adult_video' OR vm.adult_isolated=1)) AND NOT EXISTS(SELECT 1 FROM media_relations pr JOIN media_relations cr ON cr.parent_id=pr.child_id JOIN media_files f ON f.media_item_id=cr.child_id JOIN library_roots r ON r.id=f.root_id WHERE pr.parent_id=m.id AND r.kind='adult_video')");
     }
 }
 
@@ -479,7 +555,8 @@ fn filter(sql: &mut QueryBuilder<'_, Sqlite>, input: &BrowseQuery) -> Result<()>
         sql.push(" AND m.kind=").push_bind(kind.as_str().to_owned());
     }
     if let Some(root) = input.root_id {
-        sql.push(" AND (EXISTS(SELECT 1 FROM media_files f WHERE f.media_item_id=m.id AND f.root_id=").push_bind(root.to_string()).push(") OR EXISTS(SELECT 1 FROM media_relations r JOIN media_files f ON f.media_item_id=r.child_id WHERE r.parent_id=m.id AND f.root_id=").push_bind(root.to_string()).push(") OR EXISTS(SELECT 1 FROM media_relations r JOIN media_relations c ON c.parent_id=r.child_id JOIN media_files f ON f.media_item_id=c.child_id WHERE r.parent_id=m.id AND f.root_id=").push_bind(root.to_string()).push("))");
+        let typed = crate::library_ready::typed_descendant("m", "descendant");
+        sql.push(" AND (EXISTS(SELECT 1 FROM media_files f WHERE f.media_item_id=m.id AND f.root_id=").push_bind(root.to_string()).push(format!(") OR EXISTS(SELECT 1 FROM media_items descendant JOIN media_files f ON f.media_item_id=descendant.id WHERE ({typed}) AND f.root_id=")).push_bind(root.to_string()).push("))");
     }
     if let Some(text) = input
         .query

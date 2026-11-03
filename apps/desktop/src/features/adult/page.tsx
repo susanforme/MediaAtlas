@@ -21,6 +21,7 @@ import { defaultBrowse } from "../../api/library";
 import { providerApi } from "../../api/providers";
 import { Button } from "../../components/ui/button";
 import { usePrivacy } from "../library/context";
+import { NativeOpen } from "../library/native-open";
 import { RootsPage } from "../library/pages";
 import { ScannerPage, type ScannerSearch } from "../library/scanner";
 import {
@@ -31,6 +32,7 @@ import {
   Pager,
   useFormat,
 } from "../library/shared";
+import { LocalCandidates } from "../tools/page";
 import "./translations";
 import "../scraper/navigation";
 
@@ -53,8 +55,32 @@ export function AdultGate({ children }: { children: ReactNode }) {
 export function AdultPage() {
   return (
     <AdultGate>
+      <AdultConsumption />
+    </AdultGate>
+  );
+}
+export function AdultToolsPage() {
+  return (
+    <AdultGate>
       <AdultWorkspace />
     </AdultGate>
+  );
+}
+function AdultConsumption() {
+  const { t } = useTranslation();
+  const { lock } = usePrivacy();
+  return (
+    <>
+      <PageHeading title={t("adultLibrary")}>
+        <Link to="/adult/tools" className="action-link">
+          {t("videoTools")}
+        </Link>
+        <Button variant="outline" onClick={() => void lock()}>
+          {t("adultLock")}
+        </Button>
+      </PageHeading>
+      <AdultLibrary />
+    </>
   );
 }
 function AdultWorkspace() {
@@ -98,7 +124,13 @@ function AdultWorkspace() {
         )}
       </div>
       {tab === "library" ? (
-        <AdultLibrary />
+        <>
+          <LocalCandidates
+            adult
+            renderExtra={(id) => <AdultOutput mediaId={id} />}
+          />
+          <AdultLibrary tools />
+        </>
       ) : tab === "scraper" ? (
         <AdultScraper />
       ) : tab === "roots" ? (
@@ -268,7 +300,7 @@ export function AdultOutput({ mediaId }: { mediaId: string }) {
     </div>
   );
 }
-function AdultLibrary() {
+function AdultLibrary({ tools = false }: { tools?: boolean }) {
   const { t } = useTranslation();
   const { settings } = usePrivacy();
   const [query, setQuery] = useState("");
@@ -293,13 +325,13 @@ function AdultLibrary() {
   const media = useQuery({
     queryKey: [
       "adult",
-      "library",
+      tools ? "tools-library" : "library",
       query,
       cursors[page],
       settings.covers_visible,
     ],
     queryFn: () =>
-      adultApi.media({
+      (tools ? adultApi.toolsMedia : adultApi.media)({
         ...defaultBrowse(true),
         kind: "adult_video",
         query: query || null,
@@ -336,7 +368,7 @@ function AdultLibrary() {
   });
   return (
     <div className="space-y-5">
-      <AdultRecent />
+      {!tools && <AdultRecent />}
       <label className="filter-field">
         <span>{t("adultLocalSearch")}</span>
         <input
@@ -361,22 +393,29 @@ function AdultLibrary() {
               className="panel flex flex-wrap items-center gap-4"
               key={item.id}
             >
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  aria-label={`${t("adultBatchSelect")}: ${item.title}`}
-                  checked={selected.includes(item.id)}
-                  disabled={!!batch || execute.isPending}
-                  onChange={(event) =>
-                    setSelected((values) =>
-                      event.target.checked
-                        ? [...values, item.id].slice(0, 32)
-                        : values.filter((v) => v !== item.id),
-                    )
-                  }
-                />
-                {t("adultBatchSelect")}
-              </label>
+              {tools && (
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    aria-label={`${t("adultBatchSelect")}: ${item.title}`}
+                    checked={selected.includes(item.id)}
+                    disabled={!!batch || execute.isPending}
+                    onChange={(event) =>
+                      setSelected((values) =>
+                        event.target.checked
+                          ? [...values, item.id].slice(0, 32)
+                          : values.filter((v) => v !== item.id),
+                      )
+                    }
+                  />
+                  {t("adultBatchSelect")}
+                </label>
+              )}
+              {!tools && (
+                <NativeOpen mediaId={item.id} adult>
+                  {item.title}
+                </NativeOpen>
+              )}
               {settings.covers_visible &&
                 poster_uri?.startsWith("data:image/") && (
                   <img src={poster_uri} alt="" className="max-h-24 max-w-16" />
@@ -386,7 +425,7 @@ function AdultLibrary() {
                 to="/adult/media/$mediaId"
                 params={{ mediaId: item.id }}
               >
-                {item.title}
+                {tools ? item.title : t("detailsAction")}
               </Link>
             </li>
           ))}
@@ -406,56 +445,61 @@ function AdultLibrary() {
           }}
         />
       )}
-      <Button
-        disabled={
-          !selected.length || plan.isPending || execute.isPending || !!batch
-        }
-        onClick={() => plan.mutate()}
-      >
-        {t("adultBatchPreview")}
-      </Button>
-      {plan.error && <ErrorNotice error={plan.error} />}{" "}
-      {batch && (
-        <section className="space-y-4">
-          {batch.items.map((item) => (
-            <OutputDiff key={item.preview_id} preview={item} />
-          ))}
-          <div className="flex gap-3">
-            <Button
-              onClick={() => execute.mutate()}
-              disabled={execute.isPending || cancel.isPending}
-            >
-              {t("adultBatchConfirm")}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => cancel.mutate()}
-              disabled={cancel.isPending}
-            >
-              {t("adultBatchCancel")}
-            </Button>
-          </div>
-        </section>
-      )}
-      {execute.error && <ErrorNotice error={execute.error} />}{" "}
-      {cancel.error && <ErrorNotice error={cancel.error} />}{" "}
-      {result && (
-        <section className="panel" role="status">
-          <h2>
-            {t("adultBatchResult")}:{" "}
-            {t(`state_${result.state}`, { defaultValue: result.state })}
-          </h2>
-          <ul>
-            {result.items.map((item) => (
-              <li key={item.preview_id}>
-                {item.media_item_id}:{" "}
-                {t(`state_${item.state}`, { defaultValue: item.state })}
-                {item.error_code &&
-                  ` · ${t(`providerFailure_${item.error_code}`, { defaultValue: item.error_code })}`}
-              </li>
-            ))}
-          </ul>
-        </section>
+      {tools && (
+        <>
+          {" "}
+          <Button
+            disabled={
+              !selected.length || plan.isPending || execute.isPending || !!batch
+            }
+            onClick={() => plan.mutate()}
+          >
+            {t("adultBatchPreview")}
+          </Button>
+          {plan.error && <ErrorNotice error={plan.error} />}{" "}
+          {batch && (
+            <section className="space-y-4">
+              {batch.items.map((item) => (
+                <OutputDiff key={item.preview_id} preview={item} />
+              ))}
+              <div className="flex gap-3">
+                <Button
+                  onClick={() => execute.mutate()}
+                  disabled={execute.isPending || cancel.isPending}
+                >
+                  {t("adultBatchConfirm")}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => cancel.mutate()}
+                  disabled={cancel.isPending}
+                >
+                  {t("adultBatchCancel")}
+                </Button>
+              </div>
+            </section>
+          )}
+          {execute.error && <ErrorNotice error={execute.error} />}{" "}
+          {cancel.error && <ErrorNotice error={cancel.error} />}{" "}
+          {result && (
+            <section className="panel" role="status">
+              <h2>
+                {t("adultBatchResult")}:{" "}
+                {t(`state_${result.state}`, { defaultValue: result.state })}
+              </h2>
+              <ul>
+                {result.items.map((item) => (
+                  <li key={item.preview_id}>
+                    {item.media_item_id}:{" "}
+                    {t(`state_${item.state}`, { defaultValue: item.state })}
+                    {item.error_code &&
+                      ` · ${t(`providerFailure_${item.error_code}`, { defaultValue: item.error_code })}`}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}{" "}
+        </>
       )}
     </div>
   );
@@ -493,7 +537,7 @@ export function AdultScraper() {
   const local = useQuery({
     queryKey: ["adult", "targets"],
     queryFn: () =>
-      adultApi.media({ ...defaultBrowse(true), kind: "adult_video" }),
+      adultApi.toolsMedia({ ...defaultBrowse(true), kind: "adult_video" }),
   });
   const enabled =
     providers.data?.providers
@@ -905,19 +949,23 @@ function AdultMediaDetail({ mediaId }: { mediaId: string }) {
   const source = useQuery({
     queryKey: ["adult", "source", mediaId],
     queryFn: () => adultApi.mediaDetail(mediaId),
+    enabled: local.isSuccess,
   });
+  if (local.isPending) return <Loading />;
+  if (local.error) return <ErrorNotice error={local.error} />;
   return (
     <div className="space-y-5">
       <Link to="/adult" className="action-link">
         ← {t("adultBack")}
       </Link>
-      {local.isPending ? (
-        <Loading />
-      ) : local.error ? (
-        <ErrorNotice error={local.error} />
-      ) : (
+      {
         <>
-          <PageHeading title={local.data.media.title} />
+          <PageHeading title={local.data.media.title}>
+            <NativeOpen files={local.data.files} adult />
+            <Link to="/adult/tools" className="action-link">
+              {t("videoTools")}
+            </Link>
+          </PageHeading>
           {settings.covers_visible &&
             local.data.poster_uri?.startsWith("data:image/") && (
               <img src={local.data.poster_uri} alt="" className="max-h-64" />
@@ -933,7 +981,7 @@ function AdultMediaDetail({ mediaId }: { mediaId: string }) {
             </ul>
           </section>
         </>
-      )}
+      }
       {source.isPending ? (
         <Loading />
       ) : source.error ? (
@@ -943,7 +991,7 @@ function AdultMediaDetail({ mediaId }: { mediaId: string }) {
       ) : (
         <Empty title={t("adultNoMetadata")} />
       )}
-      {local.data && <AdultOutput mediaId={mediaId} />}
+
       <p className="text-xs text-muted-foreground">
         {t(
           settings.remember_recent

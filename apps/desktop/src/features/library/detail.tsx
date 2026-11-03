@@ -4,6 +4,7 @@ import { ImageOff, LockKeyhole } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { libraryApi } from "../../api/library";
+import { NativeOpen } from "./native-open";
 import {
   Empty,
   ErrorNotice,
@@ -42,7 +43,12 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
       <PageHeading
         title={data.media.title}
         description={`${t(`kind_${data.media.kind}`)} · ${data.media.year ?? t("unknownYear")}`}
-      />
+      >
+        <NativeOpen files={data.files} />
+        <Link to="/tools" className="action-link">
+          {t("videoTools")}
+        </Link>
+      </PageHeading>
       <div className="detail-layout">
         <div>
           <div className="poster-image rounded-2xl border border-border">
