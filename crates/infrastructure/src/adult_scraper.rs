@@ -1015,7 +1015,7 @@ mod tests {
         }
     }
     async fn setup() -> Setup {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("library.sqlite"))
             .await
             .unwrap();
@@ -1046,7 +1046,7 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Synthetic Adult Root".into(),
             path: dir.path().to_string_lossy().into_owned(),
-            path_style: PathStyle::Posix,
+            path_style: crate::test_support::native_path_style(),
             kind: Some(MediaKind::AdultVideo),
             enabled: true,
             created_at: now,

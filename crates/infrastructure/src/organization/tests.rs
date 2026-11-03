@@ -56,7 +56,7 @@ struct Fixture {
 }
 impl Fixture {
     async fn new() -> Self {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = crate::test_support::tempdir().unwrap();
         std::fs::create_dir(temp.path().join("source")).unwrap();
         std::fs::create_dir(temp.path().join("target")).unwrap();
         let repo = LibraryRepository::open(&temp.path().join("db.sqlite"))
@@ -67,7 +67,7 @@ impl Fixture {
             id: Uuid::new_v4(),
             name: name.into(),
             path: temp.path().join(name).to_str().unwrap().into(),
-            path_style: mediaatlas_domain::PathStyle::Posix,
+            path_style: crate::test_support::native_path_style(),
             kind: Some(MediaKind::Movie),
             enabled: true,
             created_at: now,

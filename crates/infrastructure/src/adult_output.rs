@@ -386,7 +386,7 @@ mod tests {
         Vec<Uuid>,
         AdultOutputAccess,
     ) {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = crate::test_support::tempdir().unwrap();
         let media = temp.path().join("synthetic-adult-fixtures");
         std::fs::create_dir(&media).unwrap();
         let repo = LibraryRepository::open(&temp.path().join("batch.sqlite"))

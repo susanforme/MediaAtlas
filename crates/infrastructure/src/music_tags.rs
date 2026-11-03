@@ -1111,7 +1111,7 @@ mod tests {
         ("wav", include_bytes!("../tests/fixtures/music/silence.wav")),
     ];
     async fn library(ext: &str, bytes: &[u8]) -> (TempDir, LibraryRepository, MediaFile) {
-        let directory = tempfile::tempdir().unwrap();
+        let directory = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&directory.path().join("library.sqlite"))
             .await
             .unwrap();

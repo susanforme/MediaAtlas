@@ -839,7 +839,7 @@ mod tests {
                 });
             }
         });
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("library.sqlite"))
             .await
             .unwrap();
@@ -896,7 +896,7 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Mock media".into(),
             path: dir.path().to_string_lossy().into_owned(),
-            path_style: PathStyle::Posix,
+            path_style: crate::test_support::native_path_style(),
             kind: Some(MediaKind::Movie),
             enabled: true,
             created_at: now,
@@ -1756,7 +1756,7 @@ mod tests {
             id: Uuid::new_v4(),
             name: "Private".into(),
             path: adult_path.to_str().unwrap().into(),
-            path_style: PathStyle::Posix,
+            path_style: crate::test_support::native_path_style(),
             kind: Some(MediaKind::AdultVideo),
             enabled: true,
             created_at: Utc::now(),

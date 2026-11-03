@@ -1,3 +1,5 @@
+mod support;
+
 use chrono::Utc;
 use mediaatlas_domain::*;
 use mediaatlas_infrastructure::{
@@ -112,7 +114,7 @@ fn graph() -> MusicReleaseGraph {
     }
 }
 async fn database() -> (tempfile::TempDir, LibraryRepository, MusicLibraryService) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = support::tempdir().unwrap();
     let repo = LibraryRepository::open(&dir.path().join("music.sqlite"))
         .await
         .unwrap();
@@ -124,7 +126,7 @@ async fn local_file(repo: &LibraryRepository, dir: &tempfile::TempDir) -> MediaF
         id: Uuid::new_v4(),
         name: "Audio".into(),
         path: dir.path().to_str().unwrap().into(),
-        path_style: PathStyle::Posix,
+        path_style: support::native_path_style(),
         kind: Some(MediaKind::MusicTrack),
         enabled: true,
         created_at: Utc::now(),

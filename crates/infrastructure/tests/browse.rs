@@ -1,3 +1,5 @@
+mod support;
+
 use chrono::{DateTime, Duration, Utc};
 use mediaatlas_application::library::{BrowseQuery, MediaDetailInput, RootInput};
 use mediaatlas_domain::{
@@ -9,14 +11,14 @@ use mediaatlas_infrastructure::{
 };
 use serde_json::json;
 use std::path::Path;
-use tempfile::{tempdir, TempDir};
+use tempfile::TempDir;
 use uuid::Uuid;
 
 fn now() -> DateTime<Utc> {
     DateTime::from_timestamp_millis(1_700_000_000_000).unwrap()
 }
 async fn setup() -> (TempDir, LibraryRepository, BrowseService) {
-    let dir = tempdir().unwrap();
+    let dir = support::tempdir().unwrap();
     let repo = LibraryRepository::open(&dir.path().join("test.sqlite"))
         .await
         .unwrap();

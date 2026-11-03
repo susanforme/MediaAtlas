@@ -410,7 +410,7 @@ mod tests {
         LibraryRoot,
         Arc<StubOpener>,
     ) {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("library.sqlite"))
             .await
             .unwrap();

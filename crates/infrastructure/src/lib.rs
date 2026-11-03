@@ -107,3 +107,7 @@ mod tests {
         assert_eq!(log["fields"].as_object().unwrap().len(), 2);
     }
 }
+
+#[cfg(test)]
+#[path = "../tests/support/mod.rs"]
+mod test_support;

@@ -11,7 +11,7 @@ async fn fixture() -> (
     WatcherService,
     LibraryRoot,
 ) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_support::tempdir().unwrap();
     let path = dir.path().join("media");
     std::fs::create_dir(&path).unwrap();
     let repo = LibraryRepository::open(&dir.path().join("db.sqlite"))
@@ -241,7 +241,7 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
 #[test]
 fn scanner_prunes_private_staging_without_implicit_git_or_hidden_exclusions() {
     use mediaatlas_media_scanner::{run_scan, ScanOptions};
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_support::tempdir().unwrap();
     for relative in [
         ".mediaatlas-tag-backup/Original.2020.mkv",
         ".mediaatlas_org/source.mkv",
@@ -256,7 +256,7 @@ fn scanner_prunes_private_staging_without_implicit_git_or_hidden_exclusions() {
     std::fs::write(dir.path().join(".gitignore"), b"ordinary/\n.user/\n").unwrap();
     let options = ScanOptions {
         kind: Some(MediaKind::Movie),
-        path_style: mediaatlas_domain::PathStyle::Posix,
+        path_style: crate::test_support::native_path_style(),
         exclude_patterns: vec!["excluded/**".into()],
         known_files: HashMap::new(),
     };

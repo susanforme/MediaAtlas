@@ -201,7 +201,7 @@ mod tests {
         MusicReleaseGraph,
         SelectedCover,
     ) {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("art.sqlite"))
             .await
             .unwrap();

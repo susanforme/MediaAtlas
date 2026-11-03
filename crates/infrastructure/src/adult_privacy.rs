@@ -173,7 +173,7 @@ mod tests {
     use super::*;
     use crate::network::NetworkEngine;
     async fn fixture() -> (tempfile::TempDir, LibraryRepository, AdultPrivacyService) {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("synthetic.sqlite"))
             .await
             .unwrap();
@@ -391,7 +391,7 @@ mod race_tests {
     use mediaatlas_domain::MediaKind;
     #[tokio::test]
     async fn disabling_recent_concurrently_with_a_visit_never_leaves_disabled_history() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("synthetic.sqlite"))
             .await
             .unwrap();
@@ -431,7 +431,7 @@ mod race_tests {
     }
     #[tokio::test]
     async fn ordinary_and_adult_roots_cannot_overlap_in_either_direction() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("synthetic.sqlite"))
             .await
             .unwrap();
@@ -477,7 +477,7 @@ mod output_revocation_tests {
     use mediaatlas_domain::{MediaFile, MediaItem, MediaKind};
     #[tokio::test]
     async fn lock_invalidates_old_output_even_after_a_fresh_unlock() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("synthetic.sqlite"))
             .await
             .unwrap();
@@ -600,7 +600,7 @@ mod terminal_request_tests {
     use crate::network::{CancellationToken, NetworkEngine};
     #[tokio::test]
     async fn lock_cancels_gallery_requests_from_an_already_succeeded_adult_run() {
-        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::test_support::tempdir().unwrap();
         let repo = LibraryRepository::open(&dir.path().join("synthetic.sqlite"))
             .await
             .unwrap();

@@ -1,3 +1,5 @@
+mod support;
+
 use chrono::Utc;
 use mediaatlas_application::library::{ConfirmInput, PreviewInput, RootInput};
 use mediaatlas_domain::{LibraryRoot, MediaKind, TaskState};
@@ -8,11 +10,11 @@ use mediaatlas_infrastructure::{
 };
 use serde_json::json;
 use std::{path::Path, time::Duration};
-use tempfile::{tempdir, TempDir};
+use tempfile::TempDir;
 use uuid::Uuid;
 
 async fn setup(kind: Option<MediaKind>) -> (TempDir, LibraryRepository, ScanService, LibraryRoot) {
-    let dir = tempdir().unwrap();
+    let dir = support::tempdir().unwrap();
     let media = dir.path().join("media");
     std::fs::create_dir(&media).unwrap();
     let repo = LibraryRepository::open(&dir.path().join("library.sqlite"))

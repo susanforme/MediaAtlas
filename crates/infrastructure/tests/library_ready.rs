@@ -1,3 +1,5 @@
+mod support;
+
 use mediaatlas_application::library::{
     BrowseQuery, ConfirmInput, MediaDetailInput, PreviewInput, RootInput,
 };
@@ -13,7 +15,7 @@ use std::{path::Path, time::Duration};
 async fn imported(
     names: &[(&str, Option<&str>)],
 ) -> (tempfile::TempDir, LibraryRepository, BrowseService) {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = support::tempdir().unwrap();
     let media = dir.path().join("media");
     std::fs::create_dir(&media).unwrap();
     for (name, nfo) in names {

@@ -209,7 +209,11 @@ fn windows_source_lease(
 async fn check_windows_lease(id: Uuid) -> Result<Arc<WindowsSourceLease>, RepositoryError> {
     let mut leases = windows_leases().lock().await;
     leases.retain(|_, lease| lease.created.elapsed() < std::time::Duration::from_secs(600));
-    leases.get(&id).cloned().ok_or(RepositoryError::Conflict)
+    let lease = leases.get(&id).cloned().ok_or(RepositoryError::Conflict)?;
+    if let Some(access) = &lease.adult_access {
+        access.ensure()?;
+    }
+    Ok(lease)
 }
 fn verify_source(plan: &OutputPlan) -> Result<(), RepositoryError> {
     let dir = descend(
@@ -653,7 +657,10 @@ impl MediaOutputService {
     ) -> Result<OutputResult, RepositoryError> {
         let result = self.execute_inner(preview_id, cancel).await;
         #[cfg(windows)]
-        {
+        if result.is_ok() {
+            // A rejected channel/root check or an external sidecar collision
+            // must not consume another channel's lease or a retryable preview.
+            // Discard, privacy lock and the bounded TTL release unused leases.
             windows_leases().lock().await.remove(&preview_id);
         }
         if result.is_ok() {
@@ -719,8 +726,10 @@ impl MediaOutputService {
         } else {
             Some(check_windows_lease(preview_id).await?)
         };
-        verify_source(&plan)?;
         if state == "succeeded" {
+            // Replaying an already completed plan is a current-state check:
+            // a disappeared source is a stale plan, not invalid caller input.
+            verify_source(&plan).map_err(|_| RepositoryError::Conflict)?;
             verify_completed_plan(&plan)?;
             return Ok(OutputResult {
                 schema_version: 1,
@@ -731,6 +740,7 @@ impl MediaOutputService {
                 state,
             });
         }
+        verify_source(&plan)?;
         if state == "running" {
             return Err(RepositoryError::Conflict);
         }
@@ -1526,7 +1536,7 @@ mod tests {
         MediaOutputService,
         Uuid,
     ) {
-        let temporary = tempfile::tempdir().unwrap();
+        let temporary = crate::test_support::tempdir().unwrap();
         let media_dir = temporary.path().join("media");
         std::fs::create_dir(&media_dir).unwrap();
         std::fs::write(media_dir.join("Example.mkv"), b"untouched video bytes").unwrap();
@@ -1629,7 +1639,16 @@ mod tests {
             temp.path().join("adult-cache"),
             AdultOutputAccess::new(),
         );
-        assert_eq!(fresh.execute(preview.preview_id).await.unwrap().written, 1);
+        // A fresh grant obtains its own preview and platform source lease.
+        let fresh_preview = fresh.preview(id).await.unwrap();
+        assert_eq!(
+            fresh
+                .execute(fresh_preview.preview_id)
+                .await
+                .unwrap()
+                .written,
+            1
+        );
         assert_eq!(
             std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
             b"untouched video bytes"
@@ -1640,8 +1659,30 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            fresh.execute(preview.preview_id).await.unwrap_err(),
+            fresh.execute(fresh_preview.preview_id).await.unwrap_err(),
             RepositoryError::InvalidInput
+        );
+    }
+    #[tokio::test]
+    async fn wrong_channel_rejection_does_not_consume_authorized_output_preview() {
+        let (temp, repo, service, _access, id) = adult_library().await;
+        let ordinary = MediaOutputService::new(repo, temp.path().join("cache"));
+        let preview = service.preview(id).await.unwrap();
+        assert_eq!(
+            ordinary.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert_eq!(
+            ordinary.discard(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap().written,
+            1
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
+            b"untouched video bytes"
         );
     }
     #[test]
@@ -1752,7 +1793,7 @@ mod tests {
     }
     #[test]
     fn revoked_grant_after_staging_cannot_publish_and_cleans_the_temporary_file() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = crate::test_support::tempdir().unwrap();
         let dir = open_absolute_dir(temp.path(), false).unwrap();
         let access = AdultOutputAccess::new();
         assert_eq!(
@@ -1957,6 +1998,19 @@ mod tests {
             service.execute(preview.preview_id).await.unwrap_err(),
             RepositoryError::Conflict
         );
+    }
+    #[tokio::test]
+    async fn completed_output_with_missing_source_is_a_stale_plan_conflict() {
+        let (temp, _, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        service.execute(preview.preview_id).await.unwrap();
+        service.discard(preview.preview_id).await.unwrap();
+        std::fs::remove_file(temp.path().join("media/Example.mkv")).unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+        assert!(temp.path().join("media/Example.nfo").is_file());
     }
     #[cfg(unix)]
     #[tokio::test]

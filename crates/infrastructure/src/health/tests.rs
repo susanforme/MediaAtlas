@@ -7,7 +7,7 @@ use serde_json::json;
 
 #[tokio::test]
 async fn bounded_health_review_finds_missing_assets_duplicates_and_offline_files_without_writes() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_support::tempdir().unwrap();
     let media = dir.path().join("media");
     std::fs::create_dir(&media).unwrap();
     let repo = LibraryRepository::open(&dir.path().join("db.sqlite"))
@@ -149,7 +149,7 @@ async fn bounded_health_review_finds_missing_assets_duplicates_and_offline_files
 }
 #[test]
 fn file_checks_do_not_follow_symlinks_or_traversal() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_support::tempdir().unwrap();
     std::fs::write(dir.path().join("real.mkv"), b"fixture").unwrap();
     assert!(regular_file_available(dir.path(), Path::new("real.mkv")));
     assert!(!regular_file_available(
@@ -169,7 +169,7 @@ fn file_checks_do_not_follow_symlinks_or_traversal() {
 async fn missing_actual_local_and_approved_cached_artwork_is_reported_without_reading_arbitrary_database_paths(
 ) {
     use mediaatlas_domain::{Artwork, ArtworkKind};
-    let dir = tempfile::tempdir().unwrap();
+    let dir = crate::test_support::tempdir().unwrap();
     let media = dir.path().join("media");
     let cache = dir.path().join("approved-cache");
     std::fs::create_dir(&media).unwrap();
