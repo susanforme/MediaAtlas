@@ -1,3 +1,31 @@
+# MediaAtlas 电影式深色重构验收（2026-11-03）
+
+本轮以 `main / 8004e83` 为基线，界面源码为 `2ef08af`。以下 **17 张 PNG 均为本轮 Chromium 实际页面截图**，视口为 1648×928 和 390×844；未使用图像生成、拼接或修补。精确源码 SHA、图片 SHA-256 与验证结果见 [cinematic-ui-report.json](cinematic-ui-report.json)。下方旧版截图及历史成绩不计入本轮验收。
+
+| 本轮场景 | 文件 |
+| --- | --- |
+| 无桌面宿主（真实浏览器限制） | [desktop-required-1648.png](desktop-required-1648.png) |
+| 首页 / 窄屏与减少动态效果 | [fixture-home-1648.png](fixture-home-1648.png) / [fixture-home-narrow-reduced-motion.png](fixture-home-narrow-reduced-motion.png) |
+| 媒体库搜索 / 窄屏 | [fixture-library-search-1648.png](fixture-library-search-1648.png) / [fixture-library-narrow.png](fixture-library-narrow.png) |
+| 版本选择 / 键盘焦点 | [fixture-version-dialog-1648.png](fixture-version-dialog-1648.png) |
+| 加载 / 空 / 错误 / 缺图（含损坏 PNG） | [fixture-loading-1648.png](fixture-loading-1648.png) / [fixture-empty-1648.png](fixture-empty-1648.png) / [fixture-error-1648.png](fixture-error-1648.png) / [fixture-missing-1648.png](fixture-missing-1648.png) |
+| 设置 / 窄屏 | [fixture-settings-1648.png](fixture-settings-1648.png) / [fixture-settings-narrow.png](fixture-settings-narrow.png) |
+| 媒体工具 / 窄屏 | [fixture-tools-1648.png](fixture-tools-1648.png) / [fixture-tools-narrow.png](fixture-tools-narrow.png) |
+| 音乐空状态 | [fixture-music-empty-1648.png](fixture-music-empty-1648.png) |
+| 备份维护 / 窄屏 | [fixture-maintenance-1648.png](fixture-maintenance-1648.png) / [fixture-diagnostics-narrow.png](fixture-diagnostics-narrow.png) |
+
+`desktop-required-*` 没有注入 IPC，真实呈现“请在桌面应用中打开”。`fixture-*` 在测试浏览器注入**明确标识的合成 IPC 数据**，海报写有 QA FIXTURE，数据只存在验证脚本，不进入产品源码、不写用户库。它们证明界面渲染、搜索 URL 状态、加载/空/错误/缺图和键盘行为；**不证明真实 Tauri 后端、Provider、系统 App 打开、系统密钥存储或文件写入成功**。Token 验证只使用合成测试值，截图前输入已清空；没有读取或展示环境密钥。
+
+浏览器自动断言通过：所有捕获视口无页面横向溢出；首页四横卡与七海报；无内嵌 video/audio/iframe；成人入口默认隐藏；工具栏搜索导航并复用媒体库唯一搜索状态；多版本选择不自动打开文件，Tab 限制在对话框内，Escape 关闭并恢复触发器焦点；减少动态效果关闭海报位移；Token 仅显式点击保存且立即清空。另有 Vitest 验证成人隔离、锁定后过期响应、只读边界和确认流程。
+
+复现：安装 Python `playwright` / `pillow` 与系统 Chromium，先运行 `pnpm dev:web`，再执行 `python scripts/desktop-ui-qa.py`。可通过 `MEDIAATLAS_QA_URL`、`MEDIAATLAS_CHROMIUM` 指定 URL 和系统浏览器路径。测试浏览器只用于 QA，不是产品依赖；没有捆绑浏览器引擎。
+
+本轮重跑 `pnpm check`：lint、typecheck、29 文件 / 170 测试、前端 build 全部通过。Vite 提示主 chunk 约 535kB（gzip 约 173kB）超过默认 500kB 提示阈值，构建成功。当前环境没有 Rust/Tauri 工具链，本轮未运行原生宿主或桌面打包，既有 tag 未移动。
+
+---
+
+## 以下为历史资料（不计入本轮验收）
+
 # MediaAtlas 0.1.0-beta.1 截图
 
 本轮全部 10 张截图对应应用源码提交 **`d50b4dd03c15e45428c4b455f3e8755d40732a48`**，浏览器 5 张与原生 5 张均已重拍。更新后的界面已移除冗余介绍和页头副标签。截图及报告随后单独提交；生成截图会让 `screenshots/` 变更，不把该时刻整棵工作树称作 clean。
