@@ -53,7 +53,14 @@ export function ErrorNotice({
       <p className="font-medium">
         {desktop
           ? t("desktopRequired")
-          : t(key, { defaultValue: t("operationFailed") })}
+          : t(key, {
+              defaultValue:
+                error instanceof DesktopError && error.envelope
+                  ? t(`providerFailure_${error.envelope.code}`, {
+                      defaultValue: t("operationFailed"),
+                    })
+                  : t("operationFailed"),
+            })}
       </p>
       {desktop && <p className="mt-1">{t("desktopDescription")}</p>}
       {retry && !desktop && (

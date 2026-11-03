@@ -20,7 +20,7 @@ pub const FIXTURE_PROVIDER_ID: &str = "fixture.offline";
 pub struct ProviderService {
     repo: LibraryRepository,
     gate: Arc<Mutex<()>>,
-    cancellations: Arc<Mutex<HashMap<Uuid, CancellationToken>>>,
+    cancellations: Arc<Mutex<HashMap<Uuid, (CancellationToken, usize)>>>,
     adapters: Arc<RwLock<HashMap<String, Arc<dyn ProviderAdapter>>>>,
     engine: Arc<NetworkEngine>,
 }
@@ -140,6 +140,22 @@ impl ProviderAdapter for OfflineFixtureProvider {
     }
 }
 
+/// Descriptor registration for typed P4 workflows. Untyped legacy start is rejected.
+pub struct TypedVideoRegistration(pub mediaatlas_domain::ProviderDescriptor);
+impl ProviderAdapter for TypedVideoRegistration {
+    fn descriptor(&self) -> ProviderDescriptor {
+        self.0.clone()
+    }
+    fn execute<'a>(
+        &'a self,
+        _job: &'a ProviderJob,
+        _engine: &'a NetworkEngine,
+        _cancel: &'a CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = Result<String, ProviderFailure>> + Send + 'a>> {
+        Box::pin(async { Err(ProviderFailure::InvalidConfiguration) })
+    }
+}
+
 impl ProviderService {
     pub async fn new(repo: LibraryRepository) -> Result<Self, RepositoryError> {
         let engine = NetworkEngine::new(4).map_err(|_| RepositoryError::InvalidInput)?;
@@ -181,8 +197,12 @@ impl ProviderService {
         }
         // P3 has no adult/context selector. Keep adapters on the ordinary Movie
         // lane until the later typed provider workflow adds explicit isolation.
-        if !descriptor.media_kinds.contains(&MediaKind::Movie)
-            || descriptor.media_kinds.contains(&MediaKind::AdultVideo)
+        if !descriptor.media_kinds.iter().any(|kind| {
+            matches!(
+                kind,
+                MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime
+            )
+        }) || descriptor.media_kinds.contains(&MediaKind::AdultVideo)
         {
             return Err(RepositoryError::InvalidInput);
         }
@@ -211,7 +231,7 @@ impl ProviderService {
         Ok(result.rows_affected())
     }
 
-    async fn config(&self, provider_id: &str) -> Result<ProviderConfig, RepositoryError> {
+    pub async fn config(&self, provider_id: &str) -> Result<ProviderConfig, RepositoryError> {
         if !self.adapters.read().await.contains_key(provider_id) {
             return Err(RepositoryError::NotFound);
         }
@@ -309,7 +329,10 @@ impl ProviderService {
         mut config: ProviderConfig,
     ) -> Result<(), RepositoryError> {
         validate_config(&config)?;
-        if provider_id == FIXTURE_PROVIDER_ID && config.credential_ref.is_some() {
+        if (provider_id == FIXTURE_PROVIDER_ID
+            || ["tmdb", "anilist", "wikipedia.html"].contains(&provider_id))
+            && config.credential_ref.is_some()
+        {
             return Err(RepositoryError::InvalidInput);
         }
         let old = self.config(provider_id).await?;
@@ -323,8 +346,8 @@ impl ProviderService {
             .execute(self.repo.pool())
             .await?;
         if !config.enabled {
-            let ids = sqlx::query_scalar::<_, String>("SELECT t.id FROM scrape_tasks t JOIN provider_sessions p ON p.task_id=t.id WHERE p.provider_id=? AND t.state IN ('queued','running')")
-                .bind(provider_id).fetch_all(self.repo.pool()).await?;
+            let ids = sqlx::query_scalar::<_, String>("SELECT DISTINCT t.id FROM scrape_tasks t JOIN provider_sessions p ON p.task_id=t.id LEFT JOIN scrape_runs r ON r.task_id=t.id WHERE (p.provider_id=? OR r.provider_id=?) AND t.state IN ('queued','running','waiting_for_user')")
+                .bind(provider_id).bind(provider_id).fetch_all(self.repo.pool()).await?;
             for id in ids {
                 let id = Uuid::parse_str(&id).map_err(|_| RepositoryError::CorruptData)?;
                 self.cancel_inner(id).await?;
@@ -415,7 +438,10 @@ impl ProviderService {
             .await?;
         tx.commit().await?;
         let cancel = CancellationToken::new();
-        self.cancellations.lock().await.insert(id, cancel.clone());
+        self.cancellations
+            .lock()
+            .await
+            .insert(id, (cancel.clone(), 1));
         let service = self.clone();
         tokio::spawn(async move {
             if service.run(job.clone(), cancel).await.is_err() {
@@ -428,6 +454,30 @@ impl ProviderService {
         Ok(id)
     }
 
+    pub fn engine(&self) -> Arc<NetworkEngine> {
+        self.engine.clone()
+    }
+    /// Concurrent typed operations for one run share a token and reference count.
+    pub async fn attach_cancellation(
+        &self,
+        id: Uuid,
+        cancel: CancellationToken,
+    ) -> CancellationToken {
+        let mut registrations = self.cancellations.lock().await;
+        let entry = registrations.entry(id).or_insert((cancel, 0));
+        entry.1 += 1;
+        entry.0.clone()
+    }
+    pub async fn detach_cancellation(&self, id: Uuid) {
+        let mut registrations = self.cancellations.lock().await;
+        if let Some(entry) = registrations.get_mut(&id) {
+            entry.1 = entry.1.saturating_sub(1);
+            if entry.1 == 0 {
+                registrations.remove(&id);
+            }
+        }
+    }
+
     pub async fn cancel(&self, task_id: Uuid) -> Result<bool, RepositoryError> {
         let _gate = self.gate.lock().await;
         self.cancel_inner(task_id).await
@@ -435,7 +485,7 @@ impl ProviderService {
 
     async fn cancel_inner(&self, task_id: Uuid) -> Result<bool, RepositoryError> {
         let mut tx = self.repo.pool().begin().await?;
-        let result = sqlx::query("UPDATE scrape_tasks SET state='cancelled',updated_at=MAX(updated_at,?) WHERE id=? AND id IN (SELECT task_id FROM provider_sessions) AND state IN ('queued','running')")
+        let result = sqlx::query("UPDATE scrape_tasks SET state='cancelled',updated_at=MAX(updated_at,?) WHERE id=? AND id IN (SELECT task_id FROM provider_sessions) AND state IN ('queued','running','waiting_for_user')")
             .bind(Utc::now().timestamp_millis()).bind(task_id.to_string()).execute(&mut *tx).await?;
         if result.rows_affected() == 1 {
             sqlx::query("UPDATE provider_sessions SET failure=? WHERE task_id=?")
@@ -448,7 +498,7 @@ impl ProviderService {
         }
         tx.commit().await?;
         if result.rows_affected() == 1 {
-            if let Some(cancel) = self.cancellations.lock().await.get(&task_id) {
+            if let Some((cancel, _)) = self.cancellations.lock().await.get(&task_id) {
                 cancel.cancel();
             }
         }
@@ -566,7 +616,7 @@ impl ProviderService {
     }
 }
 
-fn validate_query(query: &str) -> Result<(), RepositoryError> {
+pub(crate) fn validate_query(query: &str) -> Result<(), RepositoryError> {
     let lower = query.to_ascii_lowercase();
     let compact: String = lower.chars().filter(|c| !c.is_whitespace()).collect();
     if query.trim().is_empty()

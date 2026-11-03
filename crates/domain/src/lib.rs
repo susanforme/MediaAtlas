@@ -6,6 +6,7 @@ pub mod metadata;
 pub mod music;
 pub mod paths;
 pub mod provider;
+pub mod scraper;
 pub mod tasks;
 pub mod video;
 
@@ -15,6 +16,7 @@ pub use metadata::*;
 pub use music::*;
 pub use paths::*;
 pub use provider::*;
+pub use scraper::*;
 pub use tasks::*;
 pub use video::*;
 

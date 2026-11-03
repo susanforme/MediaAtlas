@@ -14,6 +14,7 @@ fn storage_error(error: RepositoryError) -> ErrorDto {
         RepositoryError::Database => "database_error",
         RepositoryError::Migration => "migration_error",
         RepositoryError::CorruptData => "corrupt_data",
+        RepositoryError::Provider(failure) => failure.code(),
     };
     ErrorDto {
         schema_version: 1,
@@ -271,6 +272,212 @@ pub async fn provider_cancel(
     state
         .providers
         .cancel(input.task_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScraperDetailInput {
+    run_id: Uuid,
+    candidate_index: usize,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScraperPreviewIdInput {
+    preview_id: Uuid,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScraperMediaInput {
+    media_id: Uuid,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScraperArtworkInput {
+    run_id: Uuid,
+    candidate_index: usize,
+    artwork_index: usize,
+}
+#[tauri::command]
+pub async fn scraper_search(
+    state: State<'_, DesktopState>,
+    input: mediaatlas_domain::ScraperSearchRequest,
+) -> Result<ApiResponse<mediaatlas_domain::SearchPreview>, ErrorDto> {
+    state
+        .scraper
+        .search(input)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_detail(
+    state: State<'_, DesktopState>,
+    input: ScraperDetailInput,
+) -> Result<ApiResponse<mediaatlas_domain::VideoMetadata>, ErrorDto> {
+    state
+        .scraper
+        .detail(input.run_id, input.candidate_index)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_preview(
+    state: State<'_, DesktopState>,
+    input: mediaatlas_domain::MergeRequest,
+) -> Result<ApiResponse<mediaatlas_domain::MergePreview>, ErrorDto> {
+    state
+        .scraper
+        .preview(input)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_confirm(
+    state: State<'_, DesktopState>,
+    input: ScraperPreviewIdInput,
+) -> Result<ApiResponse<mediaatlas_domain::MergeResult>, ErrorDto> {
+    state
+        .scraper
+        .confirm(input.preview_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_history(
+    state: State<'_, DesktopState>,
+    input: ProviderSnapshotInput,
+) -> Result<ApiResponse<Vec<mediaatlas_infrastructure::scraper::ScraperHistoryEntry>>, ErrorDto> {
+    let _ = input;
+    state
+        .scraper
+        .history()
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_output_preview(
+    state: State<'_, DesktopState>,
+    input: ScraperMediaInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::media_output::OutputPreview>, ErrorDto> {
+    state
+        .output
+        .preview(input.media_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_output_execute(
+    state: State<'_, DesktopState>,
+    input: ScraperPreviewIdInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::media_output::OutputResult>, ErrorDto> {
+    state
+        .output
+        .execute(input.preview_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_artwork_preview(
+    state: State<'_, DesktopState>,
+    input: ScraperArtworkInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::scraper::ArtworkPreview>, ErrorDto> {
+    state
+        .scraper
+        .artwork_preview(input.run_id, input.candidate_index, input.artwork_index)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScraperRunInput {
+    run_id: Uuid,
+}
+#[tauri::command]
+pub async fn scraper_search_preview(
+    state: State<'_, DesktopState>,
+    input: ScraperRunInput,
+) -> Result<ApiResponse<mediaatlas_domain::SearchPreview>, ErrorDto> {
+    state
+        .scraper
+        .search_preview(input.run_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn scraper_media_detail(
+    state: State<'_, DesktopState>,
+    input: ScraperMediaInput,
+) -> Result<ApiResponse<Option<mediaatlas_domain::VideoMetadata>>, ErrorDto> {
+    state
+        .scraper
+        .media_detail(input.media_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+
+#[tauri::command]
+pub async fn scraper_output_discard(
+    state: State<'_, DesktopState>,
+    input: ScraperPreviewIdInput,
+) -> Result<ApiResponse<()>, ErrorDto> {
+    state
+        .output
+        .discard(input.preview_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderAuthInput {
+    provider_id: String,
+}
+#[tauri::command]
+pub async fn provider_auth_status(
+    state: State<'_, DesktopState>,
+    input: ProviderAuthInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::provider_auth::AuthStatus>, ErrorDto> {
+    state
+        .auth
+        .status(&input.provider_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn provider_auth_save(
+    state: State<'_, DesktopState>,
+    input: mediaatlas_infrastructure::provider_auth::AuthSaveInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::provider_auth::AuthStatus>, ErrorDto> {
+    state
+        .auth
+        .save(input)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn provider_auth_clear(
+    state: State<'_, DesktopState>,
+    input: ProviderAuthInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::provider_auth::AuthStatus>, ErrorDto> {
+    state
+        .auth
+        .clear(&input.provider_id)
         .await
         .map(ApiResponse::new)
         .map_err(storage_error)

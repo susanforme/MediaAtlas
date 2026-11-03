@@ -62,3 +62,7 @@ P1 不实现所有 Person/Organization/Credit 的业务 Repository，也不预�
 6. 时间相同的多媒体条目可按 ID 翻页，不重不漏；多文件作品在 Root 过滤中只出现一次。
 7. Provider 写入无法覆盖人工/锁定字段，多语言当前值相互独立。
 8. 任务快照插入后保持不变；状态更新不执行文件操作，媒体删除不删除实际文件。
+
+## P4 appended storage
+
+Migrations `0006_media_output.sql`, `0007_scraper_workflow.sql`, `0008_provider_auth.sql` append output plan snapshots; immutable typed search/job/detail/merge snapshots and confirmed Movie/TV/Anime source structures; authentication method/storage/opaque revision references and pending retirement references. No credential value is stored in SQLite. Output operations reuse `file_operations`; scraping reuses `scrape_tasks`, `scrape_runs`, and redacted request history without altering scan sessions. Provider confirmation checks the current canonical values, locale-specific metadata before-images, user/locked flags, type and adult isolation in one transaction. Source output checks current Root/file association and filesystem identity separately before creating sidecars.

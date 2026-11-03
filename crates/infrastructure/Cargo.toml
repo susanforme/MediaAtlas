@@ -24,6 +24,10 @@ reqwest.workspace = true
 scraper.workspace = true
 tokio-util.workspace = true
 httpdate.workspace = true
+sha2 = "0.10"
+roxmltree = "0.20"
+cap-std = "3"
+cap-fs-ext = "3"
 keyring = { version = "3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust", "vendored"] }
 
 [dev-dependencies]

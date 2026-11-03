@@ -27,6 +27,31 @@ pub enum ProviderFailure {
     Disabled,
     CoolingDown,
 }
+impl ProviderFailure {
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Timeout => "timeout",
+            Self::DnsError => "dns_error",
+            Self::TlsError => "tls_error",
+            Self::NetworkError => "network_error",
+            Self::Http4xx => "http4xx",
+            Self::Http5xx => "http5xx",
+            Self::RateLimited => "rate_limited",
+            Self::Blocked => "blocked",
+            Self::Captcha => "captcha",
+            Self::NotFound => "not_found",
+            Self::ParseError => "parse_error",
+            Self::IdentityMismatch => "identity_mismatch",
+            Self::Cancelled => "cancelled",
+            Self::UnsafeTarget => "unsafe_target",
+            Self::ResponseTooLarge => "response_too_large",
+            Self::InvalidConfiguration => "invalid_configuration",
+            Self::CredentialsUnavailable => "credentials_unavailable",
+            Self::Disabled => "disabled",
+            Self::CoolingDown => "cooling_down",
+        }
+    }
+}
 impl std::fmt::Display for ProviderFailure {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Provider operation failed ({self:?})")

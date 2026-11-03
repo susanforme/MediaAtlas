@@ -19,6 +19,41 @@ impl BrowseService {
                 .await?;
         let artworks = self.repo.list_artworks(media.id).await?;
         for art in artworks {
+            if media.kind != MediaKind::AdultVideo && !isolated {
+                if let (Some(cache), Some(hash), Some(path)) = (
+                    &self.approved_artwork_cache,
+                    &art.content_hash,
+                    &art.cache_path,
+                ) {
+                    if art.kind == ArtworkKind::Poster
+                        && hash.len() == 64
+                        && hash.bytes().all(|b| b.is_ascii_hexdigit())
+                        && Path::new(path).parent() == Some(cache.as_path())
+                    {
+                        let cached = crate::media_output::CachedArtwork {
+                            cache_path: path.clone(),
+                            thumbnail_path: cache
+                                .join(format!("{hash}.thumb.png"))
+                                .to_string_lossy()
+                                .into_owned(),
+                            content_hash: hash.clone(),
+                            width: art.width.unwrap_or(0),
+                            height: art.height.unwrap_or(0),
+                            mime: String::new(),
+                        };
+                        let service = crate::media_output::MediaOutputService::new(
+                            self.repo.clone(),
+                            cache.clone(),
+                        );
+                        if let Ok(bytes) = service.thumbnail_bytes(&cached) {
+                            return Ok(Some(format!(
+                                "data:image/png;base64,{}",
+                                STANDARD.encode(bytes)
+                            )));
+                        }
+                    }
+                }
+            }
             if !matches!(
                 art.kind,
                 ArtworkKind::Poster | ArtworkKind::Cover | ArtworkKind::AlbumCover

@@ -1,0 +1,1688 @@
+//! Capability-confined Preserve-only sidecar output and bounded artwork cache.
+//! Existing sidecars are always protected; application code never replaces media.
+use crate::{
+    library::{LibraryRepository, RepositoryError},
+    network::{CancellationToken, EngineKind, NetworkEngine, RequestSpec},
+};
+use cap_fs_ext::DirExt;
+use cap_std::{
+    ambient_authority,
+    fs::{Dir, OpenOptions},
+};
+use chrono::Utc;
+use image::{ImageFormat, ImageReader, Limits};
+use mediaatlas_domain::{
+    ArtworkKind, MediaItem, MediaKind, MetadataValue, ProviderFailure, ProviderJob,
+};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use sqlx::Row;
+use std::{
+    collections::BTreeMap,
+    io::{Cursor, Read, Write},
+    path::{Component, Path, PathBuf},
+    sync::{Arc, OnceLock},
+};
+use tokio::sync::{Mutex, Semaphore};
+use uuid::Uuid;
+
+const MAX_NFO: usize = 2 * 1024 * 1024;
+const MAX_IMAGE: usize = 8 * 1024 * 1024;
+const MAX_PIXELS: u64 = 20_000_000;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputFileDiff {
+    pub destination: String,
+    pub kind: String,
+    pub old_text: Option<String>,
+    pub new_text: Option<String>,
+    pub expected_hash: Option<String>,
+    pub content_hash: String,
+    pub protected: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputPreview {
+    pub schema_version: u16,
+    pub preview_id: Uuid,
+    pub media_item_id: Uuid,
+    pub strategy: String,
+    pub files: Vec<OutputFileDiff>,
+    pub state: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutputResult {
+    pub schema_version: u16,
+    pub preview_id: Uuid,
+    pub written: usize,
+    pub preserved: usize,
+    pub already_applied: bool,
+    pub state: String,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OutputPlan {
+    preview: OutputPreview,
+    root: PathBuf,
+    root_id: Uuid,
+    source_file_id: Uuid,
+    source_relative: String,
+    source_fingerprint: SourceFingerprint,
+    relative_parent: PathBuf,
+    payloads: Vec<Vec<u8>>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct SourceFingerprint {
+    len: u64,
+    modified_nanos: u128,
+    identity: String,
+}
+fn source_fingerprint(
+    dir: &Dir,
+    name: impl AsRef<Path>,
+) -> Result<SourceFingerprint, RepositoryError> {
+    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let file = dir.open_with(name, &options).map_err(io_error)?;
+    let metadata = file.metadata().map_err(io_error)?;
+    if !metadata.is_file() {
+        return Err(RepositoryError::InvalidInput);
+    }
+    let modified_nanos = metadata
+        .modified()
+        .map_err(io_error)?
+        .into_std()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| RepositoryError::InvalidInput)?
+        .as_nanos();
+    let identity = metadata_identity(&metadata)?;
+    Ok(SourceFingerprint {
+        len: metadata.len(),
+        modified_nanos,
+        identity,
+    })
+}
+#[cfg(unix)]
+fn metadata_identity(metadata: &cap_std::fs::Metadata) -> Result<String, RepositoryError> {
+    use cap_std::fs::MetadataExt;
+    Ok(format!("{}:{}", metadata.dev(), metadata.ino()))
+}
+#[cfg(not(unix))]
+fn metadata_identity(_: &cap_std::fs::Metadata) -> Result<String, RepositoryError> {
+    #[cfg(windows)]
+    {
+        static SESSION: OnceLock<String> = OnceLock::new();
+        Ok(format!(
+            "windows-session:{}",
+            SESSION.get_or_init(|| Uuid::new_v4().to_string())
+        ))
+    }
+    #[cfg(not(windows))]
+    {
+        Err(RepositoryError::InvalidInput)
+    }
+}
+// Windows uses a short-lived, process-local no-delete lease rather than
+// persisting a truncated FileIndex that can collide on ReFS. Every pathname
+// ancestor and the source remain opened without FILE_SHARE_DELETE. This makes
+// replacement impossible while the preview is valid. Recovery across processes
+// requires a fresh preview; it never falls back to path-only identity.
+#[cfg(windows)]
+struct WindowsSourceLease {
+    _directories: Vec<Dir>,
+    _source: cap_std::fs::File,
+    created: std::time::Instant,
+}
+#[cfg(windows)]
+fn windows_leases() -> &'static Mutex<std::collections::HashMap<Uuid, Arc<WindowsSourceLease>>> {
+    static LEASES: OnceLock<Mutex<std::collections::HashMap<Uuid, Arc<WindowsSourceLease>>>> =
+        OnceLock::new();
+    LEASES.get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+}
+#[cfg(windows)]
+fn windows_source_lease(
+    root: &Path,
+    relative: &Path,
+) -> Result<WindowsSourceLease, RepositoryError> {
+    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt};
+    use cap_std::fs::OpenOptionsExt;
+    let path = root.join(relative);
+    let mut anchor = PathBuf::new();
+    let mut parts = Vec::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(p) => anchor.push(p.as_os_str()),
+            Component::RootDir => anchor.push(component.as_os_str()),
+            Component::Normal(v) => parts.push(v.to_os_string()),
+            _ => return Err(RepositoryError::InvalidInput),
+        }
+    }
+    let source = parts.pop().ok_or(RepositoryError::InvalidInput)?;
+    let mut directories =
+        vec![Dir::open_ambient_dir(anchor, ambient_authority()).map_err(io_error)?];
+    // Windows FILE_SHARE_READ | FILE_SHARE_WRITE deliberately excludes DELETE.
+    for name in parts {
+        let mut options = OpenOptions::new();
+        options
+            .read(true)
+            .maybe_dir(true)
+            .follow(FollowSymlinks::No)
+            .share_mode(0x1 | 0x2);
+        let file = directories
+            .last()
+            .ok_or(RepositoryError::InvalidInput)?
+            .open_with(name, &options)
+            .map_err(io_error)?;
+        if !file.metadata().map_err(io_error)?.is_dir() {
+            return Err(RepositoryError::InvalidInput);
+        }
+        directories.push(Dir::from_std_file(file.into_std()));
+    }
+    let mut options = OpenOptions::new();
+    options
+        .read(true)
+        .follow(FollowSymlinks::No)
+        .share_mode(0x1 | 0x2);
+    let source = directories
+        .last()
+        .ok_or(RepositoryError::InvalidInput)?
+        .open_with(source, &options)
+        .map_err(io_error)?;
+    if !source.metadata().map_err(io_error)?.is_file() {
+        return Err(RepositoryError::InvalidInput);
+    }
+    Ok(WindowsSourceLease {
+        _directories: directories,
+        _source: source,
+        created: std::time::Instant::now(),
+    })
+}
+#[cfg(windows)]
+async fn check_windows_lease(id: Uuid) -> Result<Arc<WindowsSourceLease>, RepositoryError> {
+    let mut leases = windows_leases().lock().await;
+    leases.retain(|_, lease| lease.created.elapsed() < std::time::Duration::from_secs(600));
+    leases.get(&id).cloned().ok_or(RepositoryError::Conflict)
+}
+fn verify_source(plan: &OutputPlan) -> Result<(), RepositoryError> {
+    let dir = descend(
+        open_absolute_dir(&plan.root, false).map_err(io_error)?,
+        &plan.relative_parent,
+        false,
+    )
+    .map_err(io_error)?;
+    let relative = checked_relative(&plan.source_relative)?;
+    let fingerprint = source_fingerprint(
+        &dir,
+        relative.file_name().ok_or(RepositoryError::CorruptData)?,
+    )?;
+    if fingerprint != plan.source_fingerprint {
+        return Err(RepositoryError::Conflict);
+    }
+    Ok(())
+}
+#[derive(Clone)]
+pub struct MediaOutputService {
+    repo: LibraryRepository,
+    base_cache: PathBuf,
+    gate: Arc<Mutex<()>>,
+}
+impl MediaOutputService {
+    pub fn new(repo: LibraryRepository, base_cache: PathBuf) -> Self {
+        Self {
+            repo,
+            base_cache,
+            gate: Arc::default(),
+        }
+    }
+    /// Opening/recovering never replays file I/O; execution needs a fresh UI call.
+    pub async fn recover_interrupted(&self) -> Result<u64, RepositoryError> {
+        Ok(sqlx::query("UPDATE file_operations SET state='interrupted',updated_at=MAX(updated_at,?) WHERE state='running' AND id IN (SELECT id FROM output_previews)")
+            .bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?.rows_affected())
+    }
+    pub async fn preview(&self, media_id: Uuid) -> Result<OutputPreview, RepositoryError> {
+        let _gate = self.gate.lock().await;
+        let item = self
+            .repo
+            .get_media(media_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
+        if !matches!(
+            item.kind,
+            MediaKind::Movie
+                | MediaKind::TvSeries
+                | MediaKind::TvSeason
+                | MediaKind::TvEpisode
+                | MediaKind::Anime
+        ) {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let files = self.repo.list_files(media_id).await?;
+        let source = files.first().ok_or(RepositoryError::NotFound)?;
+        let root = self
+            .repo
+            .get_root(source.root_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
+        self.ensure_ordinary_media(media_id).await?;
+        if !root.enabled || root.kind == Some(MediaKind::AdultVideo) {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let relative = checked_relative(&source.relative_path)?;
+        let parent = relative
+            .parent()
+            .unwrap_or_else(|| Path::new(""))
+            .to_path_buf();
+        let dir = open_absolute_dir(Path::new(&root.path), false)
+            .and_then(|d| descend(d, &parent, false))
+            .map_err(io_error)?;
+        let source_name = relative.file_name().ok_or(RepositoryError::InvalidInput)?;
+        let meta = dir.symlink_metadata(source_name).map_err(io_error)?;
+        if !meta.is_file() || meta.file_type().is_symlink() {
+            return Err(RepositoryError::InvalidInput);
+        }
+        #[cfg(windows)]
+        let windows_lease = windows_source_lease(Path::new(&root.path), &relative)?;
+        let source_fingerprint = source_fingerprint(&dir, source_name)?;
+        let metadata = self.repo.list_metadata_values(media_id).await?;
+        let ids = self.repo.list_external_ids(media_id).await?;
+        let name = relative
+            .file_stem()
+            .and_then(|v| v.to_str())
+            .ok_or(RepositoryError::InvalidInput)?;
+        let nfo_name = format!("{name}.nfo");
+        let old = read_optional(&dir, &nfo_name, MAX_NFO)?;
+        let old_text = old
+            .as_ref()
+            .map(|b| {
+                std::str::from_utf8(b)
+                    .map(str::to_owned)
+                    .map_err(|_| RepositoryError::InvalidInput)
+            })
+            .transpose()?;
+        // Existing local XML is the authoritative before-image, including every
+        // unknown element/attribute/comment and manual value. Do not roundtrip it
+        // through a lossy serializer and do not silently add provider fields.
+        let nfo = if let Some(old) = &old_text {
+            validate_nfo(old)?;
+            old.clone()
+        } else {
+            render_nfo(&item, &metadata, &ids)?
+        };
+        let mut diffs = vec![OutputFileDiff {
+            destination: parent.join(&nfo_name).to_string_lossy().into_owned(),
+            kind: "nfo".into(),
+            old_text,
+            new_text: Some(nfo.clone()),
+            expected_hash: old.as_ref().map(|b| hash(b)),
+            content_hash: hash(nfo.as_bytes()),
+            protected: old.is_some(),
+        }];
+        let mut payloads = vec![nfo.into_bytes()];
+        if let Some(existing) = &old {
+            let existing =
+                std::str::from_utf8(existing).map_err(|_| RepositoryError::InvalidInput)?;
+            let generated = render_nfo(&item, &metadata, &ids)?;
+            let generated_doc = roxmltree::Document::parse(&generated)
+                .map_err(|_| RepositoryError::InvalidInput)?;
+            let fields: BTreeMap<String, String> = generated_doc
+                .root_element()
+                .children()
+                .filter(roxmltree::Node::is_element)
+                .filter_map(|node| {
+                    if node.tag_name().name() == "uniqueid" {
+                        None
+                    } else {
+                        node.text()
+                            .map(|text| (node.tag_name().name().to_owned(), text.to_owned()))
+                    }
+                })
+                .collect();
+            let protected: Vec<String> = roxmltree::Document::parse(existing)
+                .map_err(|_| RepositoryError::InvalidInput)?
+                .root_element()
+                .children()
+                .filter(roxmltree::Node::is_element)
+                .map(|node| node.tag_name().name().to_owned())
+                .collect();
+            let revised = merge_nfo_known_fields(existing, &fields, &protected)?;
+            if revised != existing {
+                // A content-addressed alternate is app-owned, so future exports
+                // can add a new revision without replacing a manual sidecar.
+                let content_hash = hash(revised.as_bytes());
+                let revised_name = format!("{name}.mediaatlas-{}.nfo", &content_hash[..12]);
+                let previous = read_optional(&dir, &revised_name, MAX_NFO)?;
+                diffs.push(OutputFileDiff {
+                    destination: parent.join(&revised_name).to_string_lossy().into_owned(),
+                    kind: "nfo".into(),
+                    old_text: previous
+                        .as_ref()
+                        .and_then(|b| String::from_utf8(b.clone()).ok()),
+                    new_text: Some(revised.clone()),
+                    expected_hash: previous.as_ref().map(|b| hash(b)),
+                    content_hash,
+                    protected: previous.is_some(),
+                });
+                payloads.push(revised.into_bytes());
+            }
+        }
+        // Selected artwork is persisted by the merge workflow. Only validated
+        // content-addressed image bytes inside this service's cache are eligible.
+        for art in self.repo.list_artworks(media_id).await? {
+            if art.kind != ArtworkKind::Poster {
+                continue;
+            }
+            let (Some(cache_path), Some(expected_hash)) = (&art.cache_path, &art.content_hash)
+            else {
+                continue;
+            };
+            let cache = open_absolute_dir(&self.base_cache, false).map_err(io_error)?;
+            let cache_path = Path::new(cache_path);
+            let relative_cache = cache_path
+                .strip_prefix(&self.base_cache)
+                .map_err(|_| RepositoryError::InvalidInput)?;
+            let relative_cache = checked_relative(&relative_cache.to_string_lossy())?;
+            if relative_cache.components().count() != 1 {
+                return Err(RepositoryError::InvalidInput);
+            }
+            let bytes = read_optional(&cache, &relative_cache, MAX_IMAGE)?
+                .ok_or(RepositoryError::NotFound)?;
+            if hash(&bytes) != *expected_hash {
+                return Err(RepositoryError::Conflict);
+            }
+            let (format, _, _) = decode_image(&bytes).map_err(|_| RepositoryError::InvalidInput)?;
+            let extension = extension(format).ok_or(RepositoryError::InvalidInput)?;
+            let poster_name = format!("{name}-poster.{extension}");
+            let existing = read_optional(&dir, &poster_name, MAX_IMAGE)?;
+            diffs.push(OutputFileDiff {
+                destination: parent.join(&poster_name).to_string_lossy().into_owned(),
+                kind: "poster".into(),
+                old_text: None,
+                new_text: None,
+                expected_hash: existing.as_ref().map(|b| hash(b)),
+                content_hash: hash(&bytes),
+                protected: existing.is_some(),
+            });
+            payloads.push(bytes);
+            break;
+        }
+        let preview = OutputPreview {
+            schema_version: 1,
+            preview_id: Uuid::new_v4(),
+            media_item_id: media_id,
+            strategy: "preserve".into(),
+            files: diffs,
+            state: "planned".into(),
+        };
+        let plan = OutputPlan {
+            preview: preview.clone(),
+            root: PathBuf::from(root.path),
+            root_id: root.id,
+            source_file_id: source.id,
+            source_relative: source.relative_path.clone(),
+            source_fingerprint,
+            relative_parent: parent,
+            payloads,
+        };
+        let serialized = serde_json::to_string(&plan).map_err(|_| RepositoryError::InvalidInput)?;
+        let now = Utc::now().timestamp_millis();
+        let mut tx = self.repo.pool().begin().await?;
+        sqlx::query("INSERT INTO file_operations(id,plan,state,created_at,updated_at) VALUES (?,?,'planned',?,?)").bind(preview.preview_id.to_string()).bind(&serialized).bind(now).bind(now).execute(&mut *tx).await?;
+        sqlx::query("INSERT INTO output_previews(id,media_item_id,snapshot) VALUES (?,?,?)")
+            .bind(preview.preview_id.to_string())
+            .bind(media_id.to_string())
+            .bind(serialized)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        #[cfg(windows)]
+        {
+            let mut leases = windows_leases().lock().await;
+            leases.retain(|_, lease| lease.created.elapsed() < std::time::Duration::from_secs(600));
+            if leases.len() >= 32 {
+                if let Some(oldest) = leases
+                    .iter()
+                    .min_by_key(|(_, lease)| lease.created)
+                    .map(|(id, _)| *id)
+                {
+                    leases.remove(&oldest);
+                }
+            }
+            leases.insert(preview.preview_id, Arc::new(windows_lease));
+            let preview_id = preview.preview_id;
+            tokio::spawn(async move {
+                tokio::time::sleep(std::time::Duration::from_secs(600)).await;
+                windows_leases().lock().await.remove(&preview_id);
+            });
+        }
+        Ok(preview)
+    }
+    /// Release platform source leases when a user dismisses an output preview.
+    /// The persisted immutable plan remains as history and cannot regain a lease.
+    pub async fn discard(&self, preview_id: Uuid) -> Result<(), RepositoryError> {
+        #[cfg(windows)]
+        {
+            windows_leases().lock().await.remove(&preview_id);
+        }
+        sqlx::query("UPDATE file_operations SET state='interrupted',updated_at=MAX(updated_at,?) WHERE id=? AND state IN ('planned','failed') AND id IN (SELECT id FROM output_previews)").bind(Utc::now().timestamp_millis()).bind(preview_id.to_string()).execute(self.repo.pool()).await?;
+        Ok(())
+    }
+    async fn ensure_ordinary_media(&self, media_id: Uuid) -> Result<(), RepositoryError> {
+        let isolated: bool =
+            sqlx::query_scalar("SELECT adult_isolated FROM media_items WHERE id=?")
+                .bind(media_id.to_string())
+                .fetch_one(self.repo.pool())
+                .await?;
+        let item = self
+            .repo
+            .get_media(media_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
+        if isolated
+            || !matches!(
+                item.kind,
+                MediaKind::Movie
+                    | MediaKind::TvSeries
+                    | MediaKind::TvSeason
+                    | MediaKind::TvEpisode
+                    | MediaKind::Anime
+            )
+        {
+            return Err(RepositoryError::InvalidInput);
+        }
+        Ok(())
+    }
+    pub async fn execute(&self, preview_id: Uuid) -> Result<OutputResult, RepositoryError> {
+        let result = self.execute_inner(preview_id).await;
+        #[cfg(windows)]
+        {
+            windows_leases().lock().await.remove(&preview_id);
+        }
+        result
+    }
+    async fn execute_inner(&self, preview_id: Uuid) -> Result<OutputResult, RepositoryError> {
+        let _gate = self.gate.lock().await;
+        let row = sqlx::query("SELECT o.state,p.snapshot FROM file_operations o JOIN output_previews p ON p.id=o.id WHERE o.id=?").bind(preview_id.to_string()).fetch_optional(self.repo.pool()).await?.ok_or(RepositoryError::NotFound)?;
+        let state: String = row.try_get("state")?;
+        let snapshot: String = row.try_get("snapshot")?;
+        let plan: OutputPlan =
+            serde_json::from_str(&snapshot).map_err(|_| RepositoryError::CorruptData)?;
+        self.ensure_ordinary_media(plan.preview.media_item_id)
+            .await?;
+        let root = self
+            .repo
+            .get_root(plan.root_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
+        if !root.enabled
+            || root.kind == Some(MediaKind::AdultVideo)
+            || Path::new(&root.path) != plan.root
+        {
+            return Err(RepositoryError::Conflict);
+        }
+        if !self
+            .repo
+            .list_files(plan.preview.media_item_id)
+            .await?
+            .iter()
+            .any(|file| {
+                file.id == plan.source_file_id
+                    && file.root_id == plan.root_id
+                    && file.relative_path == plan.source_relative
+            })
+        {
+            return Err(RepositoryError::Conflict);
+        }
+        #[cfg(windows)]
+        let _windows_lease = if state == "succeeded" {
+            None
+        } else {
+            Some(check_windows_lease(preview_id).await?)
+        };
+        verify_source(&plan)?;
+        if state == "succeeded" {
+            verify_completed_plan(&plan)?;
+            return Ok(OutputResult {
+                schema_version: 1,
+                preview_id,
+                written: 0,
+                preserved: plan.preview.files.len(),
+                already_applied: true,
+                state,
+            });
+        }
+        if state == "running" {
+            return Err(RepositoryError::Conflict);
+        }
+        let acquired = sqlx::query("UPDATE file_operations SET state='running',updated_at=MAX(updated_at,?) WHERE id=? AND state IN ('planned','failed','interrupted')")
+            .bind(Utc::now().timestamp_millis()).bind(preview_id.to_string()).execute(self.repo.pool()).await?;
+        if acquired.rows_affected() != 1 {
+            return Err(RepositoryError::Conflict);
+        }
+        let result = execute_plan(&plan);
+        let state = if result.is_ok() {
+            "succeeded"
+        } else {
+            "failed"
+        };
+        sqlx::query("UPDATE file_operations SET state=?,updated_at=MAX(updated_at,?) WHERE id=?")
+            .bind(state)
+            .bind(Utc::now().timestamp_millis())
+            .bind(preview_id.to_string())
+            .execute(self.repo.pool())
+            .await?;
+        let (written, preserved) = result?;
+        Ok(OutputResult {
+            schema_version: 1,
+            preview_id,
+            written,
+            preserved,
+            already_applied: false,
+            state: state.into(),
+        })
+    }
+}
+
+fn verify_completed_plan(plan: &OutputPlan) -> Result<(), RepositoryError> {
+    let dir = descend(
+        open_absolute_dir(&plan.root, false).map_err(io_error)?,
+        &plan.relative_parent,
+        false,
+    )
+    .map_err(io_error)?;
+    for diff in &plan.preview.files {
+        let name = target_name(diff, &plan.relative_parent)?;
+        let bytes =
+            read_optional(&dir, name, MAX_IMAGE.max(MAX_NFO))?.ok_or(RepositoryError::Conflict)?;
+        let expected = if diff.protected {
+            diff.expected_hash
+                .as_ref()
+                .ok_or(RepositoryError::CorruptData)?
+        } else {
+            &diff.content_hash
+        };
+        if hash(&bytes) != *expected {
+            return Err(RepositoryError::Conflict);
+        }
+    }
+    Ok(())
+}
+fn execute_plan(plan: &OutputPlan) -> Result<(usize, usize), RepositoryError> {
+    if plan.preview.strategy != "preserve" || plan.payloads.len() != plan.preview.files.len() {
+        return Err(RepositoryError::CorruptData);
+    }
+    let dir = descend(
+        open_absolute_dir(&plan.root, false).map_err(io_error)?,
+        &plan.relative_parent,
+        false,
+    )
+    .map_err(io_error)?;
+    let mut written = 0;
+    let mut preserved = 0;
+    // Check all before-images first. A changed existing file never becomes a
+    // successful retry merely because it coincidentally matches our payload.
+    for (diff, payload) in plan.preview.files.iter().zip(&plan.payloads) {
+        if hash(payload) != diff.content_hash {
+            return Err(RepositoryError::CorruptData);
+        }
+        let name = target_name(diff, &plan.relative_parent)?;
+        let actual = read_optional(&dir, &name, MAX_IMAGE.max(MAX_NFO))?;
+        match (&diff.expected_hash, &actual) {
+            (Some(expected), Some(bytes)) if hash(bytes) == *expected => {}
+            (None, None) => {}
+            (None, Some(bytes)) if hash(bytes) == diff.content_hash => {} // completed pre-crash operation
+            _ => return Err(RepositoryError::Conflict),
+        }
+    }
+    for (diff, payload) in plan.preview.files.iter().zip(&plan.payloads) {
+        let name = target_name(diff, &plan.relative_parent)?;
+        if diff.protected {
+            preserved += 1;
+            continue;
+        }
+        match atomic_create(&dir, &name, payload) {
+            Ok(true) => written += 1,
+            Ok(false) => preserved += 1,
+            Err(error) => return Err(error),
+        }
+    }
+    Ok((written, preserved))
+}
+fn target_name(diff: &OutputFileDiff, parent: &Path) -> Result<PathBuf, RepositoryError> {
+    let relative = checked_relative(&diff.destination)?;
+    if relative.parent().unwrap_or_else(|| Path::new("")) != parent {
+        return Err(RepositoryError::CorruptData);
+    }
+    let name = relative.file_name().ok_or(RepositoryError::CorruptData)?;
+    if !matches!(diff.kind.as_str(), "nfo" | "poster") {
+        return Err(RepositoryError::CorruptData);
+    }
+    Ok(PathBuf::from(name))
+}
+fn io_error(_: std::io::Error) -> RepositoryError {
+    RepositoryError::InvalidInput
+}
+fn checked_relative(value: &str) -> Result<PathBuf, RepositoryError> {
+    let path = PathBuf::from(value);
+    if path.as_os_str().is_empty()
+        || path
+            .components()
+            .any(|c| !matches!(c, Component::Normal(_)))
+        || value.contains('\\')
+        || value.contains('\0')
+    {
+        return Err(RepositoryError::InvalidInput);
+    }
+    Ok(path)
+}
+/// Open every directory component without following links. Once open, all I/O
+/// is relative to directory capabilities, surviving ancestor rename/replacement.
+fn open_absolute_dir(path: &Path, create: bool) -> std::io::Result<Dir> {
+    if !path.is_absolute() {
+        return Err(std::io::ErrorKind::InvalidInput.into());
+    }
+    let mut prefix = PathBuf::new();
+    let mut normals = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Prefix(p) => prefix.push(p.as_os_str()),
+            Component::RootDir => prefix.push(component.as_os_str()),
+            Component::Normal(v) => normals.push(v),
+            _ => return Err(std::io::ErrorKind::InvalidInput.into()),
+        }
+    }
+    descend(
+        Dir::open_ambient_dir(prefix, ambient_authority())?,
+        &normals,
+        create,
+    )
+}
+fn descend(mut dir: Dir, relative: &Path, create: bool) -> std::io::Result<Dir> {
+    for component in relative.components() {
+        let Component::Normal(name) = component else {
+            return Err(std::io::ErrorKind::InvalidInput.into());
+        };
+        if create {
+            match dir.create_dir(name) {
+                Ok(()) => {}
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+                Err(e) => return Err(e),
+            }
+        }
+        dir = dir.open_dir_nofollow(name)?;
+    }
+    Ok(dir)
+}
+fn read_optional(
+    dir: &Dir,
+    name: impl AsRef<Path>,
+    max: usize,
+) -> Result<Option<Vec<u8>>, RepositoryError> {
+    let name = name.as_ref();
+    let meta = match dir.symlink_metadata(name) {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(io_error(e)),
+    };
+    if meta.file_type().is_symlink() || !meta.is_file() || meta.len() > max as u64 {
+        return Err(RepositoryError::InvalidInput);
+    }
+    // Open with no-follow on the final component too; checks alone would race.
+    use cap_fs_ext::{FollowSymlinks, OpenOptionsFollowExt};
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No);
+    let mut bytes = Vec::new();
+    let file = dir.open_with(name, &options).map_err(io_error)?;
+    if !file.metadata().map_err(io_error)?.is_file() {
+        return Err(RepositoryError::InvalidInput);
+    }
+    file.take(max as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(io_error)?;
+    if bytes.len() > max {
+        return Err(RepositoryError::InvalidInput);
+    }
+    Ok(Some(bytes))
+}
+fn atomic_create(dir: &Dir, name: impl AsRef<Path>, bytes: &[u8]) -> Result<bool, RepositoryError> {
+    let name = name.as_ref();
+    let temporary = format!(".mediaatlas-{}.tmp", Uuid::new_v4());
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let mut file = dir.open_with(&temporary, &options).map_err(io_error)?;
+    let result = (|| {
+        file.write_all(bytes).map_err(io_error)?;
+        file.sync_all().map_err(io_error)?;
+        // Hard-link publication is atomic and cannot clobber an intervening file.
+        match dir.hard_link(&temporary, dir, name) {
+            Ok(()) => Ok(true),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                let existing =
+                    read_optional(dir, name, bytes.len())?.ok_or(RepositoryError::Conflict)?;
+                if existing == bytes {
+                    Ok(false)
+                } else {
+                    Err(RepositoryError::Conflict)
+                }
+            }
+            Err(e) => Err(io_error(e)),
+        }
+    })();
+    let _ = dir.remove_file(&temporary);
+    result
+}
+fn hash(bytes: &[u8]) -> String {
+    format!("{:x}", Sha256::digest(bytes))
+}
+fn xml_escape(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+fn validate_nfo(value: &str) -> Result<(), RepositoryError> {
+    if value.len() > MAX_NFO
+        || value.to_ascii_uppercase().contains("<!DOCTYPE")
+        || value.to_ascii_uppercase().contains("<!ENTITY")
+    {
+        return Err(RepositoryError::InvalidInput);
+    }
+    let document = roxmltree::Document::parse(value).map_err(|_| RepositoryError::InvalidInput)?;
+    if !matches!(
+        document.root_element().tag_name().name(),
+        "movie" | "tvshow" | "episodedetails"
+    ) {
+        return Err(RepositoryError::InvalidInput);
+    }
+    Ok(())
+}
+/// Merge a small allowlist of scalar NFO fields while preserving every byte
+/// outside changed known elements. Protected existing fields remain authoritative.
+/// Unknown elements, attributes, comments, namespaces and ordering survive.
+pub fn merge_nfo_known_fields(
+    existing: &str,
+    fields: &BTreeMap<String, String>,
+    protected_fields: &[String],
+) -> Result<String, RepositoryError> {
+    validate_nfo(existing)?;
+    let document =
+        roxmltree::Document::parse(existing).map_err(|_| RepositoryError::InvalidInput)?;
+    let root = document.root_element();
+    let allowed = [
+        "title",
+        "originaltitle",
+        "plot",
+        "outline",
+        "year",
+        "runtime",
+        "season",
+        "episode",
+        "premiered",
+        "aired",
+        "sourceattribution",
+        "sourcelicense",
+    ];
+    let mut replacements = Vec::new();
+    let mut additions = String::new();
+    for (key, value) in fields {
+        if !allowed.contains(&key.as_str()) || value.trim().is_empty() {
+            continue;
+        }
+        let nodes: Vec<_> = root
+            .children()
+            .filter(|node| node.is_element() && node.tag_name().name() == key)
+            .collect();
+        if nodes.is_empty() {
+            additions.push_str(&format!("\n  <{key}>{}</{key}>", xml_escape(value)));
+        } else if !protected_fields.contains(key) {
+            for node in nodes {
+                let range = node.range();
+                let raw = &existing[range.clone()];
+                // Preserve even unknown attributes on a known scalar element.
+                let mut quoted = None;
+                let mut end = None;
+                for (index, character) in raw.char_indices() {
+                    match (quoted, character) {
+                        (None, '\'' | '"') => quoted = Some(character),
+                        (Some(quote), c) if c == quote => quoted = None,
+                        (None, '>') => {
+                            end = Some(index);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
+                let end = end.ok_or(RepositoryError::InvalidInput)?;
+                let opening = raw[..end].trim_end_matches('/');
+                let new = format!("{opening}>{}</{key}>", xml_escape(value));
+                replacements.push((range, new));
+            }
+        }
+    }
+    if !additions.is_empty() {
+        let raw = &existing[root.range()];
+        if let Some(closing) = raw.rfind("</") {
+            let closing = closing + root.range().start;
+            replacements.push((closing..closing, additions));
+        } else {
+            let close = raw.rfind("/>").ok_or(RepositoryError::InvalidInput)?;
+            replacements.push((
+                root.range().start + close..root.range().end,
+                format!(">{additions}</{}>", root.tag_name().name()),
+            ));
+        }
+    }
+    replacements.sort_by_key(|(range, _)| std::cmp::Reverse(range.start));
+    let mut result = existing.to_owned();
+    for (range, value) in replacements {
+        result.replace_range(range, &value);
+    }
+    validate_nfo(&result)?;
+    Ok(result)
+}
+
+fn render_nfo(
+    item: &MediaItem,
+    values: &[MetadataValue],
+    ids: &[mediaatlas_domain::ExternalId],
+) -> Result<String, RepositoryError> {
+    let root = match item.kind {
+        MediaKind::TvSeries | MediaKind::TvSeason => "tvshow",
+        MediaKind::TvEpisode => "episodedetails",
+        _ => "movie",
+    };
+    let mut fields = BTreeMap::new();
+    fields.insert("title", item.title.clone());
+    if let Some(value) = &item.original_title {
+        fields.insert("originaltitle", value.clone());
+    }
+    if let Some(value) = item.year {
+        fields.insert("year", value.to_string());
+    }
+    // Stable locale ordering is supplied by the repository; manual/locked values
+    // take precedence when multiple locales must project to a single NFO tag.
+    for protected in [false, true] {
+        for value in values.iter().filter(|v| v.is_protected() == protected) {
+            let tag = match value.field_key.as_str() {
+                "title" => "title",
+                "original_title" => "originaltitle",
+                "overview" => "plot",
+                "runtime" | "runtime_minutes" => "runtime",
+                "year" => "year",
+                "season" => "season",
+                "episode" => "episode",
+                "attribution" => "sourceattribution",
+                "source_license" => "sourcelicense",
+                _ => continue,
+            };
+            if let Some(text) = value
+                .value
+                .as_str()
+                .map(str::to_owned)
+                .or_else(|| value.value.as_i64().map(|v| v.to_string()))
+            {
+                if !text.trim().is_empty() {
+                    fields.insert(tag, text);
+                }
+            }
+        }
+    }
+    let mut result = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<{root}>\n");
+    for (tag, value) in fields {
+        result.push_str(&format!("  <{tag}>{}</{tag}>\n", xml_escape(&value)));
+    }
+    for id in ids {
+        result.push_str(&format!(
+            "  <uniqueid type=\"{}\" default=\"{}\">{}</uniqueid>\n",
+            xml_escape(&id.namespace),
+            id.is_primary,
+            xml_escape(&id.external_id)
+        ));
+    }
+    result.push_str(&format!("</{root}>\n"));
+    validate_nfo(&result)?;
+    Ok(result)
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CachedArtwork {
+    pub cache_path: String,
+    pub thumbnail_path: String,
+    pub content_hash: String,
+    pub width: u32,
+    pub height: u32,
+    pub mime: String,
+}
+fn extension(format: ImageFormat) -> Option<&'static str> {
+    match format {
+        ImageFormat::Png => Some("png"),
+        ImageFormat::Jpeg => Some("jpg"),
+        ImageFormat::WebP => Some("webp"),
+        _ => None,
+    }
+}
+fn mime(format: ImageFormat) -> Option<&'static str> {
+    match format {
+        ImageFormat::Png => Some("image/png"),
+        ImageFormat::Jpeg => Some("image/jpeg"),
+        ImageFormat::WebP => Some("image/webp"),
+        _ => None,
+    }
+}
+fn decode_validated(bytes: &[u8]) -> Result<(ImageFormat, image::DynamicImage), ProviderFailure> {
+    if bytes.is_empty() || bytes.len() > MAX_IMAGE {
+        return Err(ProviderFailure::ResponseTooLarge);
+    }
+    let format = image::guess_format(bytes).map_err(|_| ProviderFailure::ParseError)?;
+    if extension(format).is_none() {
+        return Err(ProviderFailure::ParseError);
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    let mut limits = Limits::default();
+    limits.max_image_width = Some(8192);
+    limits.max_image_height = Some(8192);
+    limits.max_alloc = Some(80 * 1024 * 1024);
+    reader.limits(limits.clone());
+    let (width, height) = reader
+        .into_dimensions()
+        .map_err(|_| ProviderFailure::ParseError)?;
+    if width == 0 || height == 0 || u64::from(width) * u64::from(height) > MAX_PIXELS {
+        return Err(ProviderFailure::ResponseTooLarge);
+    }
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
+    reader.limits(limits);
+    let image = reader.decode().map_err(|_| ProviderFailure::ParseError)?;
+    Ok((format, image))
+}
+fn decode_budget() -> Arc<Semaphore> {
+    static BUDGET: OnceLock<Arc<Semaphore>> = OnceLock::new();
+    BUDGET.get_or_init(|| Arc::new(Semaphore::new(2))).clone()
+}
+fn decode_image(bytes: &[u8]) -> Result<(ImageFormat, u32, u32), ProviderFailure> {
+    let _permit = decode_budget()
+        .try_acquire_owned()
+        .map_err(|_| ProviderFailure::ResponseTooLarge)?;
+    let (format, image) = decode_validated(bytes)?;
+    Ok((format, image.width(), image.height()))
+}
+struct DecodedArtwork {
+    bytes: Vec<u8>,
+    format: ImageFormat,
+    width: u32,
+    height: u32,
+    thumbnail: Vec<u8>,
+}
+async fn decode_thumbnail(
+    bytes: Vec<u8>,
+    cancel: &CancellationToken,
+) -> Result<DecodedArtwork, ProviderFailure> {
+    let permit = tokio::select! {biased;_=cancel.cancelled()=>return Err(ProviderFailure::Cancelled),permit=decode_budget().acquire_owned()=>permit.map_err(|_|ProviderFailure::Cancelled)?};
+    let task = tokio::task::spawn_blocking(move || {
+        // Permit lives in the blocking task, including when its caller cancels.
+        let _permit = permit;
+        let (format, image) = decode_validated(&bytes)?;
+        let (width, height) = (image.width(), image.height());
+        let mut thumbnail = Cursor::new(Vec::new());
+        image
+            .thumbnail(240, 360)
+            .write_to(&mut thumbnail, ImageFormat::Png)
+            .map_err(|_| ProviderFailure::ParseError)?;
+        Ok(DecodedArtwork {
+            bytes,
+            format,
+            width,
+            height,
+            thumbnail: thumbnail.into_inner(),
+        })
+    });
+    tokio::select! {biased;_=cancel.cancelled()=>Err(ProviderFailure::Cancelled),result=task=>result.map_err(|_|ProviderFailure::ParseError)?}
+}
+impl MediaOutputService {
+    pub fn thumbnail_bytes(&self, cached: &CachedArtwork) -> Result<Vec<u8>, RepositoryError> {
+        let path = Path::new(&cached.thumbnail_path);
+        if path.parent() != Some(self.base_cache.as_path())
+            || path.file_name().and_then(|v| v.to_str())
+                != Some(format!("{}.thumb.png", cached.content_hash).as_str())
+        {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let cache = open_absolute_dir(&self.base_cache, false).map_err(io_error)?;
+        let bytes = read_optional(
+            &cache,
+            path.file_name().ok_or(RepositoryError::InvalidInput)?,
+            1024 * 1024,
+        )?
+        .ok_or(RepositoryError::NotFound)?;
+        if image::guess_format(&bytes).map_err(|_| RepositoryError::InvalidInput)?
+            != ImageFormat::Png
+        {
+            return Err(RepositoryError::InvalidInput);
+        }
+        // Reject maliciously enlarged cached thumbnails before allocating pixels.
+        let mut limits = Limits::default();
+        limits.max_image_width = Some(240);
+        limits.max_image_height = Some(360);
+        limits.max_alloc = Some(1024 * 1024);
+        let mut reader = ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png);
+        reader.limits(limits.clone());
+        let (width, height) = reader
+            .into_dimensions()
+            .map_err(|_| RepositoryError::InvalidInput)?;
+        if width == 0 || height == 0 || width > 240 || height > 360 {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let _permit = decode_budget()
+            .try_acquire_owned()
+            .map_err(|_| RepositoryError::Conflict)?;
+        let mut reader = ImageReader::with_format(Cursor::new(&bytes), ImageFormat::Png);
+        reader.limits(limits);
+        reader.decode().map_err(|_| RepositoryError::InvalidInput)?;
+        Ok(bytes)
+    }
+    pub async fn cache_artwork(
+        &self,
+        engine: &NetworkEngine,
+        job: &ProviderJob,
+        url: &str,
+        cancel: &CancellationToken,
+    ) -> Result<CachedArtwork, ProviderFailure> {
+        if cancel.is_cancelled() {
+            return Err(ProviderFailure::Cancelled);
+        }
+        let _gate = self.gate.lock().await;
+        if cancel.is_cancelled() {
+            return Err(ProviderFailure::Cancelled);
+        }
+        let cache = open_absolute_dir(&self.base_cache, true)
+            .map_err(|_| ProviderFailure::InvalidConfiguration)?;
+        let mapping = format!("url-{}.json", hash(url.as_bytes()));
+        if let Ok(Some(bytes)) = read_optional(&cache, &mapping, 4096) {
+            if let Ok(cached) = serde_json::from_slice::<CachedArtwork>(&bytes) {
+                let path = Path::new(&cached.cache_path);
+                if let Some(name) = path.file_name() {
+                    if path.parent() == Some(self.base_cache.as_path()) {
+                        if let Ok(Some(bytes)) = read_optional(&cache, name, MAX_IMAGE) {
+                            if hash(&bytes) == cached.content_hash
+                                && self.thumbnail_bytes(&cached).is_ok()
+                            {
+                                return Ok(cached);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        let mut bounded = job.clone();
+        bounded.config.max_response_bytes = bounded.config.max_response_bytes.min(MAX_IMAGE);
+        let response = engine
+            .execute(&bounded, RequestSpec::get(url, EngineKind::Image), cancel)
+            .await?;
+        let decoded = decode_thumbnail(response.body, cancel).await?;
+        let (format, width, height) = (decoded.format, decoded.width, decoded.height);
+        let actual_mime = response
+            .content_type
+            .as_deref()
+            .and_then(|s| s.split(';').next())
+            .map(str::trim);
+        if !actual_mime
+            .zip(mime(format))
+            .is_some_and(|(actual, expected)| actual.eq_ignore_ascii_case(expected))
+        {
+            return Err(ProviderFailure::ParseError);
+        }
+        let content_hash = hash(&decoded.bytes);
+        let file_name = format!(
+            "{content_hash}.{}",
+            extension(format).ok_or(ProviderFailure::ParseError)?
+        );
+        atomic_create(&cache, &file_name, &decoded.bytes)
+            .map_err(|_| ProviderFailure::InvalidConfiguration)?;
+        let thumbnail_name = format!("{content_hash}.thumb.png");
+        atomic_create(&cache, &thumbnail_name, &decoded.thumbnail)
+            .map_err(|_| ProviderFailure::InvalidConfiguration)?;
+        let cached = CachedArtwork {
+            cache_path: self
+                .base_cache
+                .join(&file_name)
+                .to_string_lossy()
+                .into_owned(),
+            thumbnail_path: self
+                .base_cache
+                .join(&thumbnail_name)
+                .to_string_lossy()
+                .into_owned(),
+            content_hash,
+            width,
+            height,
+            mime: mime(format).ok_or(ProviderFailure::ParseError)?.into(),
+        };
+        // URL aliases are only create-new. A changed remote URL never overwrites
+        // an existing cache snapshot or weakens content-hash validation.
+        atomic_create(
+            &cache,
+            &mapping,
+            &serde_json::to_vec(&cached).map_err(|_| ProviderFailure::ParseError)?,
+        )
+        .map_err(|_| ProviderFailure::InvalidConfiguration)?;
+        Ok(cached)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mediaatlas_domain::{LibraryRoot, MediaFile, PathStyle, ProviderConfig};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn library() -> (
+        tempfile::TempDir,
+        LibraryRepository,
+        MediaOutputService,
+        Uuid,
+    ) {
+        let temporary = tempfile::tempdir().unwrap();
+        let media_dir = temporary.path().join("media");
+        std::fs::create_dir(&media_dir).unwrap();
+        std::fs::write(media_dir.join("Example.mkv"), b"untouched video bytes").unwrap();
+        let repo = LibraryRepository::open(&temporary.path().join("test.sqlite"))
+            .await
+            .unwrap();
+        let now = Utc::now();
+        let root_id = Uuid::new_v4();
+        let media_id = Uuid::new_v4();
+        repo.save_root(&LibraryRoot {
+            id: root_id,
+            name: "test".into(),
+            path: media_dir.to_string_lossy().into_owned(),
+            path_style: if cfg!(windows) {
+                PathStyle::Windows
+            } else {
+                PathStyle::Posix
+            },
+            kind: Some(MediaKind::Movie),
+            enabled: true,
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+        repo.save_media(&MediaItem {
+            id: media_id,
+            kind: MediaKind::Movie,
+            title: "A & B <fixture>".into(),
+            original_title: None,
+            year: Some(2024),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .unwrap();
+        repo.save_file(&MediaFile {
+            id: Uuid::new_v4(),
+            media_item_id: media_id,
+            root_id,
+            relative_path: "Example.mkv".into(),
+            size_bytes: 21,
+            modified_at: None,
+            part: None,
+        })
+        .await
+        .unwrap();
+        let service = MediaOutputService::new(repo.clone(), temporary.path().join("cache"));
+        (temporary, repo, service, media_id)
+    }
+    #[tokio::test]
+    async fn explicit_preview_execute_records_idempotency_and_preserves_source() {
+        let (temp, repo, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        assert_eq!(preview.strategy, "preserve");
+        assert_eq!(preview.files[0].old_text, None);
+        assert!(preview.files[0]
+            .new_text
+            .as_ref()
+            .unwrap()
+            .contains("A &amp; B &lt;fixture&gt;"));
+        let output = temp.path().join("media/Example.nfo");
+        assert!(!output.exists());
+        let result = service.execute(preview.preview_id).await.unwrap();
+        assert_eq!(result.written, 1);
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
+            b"untouched video bytes"
+        );
+        let repeated = service.execute(preview.preview_id).await.unwrap();
+        assert!(repeated.already_applied);
+        assert_eq!(repeated.written, 0);
+        let persisted: String = sqlx::query_scalar("SELECT state FROM file_operations WHERE id=?")
+            .bind(preview.preview_id.to_string())
+            .fetch_one(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(persisted, "succeeded");
+        let changed = sqlx::query("UPDATE output_previews SET snapshot='{}' WHERE id=?")
+            .bind(preview.preview_id.to_string())
+            .execute(repo.pool())
+            .await;
+        assert!(changed.is_err());
+    }
+    #[tokio::test]
+    async fn existing_nfo_unknown_elements_comments_and_manual_values_roundtrip_exactly() {
+        let (temp, _, service, id) = library().await;
+        let path = temp.path().join("media/Example.nfo");
+        let local="<?xml version=\"1.0\"?><movie custom=\"x\"><title>Manual title</title><!-- keep --><extension provider=\"local\"><nested value=\"42\"/></extension></movie>";
+        std::fs::write(&path, local).unwrap();
+        let preview = service.preview(id).await.unwrap();
+        assert!(preview.files[0].protected);
+        assert_eq!(preview.files[0].new_text.as_deref(), Some(local));
+        let result = service.execute(preview.preview_id).await.unwrap();
+        assert_eq!(result.written, 1);
+        assert_eq!(result.preserved, 1);
+        assert_eq!(std::fs::read_to_string(path).unwrap(), local);
+        let alternate = preview
+            .files
+            .iter()
+            .find(|file| file.destination.contains(".mediaatlas-"))
+            .unwrap();
+        let revised =
+            std::fs::read_to_string(temp.path().join("media").join(&alternate.destination))
+                .unwrap();
+        assert!(revised.contains("<year>2024</year>"));
+        assert!(revised.contains("<title>Manual title</title>"));
+        assert!(
+            revised.contains("<extension provider=\"local\"><nested value=\"42\"/></extension>")
+        );
+    }
+    #[tokio::test]
+    async fn changed_before_image_and_external_new_file_fail_without_clobber() {
+        let (temp, repo, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        let path = temp.path().join("media/Example.nfo");
+        std::fs::write(&path, "<movie><title>intervening edit</title></movie>").unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("intervening edit"));
+        let state: String = sqlx::query_scalar("SELECT state FROM file_operations WHERE id=?")
+            .bind(preview.preview_id.to_string())
+            .fetch_one(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(state, "failed");
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap().written,
+            1
+        );
+        let preserved = service.preview(id).await.unwrap();
+        std::fs::write(&path, "<movie><title>changed after preview</title></movie>").unwrap();
+        assert_eq!(
+            service.execute(preserved.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+    }
+    #[tokio::test]
+    async fn recovery_requires_explicit_execute_and_reconciles_precrash_completed_file() {
+        let (temp, repo, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        sqlx::query("UPDATE file_operations SET state='running' WHERE id=?")
+            .bind(preview.preview_id.to_string())
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(service.recover_interrupted().await.unwrap(), 1);
+        let path = temp.path().join("media/Example.nfo");
+        assert!(!path.exists());
+        std::fs::write(&path, preview.files[0].new_text.as_ref().unwrap()).unwrap();
+        let result = service.execute(preview.preview_id).await.unwrap();
+        assert_eq!(result.written, 0);
+        assert_eq!(result.preserved, 1);
+    }
+    #[test]
+    fn selective_nfo_merge_preserves_unknowns_attributes_and_explicit_manual_protection() {
+        let existing="<movie custom=\"keep\"><title lang=\"x\">Old</title><!--keep--><unknown><title>nested untouched</title></unknown><plot>Manual</plot></movie>";
+        let fields = BTreeMap::from([
+            ("title".to_owned(), "New & escaped".to_owned()),
+            ("plot".to_owned(), "Remote".to_owned()),
+            ("year".to_owned(), "2025".to_owned()),
+        ]);
+        let merged = merge_nfo_known_fields(existing, &fields, &["plot".into()]).unwrap();
+        assert!(merged.contains("<title lang=\"x\">New &amp; escaped</title>"));
+        assert!(merged.contains("<plot>Manual</plot>"));
+        assert!(merged.contains("<!--keep--><unknown><title>nested untouched</title></unknown>"));
+        assert!(merged.contains("<year>2025</year>"));
+        assert_eq!(
+            merge_nfo_known_fields(&merged, &fields, &["plot".into()]).unwrap(),
+            merged
+        );
+        assert!(merge_nfo_known_fields(
+            "<movie/>",
+            &BTreeMap::from([("title".into(), "new".into())]),
+            &[]
+        )
+        .unwrap()
+        .contains("<title>new</title>"));
+    }
+    #[tokio::test]
+    async fn output_rechecks_adult_isolation_root_state_and_disk_after_success() {
+        let (temp, repo, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        sqlx::query("UPDATE media_items SET adult_isolated=1 WHERE id=?")
+            .bind(id.to_string())
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            service.preview(id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        sqlx::query("UPDATE media_items SET adult_isolated=0 WHERE id=?")
+            .bind(id.to_string())
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        let root_id = repo.list_files(id).await.unwrap()[0].root_id;
+        let mut root = repo.get_root(root_id).await.unwrap().unwrap();
+        root.enabled = false;
+        repo.save_root(&root).await.unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+        root.enabled = true;
+        repo.save_root(&root).await.unwrap();
+        service.execute(preview.preview_id).await.unwrap();
+        std::fs::write(
+            temp.path().join("media/Example.nfo"),
+            "<movie><title>later edit</title></movie>",
+        )
+        .unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn missing_or_replaced_media_source_rejects_preview_plan_execution() {
+        let (temp, _, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        let source = temp.path().join("media/Example.mkv");
+        std::fs::rename(&source, temp.path().join("media/original.mkv")).unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        std::fs::write(&source, b"untouched video bytes").unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+    }
+    #[tokio::test]
+    async fn decode_global_budget_limits_independent_services_and_cancellation() {
+        let budget = decode_budget();
+        let permit1 = budget.clone().acquire_owned().await.unwrap();
+        let permit2 = budget.acquire_owned().await.unwrap();
+        let cancelled = CancellationToken::new();
+        cancelled.cancel();
+        assert!(matches!(
+            decode_thumbnail(png(), &cancelled).await,
+            Err(ProviderFailure::Cancelled)
+        ));
+        drop(permit1);
+        drop(permit2);
+        let decoded = decode_thumbnail(png(), &CancellationToken::new())
+            .await
+            .unwrap();
+        assert_eq!((decoded.width, decoded.height), (32, 48));
+    }
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn windows_same_session_output_holds_no_delete_lease_and_discard_releases() {
+        let (temp, _, service, id) = library().await;
+        let preview = service.preview(id).await.unwrap();
+        let source = temp.path().join("media/Example.mkv");
+        assert!(std::fs::remove_file(&source).is_err());
+        assert!(std::fs::rename(temp.path().join("media"), temp.path().join("renamed")).is_err());
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap().written,
+            1
+        );
+        assert!(
+            service
+                .execute(preview.preview_id)
+                .await
+                .unwrap()
+                .already_applied
+        );
+        service.discard(preview.preview_id).await.unwrap();
+        std::fs::remove_file(source).unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::Conflict
+        );
+    }
+    #[tokio::test]
+    async fn thumbnail_rejects_large_dimensions_before_decoding() {
+        let (temp, _, service, _) = library().await;
+        std::fs::create_dir(temp.path().join("cache")).unwrap();
+        let image = image::DynamicImage::new_rgb8(241, 361);
+        let mut bytes = Cursor::new(Vec::new());
+        image.write_to(&mut bytes, ImageFormat::Png).unwrap();
+        let cached = CachedArtwork {
+            cache_path: String::new(),
+            thumbnail_path: temp
+                .path()
+                .join("cache/test.thumb.png")
+                .to_string_lossy()
+                .into_owned(),
+            content_hash: "test".into(),
+            width: 241,
+            height: 361,
+            mime: "image/png".into(),
+        };
+        std::fs::write(&cached.thumbnail_path, bytes.into_inner()).unwrap();
+        assert_eq!(
+            service.thumbnail_bytes(&cached).unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+    }
+    #[tokio::test]
+    async fn unsafe_xml_and_wrong_document_root_are_rejected_without_writes() {
+        let (temp, _, service, id) = library().await;
+        for xml in [
+            "<!DOCTYPE movie [<!ENTITY x SYSTEM 'file:///etc/passwd'>]><movie>&x;</movie>",
+            "<movie><broken></movie>",
+            "<html/>",
+        ] {
+            std::fs::write(temp.path().join("media/Example.nfo"), xml).unwrap();
+            assert_eq!(
+                service.preview(id).await.unwrap_err(),
+                RepositoryError::InvalidInput
+            );
+            assert_eq!(
+                std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
+                b"untouched video bytes"
+            );
+        }
+    }
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn final_symlink_and_replaced_ancestor_never_write_outside_media_root() {
+        use std::os::unix::fs::symlink;
+        let (temp, _, service, id) = library().await;
+        let external = temp.path().join("external");
+        std::fs::create_dir(&external).unwrap();
+        let preview = service.preview(id).await.unwrap();
+        let destination = temp.path().join("media/Example.nfo");
+        symlink(external.join("new.nfo"), &destination).unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert!(!external.join("new.nfo").exists());
+        std::fs::remove_file(&destination).unwrap();
+        std::fs::rename(temp.path().join("media"), temp.path().join("old-media")).unwrap();
+        symlink(&external, temp.path().join("media")).unwrap();
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap_err(),
+            RepositoryError::InvalidInput
+        );
+        assert!(!external.join("Example.nfo").exists());
+        // Capability retained before an ancestor swap keeps writes on its opened
+        // directory, even if a hostile symlink now occupies its old pathname.
+        let dir = open_absolute_dir(&temp.path().join("old-media"), false).unwrap();
+        std::fs::rename(
+            temp.path().join("old-media"),
+            temp.path().join("held-media"),
+        )
+        .unwrap();
+        symlink(&external, temp.path().join("old-media")).unwrap();
+        assert!(atomic_create(&dir, "held.nfo", b"safe").unwrap());
+        assert_eq!(
+            std::fs::read(temp.path().join("held-media/held.nfo")).unwrap(),
+            b"safe"
+        );
+        assert!(!external.join("held.nfo").exists());
+    }
+    fn png() -> Vec<u8> {
+        let image = image::DynamicImage::new_rgb8(32, 48);
+        let mut bytes = Cursor::new(Vec::new());
+        image.write_to(&mut bytes, ImageFormat::Png).unwrap();
+        bytes.into_inner()
+    }
+    async fn image_server(
+        bytes: Vec<u8>,
+        mime: &str,
+    ) -> (
+        String,
+        Arc<std::sync::atomic::AtomicUsize>,
+        tokio::task::JoinHandle<()>,
+    ) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mime = mime.to_owned();
+        let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = requests.clone();
+        let task = tokio::spawn(async move {
+            loop {
+                let Ok((mut stream, _)) = listener.accept().await else {
+                    return;
+                };
+                let bytes = bytes.clone();
+                let mime = mime.clone();
+                count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                tokio::spawn(async move {
+                    let mut request = [0; 2048];
+                    let _ = stream.read(&mut request).await;
+                    let header=format!("HTTP/1.1 200 OK\r\nContent-Type: {mime}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",bytes.len());
+                    let _ = stream.write_all(header.as_bytes()).await;
+                    let _ = stream.write_all(&bytes).await;
+                });
+            }
+        });
+        (format!("http://{address}/image.png"), requests, task)
+    }
+    fn image_job() -> ProviderJob {
+        ProviderJob {
+            id: Uuid::new_v4(),
+            provider_id: "mock.image".into(),
+            media_item_id: None,
+            media_kind: Some(MediaKind::Movie),
+            file_identity: None,
+            region: None,
+            correlation_id: Uuid::new_v4(),
+            operation: "artwork".into(),
+            query: "fixture".into(),
+            language: "en-US".into(),
+            config: ProviderConfig {
+                enabled: true,
+                interval_ms: 0,
+                max_retries: 0,
+                max_response_bytes: MAX_IMAGE,
+                ..Default::default()
+            },
+            created_at: Utc::now(),
+        }
+    }
+    #[tokio::test]
+    async fn mock_image_download_validates_caches_url_and_hash_deduplicates_with_thumbnail() {
+        let (temp, repo, service, id) = library().await;
+        let engine = NetworkEngine::for_loopback(2);
+        let job = image_job();
+        let cancel = CancellationToken::new();
+        let (url, count, server) = image_server(png(), "image/png").await;
+        let first = service
+            .cache_artwork(&engine, &job, &url, &cancel)
+            .await
+            .unwrap();
+        assert_eq!((first.width, first.height), (32, 48));
+        assert!(Path::new(&first.thumbnail_path).exists());
+        let second = service
+            .cache_artwork(&engine, &job, &url, &cancel)
+            .await
+            .unwrap();
+        assert_eq!(first.content_hash, second.content_hash);
+        assert_eq!(count.load(std::sync::atomic::Ordering::SeqCst), 1);
+        let (url2, _, server2) = image_server(png(), "image/png; charset=binary").await;
+        let third = service
+            .cache_artwork(&engine, &job, &url2, &cancel)
+            .await
+            .unwrap();
+        assert_eq!(first.cache_path, third.cache_path);
+        repo.save_artwork(&mediaatlas_domain::Artwork {
+            id: Uuid::new_v4(),
+            media_item_id: id,
+            kind: ArtworkKind::Poster,
+            cache_path: Some(first.cache_path.clone()),
+            source_url: Some(url),
+            provider_id: Some("mock.image".into()),
+            width: Some(first.width),
+            height: Some(first.height),
+            content_hash: Some(first.content_hash),
+            created_at: Utc::now(),
+        })
+        .await
+        .unwrap();
+        let preview = service.preview(id).await.unwrap();
+        assert_eq!(preview.files.len(), 2);
+        assert_eq!(
+            service.execute(preview.preview_id).await.unwrap().written,
+            2
+        );
+        assert!(temp.path().join("media/Example-poster.png").exists());
+        server.abort();
+        server2.abort();
+    }
+    #[tokio::test]
+    async fn image_mime_magic_truncation_and_byte_caps_are_enforced() {
+        let (_, _, service, _) = library().await;
+        let engine = NetworkEngine::for_loopback(2);
+        let job = image_job();
+        let cancel = CancellationToken::new();
+        for (bytes, mime) in [
+            (png(), "text/html"),
+            (b"<html>not image</html>".to_vec(), "image/png"),
+            (png()[..20].to_vec(), "image/png"),
+        ] {
+            let (url, _, server) = image_server(bytes, mime).await;
+            assert!(service
+                .cache_artwork(&engine, &job, &url, &cancel)
+                .await
+                .is_err());
+            server.abort();
+        }
+        assert_eq!(
+            decode_image(&vec![0; MAX_IMAGE + 1]).unwrap_err(),
+            ProviderFailure::ResponseTooLarge
+        );
+    }
+}

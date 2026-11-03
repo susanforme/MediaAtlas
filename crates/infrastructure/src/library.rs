@@ -23,6 +23,7 @@ pub enum RepositoryError {
     Database,
     Migration,
     CorruptData,
+    Provider(mediaatlas_domain::ProviderFailure),
 }
 
 impl fmt::Display for RepositoryError {
@@ -35,6 +36,7 @@ impl fmt::Display for RepositoryError {
             Self::Database => "The library database operation failed.",
             Self::Migration => "The library database migration failed.",
             Self::CorruptData => "The library database contains invalid data.",
+            Self::Provider(_) => "The provider request could not be completed.",
         })
     }
 }

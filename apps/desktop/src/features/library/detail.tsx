@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { ImageOff, LockKeyhole } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { libraryApi } from "../../api/library";
 import { usePrivacy } from "./context";
@@ -12,6 +13,12 @@ import {
   PageHeading,
   useFormat,
 } from "./shared";
+
+const LibraryVideoSourceDetail = lazy(() =>
+  import("../scraper/source-detail").then((module) => ({
+    default: module.LibraryVideoSourceDetail,
+  })),
+);
 
 export function MediaDetailPage({ mediaId }: { mediaId: string }) {
   const { t } = useTranslation();
@@ -61,6 +68,11 @@ export function MediaDetailPage({ mediaId }: { mediaId: string }) {
           </p>
         </div>
         <div className="space-y-6">
+          {["movie", "tv_series", "anime"].includes(data.media.kind) && (
+            <Suspense fallback={<Loading />}>
+              <LibraryVideoSourceDetail mediaId={mediaId} />
+            </Suspense>
+          )}
           <section className="panel">
             <h2 className="section-title">{t("files")}</h2>
             {data.files.length ? (

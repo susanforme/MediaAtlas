@@ -8,6 +8,7 @@ import {
   createRoute,
   createRouter,
   Link,
+  lazyRouteComponent,
   Outlet,
   RouterProvider,
 } from "@tanstack/react-router";
@@ -33,6 +34,7 @@ import {
   NetworkInspectorPage,
   ProvidersPage,
 } from "./features/providers/pages";
+import "./features/scraper/navigation";
 import { HomePage } from "./routes/home";
 
 function useTaskEvents() {
@@ -109,6 +111,7 @@ function Layout() {
               ["/library", "library"],
               ["/roots", "roots"],
               ["/scanner", "scanner"],
+              ["/scraper", "scraper"],
               ["/tasks", "tasks"],
               ["/providers", "providers"],
               ["/network", "networkInspector"],
@@ -211,6 +214,14 @@ const scannerRoute = createRoute({
     );
   },
 });
+const scraperRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/scraper",
+  component: lazyRouteComponent(
+    () => import("./features/scraper/page"),
+    "ScraperPage",
+  ),
+});
 const tasksRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/tasks",
@@ -245,6 +256,7 @@ const router = createRouter({
     rootsRoute,
     scannerRoute,
     tasksRoute,
+    scraperRoute,
     providersRoute,
     networkRoute,
     settingsRoute,

@@ -73,6 +73,8 @@ pub struct RequestSpec {
     pub cookie: Option<SecretString>,
     /// API-key header name and secret. Forbidden routing/header names are rejected.
     pub api_key: Option<(String, SecretString)>,
+    /// Added only to the actual original-origin request; never to stored URLs.
+    pub secret_query: Option<(String, SecretString)>,
     pub expected_identity: Option<(String, String)>,
 }
 impl RequestSpec {
@@ -87,6 +89,7 @@ impl RequestSpec {
             referer: None,
             cookie: None,
             api_key: None,
+            secret_query: None,
             expected_identity: None,
         }
     }
@@ -109,6 +112,7 @@ impl RequestSpec {
 pub struct EngineResponse {
     pub body: Vec<u8>,
     pub status: u16,
+    pub content_type: Option<String>,
     pub record: NetworkRequestRecord,
 }
 impl EngineResponse {
@@ -460,7 +464,7 @@ impl NetworkEngine {
                 break self.attempt(job, spec, cancel).await;
             };
             let (status, failure) = match &result {
-                Ok((_, s)) => (*s, None),
+                Ok((_, s, _)) => (*s, None),
                 Err(e) => (e.status.unwrap_or_default(), Some(e.kind)),
             };
             let record = self
@@ -474,7 +478,7 @@ impl NetworkEngine {
                 )
                 .await;
             match result {
-                Ok((body, status)) => {
+                Ok((body, status, content_type)) => {
                     let mut state = site.state.lock().await;
                     if !state.blocked_indefinitely
                         && state.cooldown.is_none_or(|t| t <= Instant::now())
@@ -486,6 +490,7 @@ impl NetworkEngine {
                     return Ok(EngineResponse {
                         body,
                         status,
+                        content_type,
                         record,
                     });
                 }
@@ -606,8 +611,20 @@ impl NetworkEngine {
         job: &ProviderJob,
         spec: &RequestSpec,
         cancel: &CancellationToken,
-    ) -> Result<(Vec<u8>, u16), AttemptFailure> {
+    ) -> Result<(Vec<u8>, u16, Option<String>), AttemptFailure> {
         let original = Url::parse(&spec.url).map_err(|_| ProviderFailure::UnsafeTarget)?;
+        if let Some((name, secret)) = &spec.secret_query {
+            if name.is_empty()
+                || name.len() > 64
+                || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+                || secret.expose().is_empty()
+                || secret.expose().len() > 16384
+                || secret.expose().chars().any(char::is_control)
+                || original.query_pairs().any(|(key, _)| key == name.as_str())
+            {
+                return Err(ProviderFailure::InvalidConfiguration.into());
+            }
+        }
         let mut url = original.clone();
         for hop in 0..=5 {
             self.policy.validate_url(&url)?;
@@ -630,6 +647,9 @@ impl NetworkEngine {
             // Never forward authorization/cookies across origins, even on a safe redirect.
             if url.origin() == original.origin() {
                 request = request.headers(secret_headers(spec)?);
+                if let Some((name, secret)) = &spec.secret_query {
+                    request = request.query(&[(name.as_str(), secret.expose())]);
+                }
             }
             if let Some(body) = &spec.json_body {
                 request = request.json(body);
@@ -651,6 +671,12 @@ impl NetworkEngine {
                 self.policy
                     .validate_url(&url)
                     .map_err(|e| http_failure(e, status))?;
+                // A remote Location may reflect the secret into a different URL.
+                // Refuse crossing origins for query credentials rather than trying
+                // to scrub arbitrary path/encoded copies supplied by that server.
+                if spec.secret_query.is_some() && url.origin() != original.origin() {
+                    return Err(http_failure(ProviderFailure::UnsafeTarget, status));
+                }
                 continue;
             }
             let retry_after = response
@@ -735,7 +761,11 @@ impl NetworkEngine {
                     }
                 }
             }
-            return Ok((body, status));
+            return Ok((
+                body,
+                status,
+                (!content_type.is_empty()).then_some(content_type),
+            ));
         }
         Err(ProviderFailure::UnsafeTarget.into())
     }

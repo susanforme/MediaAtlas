@@ -3,10 +3,14 @@
 pub mod browse;
 pub mod credentials;
 pub mod library;
+pub mod media_output;
 pub mod network;
+pub mod provider_auth;
 pub mod providers;
 pub mod scan_service;
+pub mod scraper;
 pub mod tasks;
+pub mod video_providers;
 
 use std::{io, path::Path};
 use tracing_appender::non_blocking::WorkerGuard;

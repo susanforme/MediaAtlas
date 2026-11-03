@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   defaultBrowse,
@@ -315,6 +315,12 @@ export function RootsPage() {
   );
 }
 
+const ProviderAuthSettings = lazy(() =>
+  import("../settings/provider-auth").then((module) => ({
+    default: module.ProviderAuthSettings,
+  })),
+);
+
 export function SettingsPage() {
   const { t, i18n } = useTranslation();
   const { includeAdult, setIncludeAdult } = usePrivacy();
@@ -323,6 +329,9 @@ export function SettingsPage() {
     <>
       <PageHeading title={t("settings")} />
       <div className="space-y-6">
+        <Suspense fallback={<Loading />}>
+          <ProviderAuthSettings />
+        </Suspense>
         <section className="panel">
           <h2 className="section-title">{t("languageSettings")}</h2>
           <p className="mb-4 text-sm text-muted-foreground">

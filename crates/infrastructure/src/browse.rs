@@ -27,6 +27,7 @@ const DUPLICATE: &str = "EXISTS(SELECT 1 FROM external_ids x JOIN external_ids y
 pub struct BrowseService {
     repo: LibraryRepository,
     cache_dir: PathBuf,
+    approved_artwork_cache: Option<PathBuf>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -39,7 +40,17 @@ struct Cursor {
 
 impl BrowseService {
     pub fn new(repo: LibraryRepository, cache_dir: PathBuf) -> Self {
-        Self { repo, cache_dir }
+        Self {
+            repo,
+            cache_dir,
+            approved_artwork_cache: None,
+        }
+    }
+
+    /// Only trusted desktop composition may approve the network artwork cache.
+    pub fn with_artwork_cache(mut self, path: PathBuf) -> Self {
+        self.approved_artwork_cache = Some(path);
+        self
     }
 
     pub async fn list_roots(&self, include_adult: bool) -> Result<Vec<RootView>> {

@@ -53,3 +53,9 @@ UI 暂时只支持简体中文 `zh-CN` 和美式英语 `en-US`。默认 zh-CN，
 表单和图标按钮有可识别标签；加载/完成状态可由辅助技术读取；键盘可操作选择、取消、分页与对话框。内容不依赖仅颜色区分异常。界面响应不等待目录扫描结束；1000 条记录仅请求当前页，10,000 文件候选通过分页访问，取消有明确反馈。
 
 浏览器预览保留“需要桌面应用”的真实提示；测试通过显式 Mock/Fixture 注入数据，不在产品运行时伪造 IPC 或媒体记录。
+
+## P4 additions
+
+Scraper provides typed Movie/TV/Anime search, independent provider enablement, candidate reasons/year conflicts, explicit selection, type-specific source details and field/locale/protection comparisons. Only individually requested artwork thumbnails load through backend validation. Metadata confirmation and filesystem output confirmation remain separate. Library details show confirmed type-specific source structures alongside authoritative local fields. History restores immutable candidates rather than rebuilding a job from current form inputs.
+
+Settings now supports per-provider authentication with password input, system storage by default, explicit session-only selection, safe status and deletion. TMDB offers v4 Bearer and v3 API Key; public adapters show no credential form. Secret submissions are cleared immediately, never cached as query/mutation variables or localStorage, and late responses cannot affect a different provider editor. Both supported UI languages cover these states. Output Preview cancellation/replacement/unmount discards backend leases; browser-only mode never fabricates provider/library success.

@@ -969,3 +969,59 @@ async fn global_queue_wait_does_not_spend_provider_interval_before_dispatch() {
         "provider requests bunched after global queue wait"
     );
 }
+
+#[tokio::test]
+async fn secret_query_is_sent_only_to_origin_and_cross_origin_reflection_is_rejected() {
+    let target_calls = Arc::new(AtomicUsize::new(0));
+    let seen = target_calls.clone();
+    let target = server(move |_| {
+        seen.fetch_add(1, Ordering::SeqCst);
+        async { response(200, "application/json", r#"{"ok":true}"#, "") }
+    })
+    .await;
+    let target_url = target.url.clone();
+    let captured = Arc::new(Mutex::new(Vec::new()));
+    let records = captured.clone();
+    let origin = server(move |request| {
+        records.lock().unwrap().push(request.clone());
+        let target_url = target_url.clone();
+        async move {
+            if request.starts_with("GET /redirect?") {
+                response(
+                    302,
+                    "application/json",
+                    "{}",
+                    &format!("Location: {target_url}/sink?api_key=synthetic-query-secret\r\n"),
+                )
+            } else {
+                response(200, "application/json", r#"{"ok":true}"#, "")
+            }
+        }
+    })
+    .await;
+    let engine = NetworkEngine::for_loopback(2);
+    let job = job("secret-query");
+    let mut request = spec(&format!("{}/data", origin.url));
+    request.secret_query = Some((
+        "api_key".into(),
+        SecretString::new("synthetic-query-secret".into()),
+    ));
+    engine
+        .execute(&job, request, &CancellationToken::new())
+        .await
+        .unwrap();
+    assert!(captured.lock().unwrap()[0].starts_with("GET /data?api_key=synthetic-query-secret "));
+    let mut request = spec(&format!("{}/redirect", origin.url));
+    request.secret_query = Some((
+        "api_key".into(),
+        SecretString::new("synthetic-query-secret".into()),
+    ));
+    assert_eq!(
+        failure(&engine, &job, request).await,
+        ProviderFailure::UnsafeTarget
+    );
+    assert_eq!(target_calls.load(Ordering::SeqCst), 0);
+    assert!(!serde_json::to_string(&engine.records().await)
+        .unwrap()
+        .contains("synthetic-query-secret"));
+}

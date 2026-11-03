@@ -8,6 +8,21 @@ import i18n from "../../i18n";
 import { fixtureSnapshot, fixtureTask } from "./fixtures";
 import { NetworkInspectorPage, ProvidersPage, ProviderTasks } from "./pages";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({
+    to,
+    children,
+    className,
+  }: {
+    to: string;
+    children: React.ReactNode;
+    className?: string;
+  }) => (
+    <a href={to} className={className}>
+      {children}
+    </a>
+  ),
+}));
 vi.mock("../../api/providers", async (original) => ({
   ...(await original<typeof import("../../api/providers")>()),
   providerApi: {
@@ -194,4 +209,38 @@ it("snapshots the selected Chinese UI language when starting a provider task", a
       "zh-CN",
     ),
   );
+});
+it("routes real providers to Scraper and Settings without an offline fixture search form", async () => {
+  const data = fixtureSnapshot();
+  data.providers[0].descriptor = {
+    ...data.providers[0].descriptor,
+    id: "tmdb",
+    name: "TMDB",
+    fixture: false,
+    capabilities: ["details", "images", "external_ids", "article_lookup"],
+  };
+  vi.mocked(providerApi.snapshot).mockResolvedValue(data);
+  show(<ProvidersPage />);
+  await screen.findByText("TMDB");
+  expect(
+    screen.queryByRole("button", { name: "Run offline fixture" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByLabelText("Test search text (do not enter credentials)"),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Search in Scraper" }),
+  ).toHaveAttribute("href", "/scraper");
+  expect(
+    screen.getByRole("link", { name: "Save authentication in Settings" }),
+  ).toHaveAttribute("href", "/settings");
+  expect(
+    screen.getByText(
+      "Capabilities: Details · Images · External IDs · Article lookup",
+    ),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByLabelText("Credential reference (not a secret)"),
+  ).toHaveAttribute("readonly");
+  expect(providerApi.start).not.toHaveBeenCalled();
 });

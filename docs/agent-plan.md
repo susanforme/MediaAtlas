@@ -5,7 +5,7 @@
 
 ## 当前状态与执行规则
 
-- 当前阶段：按用户最新指示拉取 P2 后由 subagent 实施 Phase 3，Provider 双引擎与生命周期的本地结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
+- 当前阶段：Phase 4 实现与本地验收见 [acceptance/phase-4.md](acceptance/phase-4.md)，包含普通影视/Anime刮削、Settings认证与安全输出；P3结果见 [acceptance/phase-3.md](acceptance/phase-3.md)。P2 结果保留于 [acceptance/phase-2.md](acceptance/phase-2.md)。历史平台启动和远端 CI 待验收项仍保留；本次会话按用户最新授权，在每阶段验收并提交推送后自动继续下一阶段。初始审计见 [repo-audit.md](repo-audit.md)。
 - 执行顺序：P0 → P1 → P2 → P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8。
 - 每个 Phase 为独立 PR/提交单元；下表的任务 ID 用于跟踪，不要求每个 ID 单独创建 PR。
 - 本次会话用户明确授权连续执行 P3 → P4 → P5 → MVP 验收 → P6 → P7 → P8：每阶段验收后立即使用 Codex 身份提交并推送，报告测试结果，再由 subagent 开始下一阶段；用户未要求中止时继续。不得自动创建 tag 或实际发布。
@@ -13,7 +13,7 @@
 - 每阶段先更新对应设计文档，再实施；DTO 契约冻结后才拆分互不冲突的实现任务。不同时修改公共领域模型。
 - 每阶段保留可运行产物、自动化测试、测试命令和结果、已知问题、设计偏差及下一阶段清单。无法执行的平台验证必须记为未验证，不能视为通过。
 - 开发 Fixture/Demo 必须标记；常规 CI 使用 Fixtures 和 Mock HTTP，不依赖实时站点。不填入虚构媒体、海报或 Provider 成功率。
-- 初次规划仅产出任务文档；随后分别获授权使用 subagent 实施 Phase 0、Phase 1、Phase 2。最新范围为本次会话连续执行 P3 至 P8，各阶段验收后提交推送再继续，不接入站点、不修改源媒体文件。测试 CI 与 tag 发布工作流保持独立；不创建或推送 tag，不实际发布应用。
+- 初次规划仅产出任务文档；随后分别获授权使用 subagent 实施 Phase 0、Phase 1、Phase 2。最新范围为本次会话连续执行 P3 至 P8，各阶段验收后提交推送再继续，按阶段实现真实 Provider 与预览输出；实际源媒体/sidecar写入仍须产品内显式确认，普通开发只操作临时测试文件，不操作用户媒体。测试 CI 与 tag 发布工作流保持独立；不创建或推送 tag，不实际发布应用。
 
 ## 阶段总览
 

@@ -94,3 +94,9 @@ P0 只验证自身启动和诊断日志。尚未接入的 Cookie、系统密钥�
 ## 实施与验收边界
 
 本架构文档确定 Phase 0 的接口和依赖方向，不代表 Phase 0 验收通过。Windows 空应用启动、macOS/Linux 编译和 Rust/TS 测试需分别记录实际结果；未运行的检查明确标记未验证。P0 未验收不得进入 P1 的数据库和媒体模型实现。
+
+## P4 typed scraping and output boundary
+
+`infrastructure::video_providers` contains fixed-endpoint TMDB/AniList/Wikipedia adapters over the P3 NetworkEngine. `domain::scraper` keeps Movie/TV/Anime queries, candidates and details tagged independently. `infrastructure::scraper` owns persistent immutable jobs/candidates/details, ID/year/alias matching, backend-generated merge diffs and atomic protected-field confirmation; confirmed type-specific source snapshots remain accessible from library details. No provider result gives the UI filesystem authority.
+
+`provider_auth` stores only method/storage/revision references in SQLite; secret input is inbound-only and values remain in OS credentials or explicitly selected session memory. Per-revision references prevent an old job from picking up a newly saved account/method. Network secret query parameters are applied only to actual requests and query-auth redirects across origins are rejected. `media_output` owns separate persistent Preview/execute/discard with capability-confined create-new sidecars, unchanged source media, XML preservation, bounded image decoding/hash cache and platform source-identity safeguards. See [P4 contract](phase-4-contract.md), [provider access](provider-access.md) and [output details](media-output.md).

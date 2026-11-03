@@ -2,15 +2,23 @@ export const providerTranslations = {
   "zh-CN": {
     providers: "Provider 管理",
     providersDescription:
-      "管理采集来源、配置快照与运行状态。当前只提供离线 Fixture，不会访问实时站点或写入媒体。",
+      "管理 TMDB、AniList、Wikipedia 与离线 Fixture 的配置和运行状态。实时来源默认停用，授权与连通性需独立验收。",
     providerFixtureName: "离线双引擎 Fixture",
     providerFixtureNotice:
       "开发 Fixture：组合 JSON 与 HTML 解析，不代表真实站点搜索结果。",
     providerCredentialsNotice:
-      "凭据只通过系统密钥服务引用；不可用时明确拒绝请求。会话内凭据仅由后端显式启用，不持久化明文。Fixture 不需要凭据。",
+      "请在设置中保存认证，再另行启用来源。默认使用系统凭据存储，可明确选择仅本次会话存储。保存不会验证实时授权，Fixture 无需凭据。",
     providerEnabled: "启用 Provider",
     providerQuery: "测试检索文本（请勿输入凭据）",
     providerRun: "运行离线 Fixture",
+    providerOpenScraper: "在刮削工作台搜索",
+    providerOpenAuthSettings: "在设置保存认证",
+    providerAuthSettingsHint:
+      "认证由设置页面管理，此处只读显示凭据引用，请勿填写密钥。",
+    providerCapability_details: "详情",
+    providerCapability_images: "图片",
+    providerCapability_external_ids: "外部标识",
+    providerCapability_article_lookup: "条目查询",
     providerJobStarted: "任务已提交，可在任务中心查看结果。",
     providerCapabilities: "支持能力",
     providerRevision: "配置版本",
@@ -95,15 +103,23 @@ export const providerTranslations = {
   "en-US": {
     providers: "Providers",
     providersDescription:
-      "Manage sources, configuration snapshots and runtime health. Only an offline fixture is registered; no live sites or media writes are enabled.",
+      "Manage TMDB, AniList, Wikipedia and offline fixture configuration and runtime health. Live providers start disabled; authorization and connectivity require separate acceptance.",
     providerFixtureName: "Offline dual-engine fixture",
     providerFixtureNotice:
       "Development fixture: combines JSON and HTML parsing. These are not live provider search results.",
     providerCredentialsNotice:
-      "Credentials use system key storage references. Unavailable storage fails the request explicitly. Session credentials require explicit backend opt-in and are never stored as plaintext. This fixture needs no credentials.",
+      "Save authentication in Settings, then enable providers separately. System credential storage is the default; session-only storage requires an explicit choice. Saving does not verify live authorization. The fixture needs no credentials.",
     providerEnabled: "Enable provider",
     providerQuery: "Test search text (do not enter credentials)",
     providerRun: "Run offline fixture",
+    providerOpenScraper: "Search in Scraper",
+    providerOpenAuthSettings: "Save authentication in Settings",
+    providerAuthSettingsHint:
+      "Manage authentication in Settings. This credential reference is read-only; do not enter a secret here.",
+    providerCapability_details: "Details",
+    providerCapability_images: "Images",
+    providerCapability_external_ids: "External IDs",
+    providerCapability_article_lookup: "Article lookup",
     providerJobStarted: "Task submitted. View its result in the task center.",
     providerCapabilities: "Capabilities",
     providerRevision: "Configuration revision",

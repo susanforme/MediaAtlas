@@ -15,6 +15,10 @@ pub enum CredentialMode {
 #[derive(Clone, Default)]
 pub struct CredentialStore {
     session: Arc<Mutex<BTreeMap<String, SecretString>>>,
+    #[cfg(test)]
+    system_unavailable: bool,
+    #[cfg(test)]
+    deletion_unavailable: Arc<std::sync::atomic::AtomicBool>,
 }
 impl CredentialStore {
     pub fn new() -> Self {
@@ -53,6 +57,10 @@ impl CredentialStore {
             session.insert(reference.to_owned(), secret);
             return Ok(());
         }
+        #[cfg(test)]
+        if self.system_unavailable {
+            return Err(ProviderFailure::CredentialsUnavailable);
+        }
         keyring::Entry::new("com.mediaatlas.desktop", reference)
             .and_then(|entry| entry.set_password(secret.expose()))
             .map_err(|_| ProviderFailure::CredentialsUnavailable)?;
@@ -74,6 +82,10 @@ impl CredentialStore {
                 .get(reference)
                 .cloned()
                 .ok_or(ProviderFailure::CredentialsUnavailable);
+        }
+        #[cfg(test)]
+        if self.system_unavailable {
+            return Err(ProviderFailure::CredentialsUnavailable);
         }
         let secret = keyring::Entry::new("com.mediaatlas.desktop", reference)
             .and_then(|entry| entry.get_password())
@@ -133,6 +145,73 @@ impl CredentialStore {
         })
         .await
         .map_err(|_| ProviderFailure::CredentialsUnavailable)?
+    }
+    fn delete_sync(&self, reference: &str, mode: CredentialMode) -> Result<(), ProviderFailure> {
+        #[cfg(test)]
+        if self
+            .deletion_unavailable
+            .load(std::sync::atomic::Ordering::SeqCst)
+        {
+            return Err(ProviderFailure::CredentialsUnavailable);
+        }
+
+        if !Self::valid(reference) {
+            return Err(ProviderFailure::InvalidConfiguration);
+        }
+        if mode == CredentialMode::SessionOnly {
+            self.session
+                .lock()
+                .map_err(|_| ProviderFailure::CredentialsUnavailable)?
+                .remove(reference);
+            return Ok(());
+        }
+        #[cfg(test)]
+        if self.system_unavailable {
+            return Err(ProviderFailure::CredentialsUnavailable);
+        }
+        match keyring::Entry::new("com.mediaatlas.desktop", reference)
+            .and_then(|entry| entry.delete_credential())
+        {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(ProviderFailure::CredentialsUnavailable),
+        }
+    }
+    pub async fn delete(
+        &self,
+        reference: &str,
+        mode: CredentialMode,
+    ) -> Result<(), ProviderFailure> {
+        if mode == CredentialMode::SessionOnly {
+            return self.delete_sync(reference, mode);
+        }
+        let store = self.clone();
+        let reference = reference.to_owned();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async move {
+            let permit = credential_gate()
+                .acquire_owned()
+                .await
+                .map_err(|_| ProviderFailure::CredentialsUnavailable)?;
+            tokio::task::spawn_blocking(move || {
+                let _permit = permit;
+                store.delete_sync(&reference, mode)
+            })
+            .await
+            .map_err(|_| ProviderFailure::CredentialsUnavailable)?
+        })
+        .await
+        .map_err(|_| ProviderFailure::CredentialsUnavailable)?
+    }
+    #[cfg(test)]
+    pub(crate) fn set_deletion_unavailable_for_test(&self, unavailable: bool) {
+        self.deletion_unavailable
+            .store(unavailable, std::sync::atomic::Ordering::SeqCst);
+    }
+    #[cfg(test)]
+    pub(crate) fn unavailable_system_for_test() -> Self {
+        Self {
+            system_unavailable: true,
+            ..Default::default()
+        }
     }
     pub fn clear_session(&self) -> Result<(), ProviderFailure> {
         self.session

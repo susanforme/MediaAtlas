@@ -1,5 +1,6 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Diagnostic rows have no local state; multiple requests can share one origin and attempt. */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -96,6 +97,7 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
             maxLength={128}
             autoComplete="off"
             value={value.credential_ref ?? ""}
+            readOnly={!provider.descriptor.fixture}
             onChange={(event) =>
               setValue((old) => ({
                 ...old,
@@ -104,6 +106,11 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
             }
           />
         </label>
+        {!provider.descriptor.fixture && (
+          <p className="mt-2 text-sm text-muted-foreground">
+            {t("providerAuthSettingsHint")}
+          </p>
+        )}
         <Button className="mt-4" type="submit" disabled={save.isPending}>
           {t("providerSaveConfig")}
         </Button>
@@ -173,32 +180,43 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
         />
         {t("providerEnabled")}
       </label>
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (query.trim() && provider.config.enabled) start.mutate();
-        }}
-        className="flex flex-wrap items-end gap-3"
-      >
-        <label className="filter-field flex-1">
-          <span>{t("providerQuery")}</span>
-          <input
-            maxLength={200}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            autoComplete="off"
-          />
-        </label>
-        <Button
-          type="submit"
-          disabled={
-            !query.trim() || !provider.config.enabled || start.isPending
-          }
+      {provider.descriptor.fixture ? (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (query.trim() && provider.config.enabled) start.mutate();
+          }}
+          className="flex flex-wrap items-end gap-3"
         >
-          {t("providerRun")}
-        </Button>
-      </form>
-      {start.isSuccess && (
+          <label className="filter-field flex-1">
+            <span>{t("providerQuery")}</span>
+            <input
+              maxLength={200}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              autoComplete="off"
+            />
+          </label>
+          <Button
+            type="submit"
+            disabled={
+              !query.trim() || !provider.config.enabled || start.isPending
+            }
+          >
+            {t("providerRun")}
+          </Button>
+        </form>
+      ) : (
+        <div className="flex flex-wrap gap-3">
+          <Link to="/scraper" className="action-link">
+            {t("providerOpenScraper")}
+          </Link>
+          <Link to="/settings" className="action-link">
+            {t("providerOpenAuthSettings")}
+          </Link>
+        </div>
+      )}
+      {provider.descriptor.fixture && start.isSuccess && (
         <p role="status" className="mt-3">
           {t("providerJobStarted")}
         </p>
@@ -262,7 +280,9 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
         </div>
       </details>
       {enabled.isError && <ErrorNotice error={enabled.error} />}
-      {start.isError && <ErrorNotice error={start.error} />}
+      {provider.descriptor.fixture && start.isError && (
+        <ErrorNotice error={start.error} />
+      )}
     </article>
   );
 }

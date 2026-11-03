@@ -2,7 +2,9 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
 
-当前实现 **Phase 3 双引擎与 Provider 生命周期**（基于 Phase 2 本地扫描与媒体库）：添加/管理 Root、后台手动及增量扫描、分页候选预览、勾选确认入库、任务进度/取消，以及真实本地海报墙、列表、筛选和详情。只读本地 NFO/音频标签，新增 Provider 注册、API/HTML 双引擎、可取消任务与脱敏网络记录；当前只内置显式禁用的离线 Fixture，不接实时站点、不移动或改写源媒体。UI 暂时仅支持 `zh-CN`、`en-US`；浏览器预览明确提示需要桌面运行。
+当前实现 **Phase 4 Movie / TV / 基础 Anime 刮削闭环**：本地 Root 扫描、候选确认和真实媒体库继续可用；新增 TMDB Movie/TV、AniList GraphQL 与 Wikipedia HTML 补充适配、类型专属候选/详情、字段来源/语言/保护比较，以及独立确认的 NFO/所选海报输出。默认 Preserve，不移动、改写或删除原视频。Provider 默认禁用，真实站点授权/连通性仍未验收，自动化使用明确标记的 Mock/Fixture。UI 支持 `zh-CN`、`en-US`；网页预览明确提示需要桌面后端。
+
+在 **Settings → Provider 认证** 可选择 TMDB v4 Bearer Token 或 v3 API Key并保存到系统密钥服务；系统不可用时会明确失败，用户可显式选择退出即失效的会话存储。输入不会回显或进入本地设置/日志。AniList 与 Wikipedia 当前使用公开访问，无需凭据。保存认证与启用 Provider 分开，之后在 Scraper 搜索→人工选择→字段/图片预览→确认入库，再独立预览并执行文件输出。
 
 ## 开发环境
 
@@ -37,7 +39,7 @@ pnpm build:desktop   # 本平台桌面可执行文件，不生成安装包、不
 
 桌面启动后在 Root 页面输入本地目录、名称和媒体类型，再进入扫描页。扫描完成先显示候选，只有勾选并再次确认的条目才进入媒体库。诊断页保留本地核心连接检查和真实版本；网页模式无法调用后端，不伪造媒体记录。
 
-默认使用本机应用数据目录中的 `library.sqlite`；原媒体目录只读。海报来自本地文件，在应用缓存中生成小图。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
+默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读，输出阶段仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。海报使用本地缓存缩略图，远程图片仅由受控后端按所选候选获取。成人入口默认隐藏，开启后为独立分区；关闭会清除前端查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
 
 ## 检查
 
@@ -72,7 +74,7 @@ cargo run -p mediaatlas-infrastructure --example library_roundtrip --locked
 
 该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。P2 桌面启动会打开应用自身的 SQLite，但不会自动扫描用户媒体目录。
 
-Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体在线业务按阶段追加。P2 支持目录扫描任务的后台执行、取消和遗留任务标记 Interrupted；等待确认的候选保留，运行中任务不会自动重放。文件移动、标签写入、在线刮削与 Watcher 均未实现。
+Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体在线业务按阶段追加。P2 支持目录扫描任务的后台执行、取消和遗留任务标记 Interrupted；等待确认的候选保留，运行中任务不会自动重放。P4 已提供普通视频在线适配与本地 Mock 全闭环；文件移动、音乐标签写入与 Watcher 留待后续阶段。Windows 输出使用限时源文件/目录句柄，重启或预览过期后需要重新生成预览，实际 Windows 运行仍待验收。
 
 ## 目录与契约
 
@@ -108,3 +110,5 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 ## Provider 开发与验收
 
 在桌面 Providers 页显式启用 Offline Fixture 后运行；Task Center 与 Network Inspector 可查看持久化任务和脱敏记录。Fixture 不联网、不写媒体，真实Provider留待P4。网络引擎和Adapter可脱离Tauri测试，常规CI仅依赖Mock HTTP和Fixtures。详见 [Provider契约](docs/provider-contract.md) 与 [Phase 3验收](docs/acceptance/phase-3.md)。
+
+P4 契约与边界：[phase-4-contract](docs/phase-4-contract.md)、[Provider 访问条件](docs/provider-access.md)、[安全输出](docs/media-output.md)、[阶段验收](docs/acceptance/phase-4.md)。系统密钥服务真实读写、实时授权及原生/跨平台 GUI 验收不由 Mock 测试替代。
