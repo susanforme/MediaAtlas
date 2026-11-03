@@ -1,0 +1,99 @@
+{
+  "checked_at": "2026-11-03T21:05:38.864364+08:00",
+  "repository": "susanforme/MediaAtlas",
+  "branch": "main",
+  "baseline": "e928fd323f039f9294a7b3104e5e37168b6d421c",
+  "source_commit": "7ec38a9778adafa53d63588d9a0fc062a4568211",
+  "checks": {
+    "pnpm_check": "passed",
+    "lint": "passed",
+    "typecheck": "passed",
+    "vitest_files": 32,
+    "vitest_tests": 219,
+    "frontend_build": "passed",
+    "cargo_metadata_locked": "passed",
+    "rustfmt": "passed",
+    "desktop_packaging": "not run as requested",
+    "native_dialog_runtime": "not run: gtk+-3.0 and webkit2gtk-4.1 development packages unavailable",
+    "build_note": "Vite main chunk 547.92 kB / gzip 176.89 kB; build succeeded with nonblocking 500 kB warning"
+  },
+  "browser_qa": {
+    "workflow_command": "python scripts/desktop-usability-qa.py",
+    "workflow_result": "passed",
+    "regression_command": "MEDIAATLAS_QA_OUTPUT_DIR=work/regression-captures python scripts/desktop-ui-qa.py",
+    "regression_result": "passed",
+    "viewports": ["1648x928", "390x844"],
+    "timezone": "Asia/Shanghai",
+    "transport": "Synthetic test-only IPC injected into a real Chromium page; no user library, real credentials, native picker window, provider network or filesystem writes were exercised.",
+    "assertions": [
+      "cancelled folder selection leaves draft unchanged and saves nothing",
+      "folder choice auto-fills name; manual path remains advanced",
+      "save-and-scan issues exactly one save and one scan and routes to that task",
+      "scan import only happens after explicit preview confirmation",
+      "tools-to-scraper URL preserves media identity and pre-fills title/year/type",
+      "provider availability/type/credentials determine search validity",
+      "metadata confirmation and sidecar preview remain separate; cancelling sidecar preview does not execute output",
+      "missing credential setup preserves media context through save and return",
+      "narrow layouts have no horizontal page overflow",
+      "regression: keyboard modal focus, reduced motion, loading/empty/error/broken-image states"
+    ],
+    "limits": [
+      "Directory plugin integration is statically verified and adapter-tested; native dialog not executed in this container",
+      "Live providers, OS keyring persistence and native app launch require a supported desktop host"
+    ]
+  },
+  "reference": [
+    {
+      "title": "MediaElch Quick Start: Add folders then reload media",
+      "url": "https://github.com/mediaelch/mediaelch-doc/blob/master/docs/source/quick-start.rst"
+    },
+    {
+      "title": "MediaElch Movie: Select local movies then choose a scrape match and fields",
+      "url": "https://github.com/mediaelch/mediaelch-doc/blob/master/docs/source/movie/index.rst"
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "screenshots/usability-fixture-directory-1648.png",
+      "sha256": "42ba34dab33e0805d4d94f961b6d0a8bb486d44180f4c872722acd43e7564f74",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-directory-narrow.png",
+      "sha256": "5158570f047a8b13212e8473b7cf3db367024079cdec7c4e12fb0ad7094536bb",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-merge-preview-1648.png",
+      "sha256": "84f7844532fc655e93c1d6e734ed624aada76b2d6edb8211a3079613e54b0c32",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-missing-credentials-1648.png",
+      "sha256": "ddb276fd716ebacc4a8a375111dc8038c352ce283a0c6841d8400d9ca62591af",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-return-from-settings-1648.png",
+      "sha256": "20408cd5c866a0719c3e0246546f2ebaddc6ed0db4f9bd92e1c60d24104f2360",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-scan-review-1648.png",
+      "sha256": "2fec26196b3a283e38a8ffdda5d93de701caea8e88fd58979667e605e73ef4d2",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-scrape-context-1648.png",
+      "sha256": "20408cd5c866a0719c3e0246546f2ebaddc6ed0db4f9bd92e1c60d24104f2360",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    },
+    {
+      "file": "screenshots/usability-fixture-scrape-context-narrow.png",
+      "sha256": "2445d01ae2a1faebb4b3c671b382588ef18508ddc98da33418734223be1a3b42",
+      "mode": "synthetic_ipc_fixture_real_browser_capture"
+    }
+  ],
+  "test_log_sha256": "cc4cc08de09c5b5601ac1bd8f81333484ea09da35ec6ae9ba4c829c12b96ecde",
+  "tags": "No tags created, moved or deleted."
+}

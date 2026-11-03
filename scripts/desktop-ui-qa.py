@@ -16,8 +16,8 @@ from playwright.sync_api import sync_playwright, expect
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "screenshots"
-OUT.mkdir(exist_ok=True)
+OUT = Path(os.environ.get("MEDIAATLAS_QA_OUTPUT_DIR", ROOT / "screenshots"))
+OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get("MEDIAATLAS_QA_URL", "http://localhost:1420")
 
 
@@ -118,107 +118,112 @@ def fixture_context(browser, **kwargs):
     return context
 
 
-with sync_playwright() as p:
-    browser = p.chromium.launch(executable_path=os.environ.get("MEDIAATLAS_CHROMIUM", "/usr/bin/chromium"),
-                                headless=True, args=["--no-sandbox"])
-    plain = browser.new_page(viewport={"width": 1648, "height": 928})
-    plain.goto(URL)
-    expect(plain.get_by_text("请在桌面应用中打开")).to_be_visible()
-    capture(plain, "desktop-required-1648.png")
-    plain.close()
+def main():
+    with sync_playwright() as p:
+        browser = p.chromium.launch(executable_path=os.environ.get("MEDIAATLAS_CHROMIUM", "/usr/bin/chromium"),
+                                    headless=True, args=["--no-sandbox"])
+        plain = browser.new_page(viewport={"width": 1648, "height": 928})
+        plain.goto(URL)
+        expect(plain.get_by_text("请在桌面应用中打开")).to_be_visible()
+        capture(plain, "desktop-required-1648.png")
+        plain.close()
 
-    context = fixture_context(browser)
-    page = context.new_page()
-    failures = []
-    page.on("pageerror", lambda e: failures.append(str(e)))
-    page.goto(URL)
-    expect(page.locator(".home-poster-card")).to_have_count(7)
-    expect(page.locator(".home-hero h1")).to_have_text("QA 媒体 01")
-    capture(page, "fixture-home-1648.png")
-    assert page.locator("video, audio, iframe").count() == 0
-    assert page.get_by_role("link", name="成人媒体库", exact=True).count() == 0
+        context = fixture_context(browser)
+        page = context.new_page()
+        failures = []
+        page.on("pageerror", lambda e: failures.append(str(e)))
+        page.goto(URL)
+        expect(page.locator(".home-poster-card")).to_have_count(7)
+        expect(page.locator(".home-hero h1")).to_have_text("QA 媒体 01")
+        capture(page, "fixture-home-1648.png")
+        assert page.locator("video, audio, iframe").count() == 0
+        assert page.get_by_role("link", name="成人媒体库", exact=True).count() == 0
 
-    # Search has one effective query: toolbar routes to the library's URL model.
-    page.get_by_role("textbox", name="搜索标题", exact=True).fill("QA 媒体 03")
-    page.get_by_role("textbox", name="搜索标题", exact=True).press("Enter")
-    expect(page).to_have_url(__import__('re').compile(r"/library\?q="))
-    expect(page.locator(".poster-card")).to_have_count(1)
-    capture(page, "fixture-library-search-1648.png")
-    assert page.locator("input[type=search]").count() == 1
+        # Search has one effective query: toolbar routes to the library's URL model.
+        page.get_by_role("textbox", name="搜索标题", exact=True).fill("QA 媒体 03")
+        page.get_by_role("textbox", name="搜索标题", exact=True).press("Enter")
+        expect(page).to_have_url(__import__('re').compile(r"/library\?q="))
+        expect(page.locator(".poster-card")).to_have_count(1)
+        capture(page, "fixture-library-search-1648.png")
+        assert page.locator("input[type=search]").count() == 1
 
-    page.goto(URL)
-    expect(page.locator(".home-poster-card")).to_have_count(7)
-    launch = page.locator(".home-actions button").first
-    expect(launch).to_be_visible()
-    launch.focus()
-    launch.press("Enter")
-    dialog = page.get_by_role("dialog")
-    expect(dialog).to_be_visible()
-    assert dialog.evaluate("el => el.contains(document.activeElement)")
-    for _ in range(5):
-        page.keyboard.press("Tab")
+        page.goto(URL)
+        expect(page.locator(".home-poster-card")).to_have_count(7)
+        launch = page.locator(".home-actions button").first
+        expect(launch).to_be_visible()
+        launch.focus()
+        launch.press("Enter")
+        dialog = page.get_by_role("dialog")
+        expect(dialog).to_be_visible()
         assert dialog.evaluate("el => el.contains(document.activeElement)")
-    capture(page, "fixture-version-dialog-1648.png")
-    page.keyboard.press("Escape")
-    expect(dialog).to_have_count(0)
-    expect(launch).to_be_focused()
-    assert not any(c["cmd"] == "library_open" for c in page.evaluate("__qa.calls"))
+        for _ in range(5):
+            page.keyboard.press("Tab")
+            assert dialog.evaluate("el => el.contains(document.activeElement)")
+        capture(page, "fixture-version-dialog-1648.png")
+        page.keyboard.press("Escape")
+        expect(dialog).to_have_count(0)
+        expect(launch).to_be_focused()
+        assert not any(c["cmd"] == "library_open" for c in page.evaluate("__qa.calls"))
 
-    for mode in ["loading", "empty", "error", "missing"]:
-        mode_context = fixture_context(browser)
-        mode_context.add_init_script(f"__qa.mode = '{mode}'")
-        page = mode_context.new_page()
-        page.goto(URL + "/library")
-        if mode == "loading":
-            expect(page.get_by_role("status")).to_be_visible()
-        elif mode == "error":
-            expect(page.get_by_role("alert")).to_be_visible()
-        elif mode == "empty":
-            expect(page.locator(".empty-state")).to_be_visible()
-        else:
-            # Reset query; the test adapter returns malformed and absent PNGs.
-            page.get_by_role("searchbox").fill("")
-            expect(page.locator(".poster-placeholder")).to_have_count(7)
-        capture(page, f"fixture-{mode}-1648.png")
+        for mode in ["loading", "empty", "error", "missing"]:
+            mode_context = fixture_context(browser)
+            mode_context.add_init_script(f"__qa.mode = '{mode}'")
+            page = mode_context.new_page()
+            page.goto(URL + "/library")
+            if mode == "loading":
+                expect(page.get_by_role("status")).to_be_visible()
+            elif mode == "error":
+                expect(page.get_by_role("alert")).to_be_visible()
+            elif mode == "empty":
+                expect(page.locator(".empty-state")).to_be_visible()
+            else:
+                # Reset query; the test adapter returns malformed and absent PNGs.
+                page.get_by_role("searchbox").fill("")
+                expect(page.locator(".poster-placeholder")).to_have_count(7)
+            capture(page, f"fixture-{mode}-1648.png")
 
-    page = context.new_page()
-    page.goto(URL + "/settings")
-    expect(page.get_by_label("凭据", exact=True)).to_be_visible()
-    credential = page.get_by_label("凭据", exact=True)
-    credential.fill("synthetic-qa-credential")
-    assert not any(c["cmd"] == "provider_auth_save" for c in page.evaluate("__qa.calls"))
-    page.get_by_role("button", name="保存认证", exact=True).click()
-    expect(credential).to_have_value("")
-    expect(page.get_by_text("认证已保存，来源启用状态保持不变。")).to_be_visible()
-    capture(page, "fixture-settings-1648.png")
-    for route, name in [("tools", "tools"), ("music", "music-empty"), ("diagnostics", "maintenance")]:
-        page.goto(URL + "/" + route)
-        expect(page.locator("main h1")).to_be_visible()
-        expect(page.get_by_role("status")).to_have_count(0)
-        expect(page.get_by_role("alert")).to_have_count(0)
-        capture(page, f"fixture-{name}-1648.png")
-    assert failures == [], failures
+        page = context.new_page()
+        page.goto(URL + "/settings")
+        expect(page.get_by_label("凭据", exact=True)).to_be_visible()
+        credential = page.get_by_label("凭据", exact=True)
+        credential.fill("synthetic-qa-credential")
+        assert not any(c["cmd"] == "provider_auth_save" for c in page.evaluate("__qa.calls"))
+        page.get_by_role("button", name="保存认证", exact=True).click()
+        expect(credential).to_have_value("")
+        expect(page.get_by_text("认证已保存，来源启用状态保持不变。")).to_be_visible()
+        capture(page, "fixture-settings-1648.png")
+        for route, name in [("tools", "tools"), ("music", "music-empty"), ("diagnostics", "maintenance")]:
+            page.goto(URL + "/" + route)
+            expect(page.locator("main h1")).to_be_visible()
+            expect(page.get_by_role("status")).to_have_count(0)
+            expect(page.get_by_role("alert")).to_have_count(0)
+            capture(page, f"fixture-{name}-1648.png")
+        assert failures == [], failures
 
-    narrow = fixture_context(browser, reduced_motion="reduce")
-    mobile = narrow.new_page()
-    mobile.set_viewport_size({"width": 390, "height": 844})
-    mobile.goto(URL)
-    expect(mobile.locator(".home-poster-card")).to_have_count(7)
-    assert mobile.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
-    capture(mobile, "fixture-home-narrow-reduced-motion.png")
-    mobile.locator(".home-poster-open").first.hover()
-    assert mobile.locator(".home-poster-open .poster-image").first.evaluate("el => getComputedStyle(el).transform") == "none"
-    mobile.keyboard.press("Tab")
-    assert mobile.locator(":focus-visible").count() == 1
-    mobile.goto(URL + "/settings")
-    expect(mobile.get_by_label("凭据", exact=True)).to_be_visible()
-    capture(mobile, "fixture-settings-narrow.png")
-    for route in ["library", "tools", "diagnostics"]:
-        mobile.goto(URL + "/" + route)
-        expect(mobile.locator("main h1")).to_be_visible()
-        expect(mobile.get_by_role("status")).to_have_count(0)
-        expect(mobile.get_by_role("alert")).to_have_count(0)
-        capture(mobile, f"fixture-{route}-narrow.png")
-    browser.close()
+        narrow = fixture_context(browser, reduced_motion="reduce")
+        mobile = narrow.new_page()
+        mobile.set_viewport_size({"width": 390, "height": 844})
+        mobile.goto(URL)
+        expect(mobile.locator(".home-poster-card")).to_have_count(7)
+        assert mobile.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
+        capture(mobile, "fixture-home-narrow-reduced-motion.png")
+        mobile.locator(".home-poster-open").first.hover()
+        assert mobile.locator(".home-poster-open .poster-image").first.evaluate("el => getComputedStyle(el).transform") == "none"
+        mobile.keyboard.press("Tab")
+        assert mobile.locator(":focus-visible").count() == 1
+        mobile.goto(URL + "/settings")
+        expect(mobile.get_by_label("凭据", exact=True)).to_be_visible()
+        capture(mobile, "fixture-settings-narrow.png")
+        for route in ["library", "tools", "diagnostics"]:
+            mobile.goto(URL + "/" + route)
+            expect(mobile.locator("main h1")).to_be_visible()
+            expect(mobile.get_by_role("status")).to_have_count(0)
+            expect(mobile.get_by_role("alert")).to_have_count(0)
+            capture(mobile, f"fixture-{route}-narrow.png")
+        browser.close()
 
-print("Browser QA passed: reference/narrow, search, modal keyboard, reduced motion, loading/empty/error/missing, explicit credential save.")
+    print("Browser QA passed: reference/narrow, search, modal keyboard, reduced motion, loading/empty/error/missing, explicit credential save.")
+
+
+if __name__ == "__main__":
+    main()

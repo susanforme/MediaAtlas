@@ -1,3 +1,31 @@
+# 功能流程优化验收（2026-11-03）
+
+本次从 `main / e928fd3` 继续开发，功能源码为 `7ec38a9`。重新运行 `pnpm check`：lint、typecheck、**32 个测试文件 / 219 项测试**、前端构建通过。原生目录选择的适配器契约测试、Rust 格式检查与 `cargo metadata --locked` 通过。Vite 主 chunk 547.92kB（gzip 176.89kB），构建成功，保留默认体积提示。
+
+本次参考 [MediaElch 目录入门](https://github.com/mediaelch/mediaelch-doc/blob/master/docs/source/quick-start.rst)和[影片刮削流程](https://github.com/mediaelch/mediaelch-doc/blob/master/docs/source/movie/index.rst)：系统选目录、选择本地影片、匹配来源、选择资料并确认保存。只采用交互思路，保留 MediaAtlas 的只读媒体库、成人隔离和显式写入边界。
+
+- 系统目录选择是主入口，自动目录名，手动路径/排除规则折叠。取消、重复点击、晚到响应、手动改名均有行为测试。
+- 保存并扫描直接进入对应任务；已保存但扫描失败仅重试扫描，不重复新增目录。唯一根/最近任务可预选，完成后可进入库或媒体工具。
+- 详情和媒体工具直接进入当前媒体刮削，预填影片名称、年份和类型；高级标识折叠，来源用友好名称，缺配置时提供实际入口。
+- 配置来源/凭据后“返回刮削”保持当前媒体，返回参数仅接受固定入口与合法媒体 ID。凭据仍由用户显式填写保存，启动时不再自动读取环境 Token。
+- 元数据、NFO/海报继续分开预览和确认；换目标或取消释放未执行的预览；普通流程防御异常成人响应泄漏。
+
+以下 **8 张图片为本次真实 Chromium 页面截图**（1648×928、390×844，Asia/Shanghai），注入了明确标注的测试 IPC。QA 影片、路径与凭据均为合成测试数据，不进入产品源码或用户库；图片没有生成、拼接或修补。它们验证浏览器流程，**不代表真实原生对话框、真实后端/来源/系统 keyring 或文件写入已经通过**。当前环境缺 GTK/WebKit 开发依赖，未运行原生宿主或打包；既有 tag 未移动。
+
+| 场景 | 本次截图 |
+| --- | --- |
+| 文件夹选择后的自动名称 / 窄屏 | [目录](usability-fixture-directory-1648.png) / [窄屏目录](usability-fixture-directory-narrow.png) |
+| 保存并扫描后的当前任务与候选 | [入库核对](usability-fixture-scan-review-1648.png) |
+| 当前影片直接进入刮削 / 窄屏 | [影片上下文](usability-fixture-scrape-context-1648.png) / [窄屏刮削](usability-fixture-scrape-context-narrow.png) |
+| 合并预览 | [合并核对](usability-fixture-merge-preview-1648.png) |
+| 缺少凭据 / 设置后返回原影片 | [配置入口](usability-fixture-missing-credentials-1648.png) / [返回原影片](usability-fixture-return-from-settings-1648.png) |
+
+复现：启动 `pnpm dev:web` 后运行 `python scripts/desktop-usability-qa.py`（需要 Python Playwright、Pillow 和系统 Chromium）。原视觉回归 `python scripts/desktop-ui-qa.py` 也已重跑通过；本次回归输出通过 `MEDIAATLAS_QA_OUTPUT_DIR=work/regression-captures` 保存到本地临时目录，保留下面上一阶段截图的原始来源记录。精确源码、校验结果、局限与 SHA-256 见 [usability-report.json](usability-report.json)。
+
+---
+
+## 上一阶段视觉重构记录（不作为本次功能验收成绩）
+
 # MediaAtlas 电影式深色重构验收（2026-11-03）
 
 本轮以 `main / 8004e83` 为基线，界面源码为 `2ef08af`。以下 **17 张 PNG 均为本轮 Chromium 实际页面截图**，视口为 1648×928 和 390×844；未使用图像生成、拼接或修补。精确源码 SHA、图片 SHA-256 与验证结果见 [cinematic-ui-report.json](cinematic-ui-report.json)。下方旧版截图及历史成绩不计入本轮验收。
