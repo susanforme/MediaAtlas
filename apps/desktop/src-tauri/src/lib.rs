@@ -35,10 +35,14 @@ pub fn run() {
             let desktop = tauri::async_runtime::block_on(async {
                 let repository = LibraryRepository::open(&data_dir.join("library.sqlite")).await?;
                 let scans = ScanService::new(repository.clone());
+                let providers =
+                    mediaatlas_infrastructure::providers::ProviderService::new(repository.clone())
+                        .await?;
                 scans.recover_interrupted().await?;
                 Ok::<_, mediaatlas_infrastructure::library::RepositoryError>(state::DesktopState {
                     browse: BrowseService::new(repository, data_dir.join("thumbnails")),
                     scans,
+                    providers,
                 })
             })?;
             let mut events = desktop.scans.subscribe();
@@ -104,7 +108,12 @@ pub fn run() {
             commands::scan_list_tasks,
             commands::scan_get_preview,
             commands::scan_confirm,
-            commands::scan_cancel
+            commands::scan_cancel,
+            commands::provider_snapshot,
+            commands::provider_set_enabled,
+            commands::provider_update_config,
+            commands::provider_start,
+            commands::provider_cancel
         ])
         .run(tauri::generate_context!())
         .expect("Desktop application could not be started");

@@ -185,3 +185,93 @@ pub async fn scan_cancel(
         .map(ApiResponse::new)
         .map_err(storage_error)
 }
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderEnabledInput {
+    provider_id: String,
+    enabled: bool,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderStartInput {
+    provider_id: String,
+    query: String,
+    language: String,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderCancelInput {
+    task_id: Uuid,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderConfigInput {
+    provider_id: String,
+    config: mediaatlas_domain::ProviderConfig,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderSnapshotInput {}
+
+#[tauri::command]
+pub async fn provider_snapshot(
+    state: State<'_, DesktopState>,
+    input: ProviderSnapshotInput,
+) -> Result<ApiResponse<mediaatlas_domain::ProviderSnapshot>, ErrorDto> {
+    let _ = input;
+    state
+        .providers
+        .snapshot()
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn provider_set_enabled(
+    state: State<'_, DesktopState>,
+    input: ProviderEnabledInput,
+) -> Result<ApiResponse<()>, ErrorDto> {
+    state
+        .providers
+        .set_enabled(&input.provider_id, input.enabled)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn provider_update_config(
+    state: State<'_, DesktopState>,
+    input: ProviderConfigInput,
+) -> Result<ApiResponse<()>, ErrorDto> {
+    state
+        .providers
+        .update_config(&input.provider_id, &input.config)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn provider_start(
+    state: State<'_, DesktopState>,
+    input: ProviderStartInput,
+) -> Result<ApiResponse<Uuid>, ErrorDto> {
+    state
+        .providers
+        .start_localized(&input.provider_id, &input.query, &input.language)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}
+#[tauri::command]
+pub async fn provider_cancel(
+    state: State<'_, DesktopState>,
+    input: ProviderCancelInput,
+) -> Result<ApiResponse<bool>, ErrorDto> {
+    state
+        .providers
+        .cancel(input.task_id)
+        .await
+        .map(ApiResponse::new)
+        .map_err(storage_error)
+}

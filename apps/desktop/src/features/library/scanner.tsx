@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { libraryApi, type ScanTask } from "../../api/library";
 import { Button } from "../../components/ui/button";
+import { ProviderTasks } from "../providers/pages";
 import { usePrivacy } from "./context";
 import {
   Empty,
@@ -36,6 +37,7 @@ export function TasksPage() {
   return (
     <>
       <PageHeading title={t("tasks")} />
+      <h2 className="section-title">{t("scanTasks")}</h2>
       {cancel.isError && <ErrorNotice error={cancel.error} />}
       {tasks.isPending ? (
         <Loading />
@@ -100,6 +102,7 @@ export function TasksPage() {
           ))}
         </div>
       )}
+      <ProviderTasks />
     </>
   );
 }

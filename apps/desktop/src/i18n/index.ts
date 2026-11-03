@@ -1,5 +1,6 @@
 import i18n from "i18next";
 import { initReactI18next } from "react-i18next";
+import { providerTranslations } from "../features/providers/translations";
 
 export const LANGUAGE_STORAGE_KEY = "mediaatlas.language";
 export type AppLocale = "zh-CN" | "en-US";
@@ -25,6 +26,15 @@ export function persistLanguage(value: string): void {
 export const resources = {
   "zh-CN": {
     translation: {
+      ...providerTranslations["zh-CN"],
+      ...Object.fromEntries(
+        Object.entries(providerTranslations["zh-CN"])
+          .filter(([key]) => key.startsWith("providerFailure_"))
+          .map(([key, value]) => [
+            key.replace("providerFailure_", "error_"),
+            value,
+          ]),
+      ),
       language: "语言",
       phase: "本地媒体库",
       title: "MediaAtlas 工作区",
@@ -227,6 +237,15 @@ export const resources = {
   },
   "en-US": {
     translation: {
+      ...providerTranslations["en-US"],
+      ...Object.fromEntries(
+        Object.entries(providerTranslations["en-US"])
+          .filter(([key]) => key.startsWith("providerFailure_"))
+          .map(([key, value]) => [
+            key.replace("providerFailure_", "error_"),
+            value,
+          ]),
+      ),
       language: "Language",
       phase: "Local media library",
       title: "MediaAtlas workspace",

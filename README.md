@@ -2,7 +2,7 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust。
 
-当前实现 **Phase 2 本地扫描与媒体库**：添加/管理 Root、后台手动及增量扫描、分页候选预览、勾选确认入库、任务进度/取消，以及真实本地海报墙、列表、筛选和详情。只读本地 NFO/音频标签，不访问在线 Provider，不移动或改写源媒体。UI 暂时仅支持 `zh-CN`、`en-US`；浏览器预览明确提示需要桌面运行。
+当前实现 **Phase 3 双引擎与 Provider 生命周期**（基于 Phase 2 本地扫描与媒体库）：添加/管理 Root、后台手动及增量扫描、分页候选预览、勾选确认入库、任务进度/取消，以及真实本地海报墙、列表、筛选和详情。只读本地 NFO/音频标签，新增 Provider 注册、API/HTML 双引擎、可取消任务与脱敏网络记录；当前只内置显式禁用的离线 Fixture，不接实时站点、不移动或改写源媒体。UI 暂时仅支持 `zh-CN`、`en-US`；浏览器预览明确提示需要桌面运行。
 
 ## 开发环境
 
@@ -104,3 +104,7 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 - [Phase 2 验收记录](docs/acceptance/phase-2.md)
 
 本轮提交 Phase 2 后停止，等待用户明确指示才开始 Phase 3。
+
+## Provider 开发与验收
+
+在桌面 Providers 页显式启用 Offline Fixture 后运行；Task Center 与 Network Inspector 可查看持久化任务和脱敏记录。Fixture 不联网、不写媒体，真实Provider留待P4。网络引擎和Adapter可脱离Tauri测试，常规CI仅依赖Mock HTTP和Fixtures。详见 [Provider契约](docs/provider-contract.md) 与 [Phase 3验收](docs/acceptance/phase-3.md)。

@@ -29,6 +29,10 @@ import {
   TasksPage,
   validateScannerSearch,
 } from "./features/library/scanner";
+import {
+  NetworkInspectorPage,
+  ProvidersPage,
+} from "./features/providers/pages";
 import { HomePage } from "./routes/home";
 
 function useTaskEvents() {
@@ -106,6 +110,8 @@ function Layout() {
               ["/roots", "roots"],
               ["/scanner", "scanner"],
               ["/tasks", "tasks"],
+              ["/providers", "providers"],
+              ["/network", "networkInspector"],
               ["/settings", "settings"],
               ["/diagnostics", "diagnostics"],
             ] as const
@@ -220,6 +226,16 @@ const diagnosticsRoute = createRoute({
   path: "/diagnostics",
   component: HomePage,
 });
+const providersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/providers",
+  component: ProvidersPage,
+});
+const networkRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/network",
+  component: NetworkInspectorPage,
+});
 const router = createRouter({
   routeTree: rootRoute.addChildren([
     indexRoute,
@@ -229,6 +245,8 @@ const router = createRouter({
     rootsRoute,
     scannerRoute,
     tasksRoute,
+    providersRoute,
+    networkRoute,
     settingsRoute,
     diagnosticsRoute,
   ]),
