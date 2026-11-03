@@ -240,3 +240,37 @@ it("traps keyboard focus in version selection and restores the opening button on
   expect(trigger).toHaveFocus();
   expect(nativeOpenApi.open).not.toHaveBeenCalled();
 });
+
+it("mounts the single library search in the toolbar before data arrives and preserves its focus", async () => {
+  let resolve!: (value: { items: []; next_cursor: null }) => void;
+  vi.mocked(libraryApi.media).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  const onSearch = vi.fn();
+  show(
+    <>
+      <div id="library-toolbar-search" />
+      <LibraryPage
+        search={{ q: "Initial query", cursor: "old-cursor", page: 4 }}
+        onSearch={onSearch}
+      />
+    </>,
+  );
+  const input = screen.getByRole("searchbox");
+  expect(document.getElementById("library-toolbar-search")).toContainElement(
+    input,
+  );
+  expect(screen.getAllByRole("searchbox")).toHaveLength(1);
+  input.focus();
+  await act(async () => resolve({ items: [], next_cursor: null }));
+  expect(screen.getByRole("searchbox")).toBe(input);
+  expect(input).toHaveFocus();
+  fireEvent.change(input, { target: { value: "Changed query" } });
+  expect(onSearch).toHaveBeenCalledWith({
+    q: "Changed query",
+    cursor: undefined,
+    page: 1,
+  });
+});

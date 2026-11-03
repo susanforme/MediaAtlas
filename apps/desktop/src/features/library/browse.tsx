@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { LayoutGrid, List } from "lucide-react";
+import { useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import type { FacetOption, MediaKind } from "../../api/library";
@@ -76,10 +77,10 @@ export function LibraryPage({
     filter,
     allowed,
   } = useLibraryBrowse(search, onSearch, adult);
-  const toolbarSearch =
-    typeof document === "undefined"
-      ? null
-      : document.getElementById("library-toolbar-search");
+  const [toolbarSearch, setToolbarSearch] = useState<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    setToolbarSearch(document.getElementById("library-toolbar-search"));
+  }, []);
   const searchInput = (
     <Label className="filter-field">
       <span className={toolbarSearch ? "sr-only" : undefined}>
