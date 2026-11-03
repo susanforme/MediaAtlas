@@ -131,9 +131,18 @@ export function MaintenancePage() {
         )}
         <section className="panel space-y-4">
           <p>{t("maintenanceDiagnosticsHelp")}</p>
-          <Button disabled={working} onClick={() => void exportDiagnostics()}>
-            {t("maintenanceDiagnostics")}
-          </Button>
+          <div className="flex flex-wrap gap-3">
+            <Button disabled={working} onClick={() => void exportDiagnostics()}>
+              {t("maintenanceDiagnostics")}
+            </Button>
+            <Button
+              variant="outline"
+              disabled={working}
+              onClick={() => void makePreview("cache")}
+            >
+              {t("maintenanceCachePreview")}
+            </Button>
+          </div>
           {exportPath && (
             <Input
               aria-label={t("maintenanceExported")}
@@ -142,13 +151,6 @@ export function MaintenancePage() {
               className="w-full"
             />
           )}
-          <Button
-            variant="outline"
-            disabled={working}
-            onClick={() => void makePreview("cache")}
-          >
-            {t("maintenanceCachePreview")}
-          </Button>
         </section>
         {working && (
           <div role="status">
