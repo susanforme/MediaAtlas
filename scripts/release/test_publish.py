@@ -15,7 +15,7 @@ SPEC.loader.exec_module(publisher)
 class FakeGitHub:
     def __init__(self, commit, existing=True):
         self.commit = commit
-        self.release = {"id": 123, "draft": False} if existing else None
+        self.release = {"id": 123, "draft": False, "tag_name": "v0.1.0-beta.2"} if existing else None
         self.uploaded = {}
         self.changes = []
         self.fail_upload = False
@@ -27,6 +27,9 @@ class FakeGitHub:
         return self.commit
 
     def get_release(self, tag):
+        return self.release
+
+    def get_release_by_id(self, identifier):
         return self.release
 
     def create_release(self, data):
@@ -129,7 +132,7 @@ class PublishTests(unittest.TestCase):
 
     def test_release_replaced_during_rebuild_blocks_uploads(self):
         github = FakeGitHub(self.commit)
-        with patch.object(github, "get_release", side_effect=[github.release, {"id": 999, "draft": True}]), self.assertRaisesRegex(ValueError, "ownership/draft state"):
+        with patch.object(github, "get_release_by_id", return_value={"id": 999, "draft": True, "tag_name": self.tag}), self.assertRaisesRegex(ValueError, "ownership/draft state"):
             self.publish(github)
         self.assertFalse(any(name == "upload" for name, _ in github.changes))
 
@@ -181,9 +184,65 @@ class PublishTests(unittest.TestCase):
 
     def test_missing_release_is_distinguished_from_auth_failure(self):
         github = publisher.GitHub("owner/repo")
-        result = SimpleNamespace(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)")
-        with patch.object(publisher.subprocess, "run", return_value=result):
+        missing = SimpleNamespace(returncode=1, stdout="", stderr="gh: Not Found (HTTP 404)")
+        empty_list = SimpleNamespace(returncode=0, stdout="[]", stderr="")
+        with patch.object(publisher.subprocess, "run", side_effect=[missing, empty_list]) as execute:
             self.assertIsNone(github.get_release(self.tag))
+        self.assertEqual(execute.call_count, 2)
+
+    def test_published_and_failed_draft_rebuilds_use_id_checks_when_tag_endpoint_returns_404(self):
+        for already_draft in [False, True]:
+            with self.subTest(already_draft=already_draft):
+                backend = FakeGitHub(self.commit)
+                backend.release["draft"] = already_draft
+                github = publisher.GitHub("owner/repo")
+                calls = []
+                def api(path, *, method="GET", data=None, missing_ok=False):
+                    calls.append((path, method))
+                    if path.startswith("git/ref/tags/"):
+                        return {"object": {"type": "commit", "sha": self.commit}}
+                    if path.startswith("releases/tags/"):
+                        # Match the documented REST boundary: draft is not found.
+                        return None if backend.release["draft"] else dict(backend.release)
+                    if path.startswith("releases?per_page=100&page="):
+                        return [dict(backend.release)]
+                    if path.startswith("releases/123/assets?"):
+                        return backend.assets(123)
+                    if path == "releases/123" and method == "PATCH":
+                        return backend.edit_release(123, data)
+                    if path == "releases/123":
+                        return dict(backend.release)
+                    raise AssertionError(f"Unexpected API or duplicate create: {method} {path}")
+                with patch.object(github, "api", side_effect=api), patch.object(github, "upload", side_effect=backend.upload):
+                    self.publish(github)
+                self.assertFalse(backend.release["draft"])
+                self.assertEqual(sum(path.startswith("releases/tags/") for path, _ in calls), 1)
+                self.assertEqual(sum(path == "releases/123" and method == "GET" for path, method in calls), len(self.paths) + 1)
+                self.assertFalse(any(name == "create" for name, _ in backend.changes))
+                # The final ref check follows the ownership read, immediately
+                # preceding the final mutation, without implying an atomic CAS.
+                self.assertTrue(calls[-2][0].startswith("git/ref/tags/"))
+                self.assertEqual(calls[-1], ("releases/123", "PATCH"))
+
+    def test_draft_lookup_searches_all_release_pages(self):
+        github = publisher.GitHub("owner/repo")
+        unrelated = [{"id": number, "tag_name": f"v0.0.{number}", "draft": False} for number in range(100)]
+        draft = {"id": 123, "tag_name": self.tag, "draft": True}
+        with patch.object(github, "api", side_effect=[None, unrelated, [draft]]) as api:
+            self.assertEqual(github.get_release(self.tag), draft)
+        self.assertEqual(api.call_args.args[0], "releases?per_page=100&page=2")
+
+    def test_ambiguous_same_tag_drafts_cannot_create_or_replace_a_release(self):
+        github = publisher.GitHub("owner/repo")
+        drafts = [{"id": value, "tag_name": self.tag, "draft": True} for value in [123, 456]]
+        with patch.object(github, "api", side_effect=[None, drafts]), self.assertRaisesRegex(ValueError, "ambiguous releases"):
+            github.get_release(self.tag)
+
+    def test_id_lookup_with_changed_tag_cannot_upload_assets(self):
+        github = FakeGitHub(self.commit)
+        with patch.object(github, "get_release_by_id", return_value={"id": 123, "tag_name": "different-tag", "draft": True}), self.assertRaisesRegex(ValueError, "ownership/draft state"):
+            self.publish(github)
+        self.assertFalse(any(name == "upload" for name, _ in github.changes))
 
     def test_real_complete_aggregate_is_revalidated_with_identical_asset_bytes(self):
         source = self.root / "source"

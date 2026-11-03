@@ -50,7 +50,24 @@ class GitHub:
         return value["sha"]
 
     def get_release(self, tag):
-        return self.api(f"releases/tags/{quote(tag, safe='')}", missing_ok=True)
+        # The by-tag REST endpoint only promises published releases. A failed
+        # earlier rebuild may have left a draft, which must be found and reused.
+        published = self.api(f"releases/tags/{quote(tag, safe='')}", missing_ok=True)
+        if published is not None:
+            require(published.get("tag_name") == tag, "release tag mismatch")
+            return published
+        matches, page = [], 1
+        while True:
+            values = self.api(f"releases?per_page=100&page={page}")
+            require(isinstance(values, list), "invalid release list response")
+            matches.extend(item for item in values if item.get("tag_name") == tag)
+            require(len(matches) <= 1, "ambiguous releases for the same tag; refusing to create or replace")
+            if len(values) < 100:
+                return matches[0] if matches else None
+            page += 1
+
+    def get_release_by_id(self, identifier):
+        return self.api(f"releases/{identifier}")
 
     def create_release(self, data):
         return self.api("releases", method="POST", data=data)
@@ -131,18 +148,21 @@ def publish_verified(github, tag, commit, paths):
                                            "prerelease": True, "make_latest": "false"})
         identifier = existing["id"]
     for path in paths:
-        check_current(github, tag, commit)
-        current = github.get_release(tag)
-        require(current is not None and current["id"] == identifier and current["draft"] is True,
+        current = github.get_release_by_id(identifier)
+        require(current is not None and current["id"] == identifier and current.get("tag_name") == tag
+                and current["draft"] is True,
                 "release ownership/draft state changed during upload")
+        check_current(github, tag, commit)
         github.upload(tag, path)
     check_current(github, tag, commit)
     verify_remote_assets(github, identifier, paths)
-    check_current(github, tag, commit)
-    current = github.get_release(tag)
-    require(current is not None and current["id"] == identifier and current["draft"] is True,
+    current = github.get_release_by_id(identifier)
+    require(current is not None and current["id"] == identifier and current.get("tag_name") == tag
+            and current["draft"] is True,
             "release ownership/draft state changed before publication")
     notes = next(path for path in paths if path.name == "RELEASE_NOTES.md").read_text()
+    # This is a fresh read immediately before PATCH, not an atomic tag/ref CAS.
+    check_current(github, tag, commit)
     github.edit_release(identifier, {"draft": False, "prerelease": True,
                                      "make_latest": "false", "name": f"MediaAtlas {tag}",
                                      "target_commitish": commit, "body": notes})
