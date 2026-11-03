@@ -1,3 +1,44 @@
+# 自动媒体库、统一类型与首屏验收（2026-11-03）
+
+本轮后端提交 `553037b`，前端与行为文档提交 `fe44b70`。添加目录后后台扫描、索引并补全可靠资料，本地媒体先显示，无需手动确认入库；成人仅是同一界面的资源类型，设置保留启用开关。后台权限、查询和缓存仍隔离，源媒体保持只读。规则与社区参考见 [自动媒体库](../docs/automatic-library.md)。
+
+重新验证：`pnpm check` 通过 lint、typecheck、**39 文件 / 273 项测试**及生产构建；`cargo test --locked` **328 项测试**通过，Clippy 全目标零警告、Rust 格式检查通过。许可证清单验证 **1001 个依赖 / 1625 条引用**，beta.3 发布 preflight 通过。四组浏览器回归覆盖自动流程、统一类型、人工更正队列与视觉状态。机器可读记录与截图哈希见 [automatic-report.json](automatic-report.json)。
+
+**`v0.1.0-beta.3` 固定在 `67782a2`，仅含 Windows NSIS 提取修复及版本更新，不包含本轮功能。** beta.2 未再次移动；本轮不等待跨平台打包。安装产物状态见 [beta.3 Actions](https://github.com/susanforme/MediaAtlas/actions/runs/41650428810)。
+
+## 生产首屏测量
+
+实际 Chromium 加载 Vite 生产文件，本地 HTTP、4 倍 CPU 降速、每次独立冷上下文，各 5 次。基线为 `375c321`，当前为 `fe44b70`；记录时仅验收脚本与证据尚未提交。
+
+| 指标 | 基线 | 本轮 |
+| --- | --- | --- |
+| 首屏请求 JavaScript | 584,625 字节 | 487,070 字节（减少 16.7%） |
+| 首次内容绘制中位数 | 1016 ms | 144 ms |
+| 首页可见中位数 | 886 ms | 492 ms |
+
+本轮主 chunk 487.07 kB / gzip 157.14 kB。9 个延迟路由正常加载，无页面异常；禁用脚本仍能显示静态品牌启动壳。计时受本地负载影响：基线首次内容绘制 664–2428 ms，本轮 108–152 ms；不能将这些浏览器数值写成 Windows 原生启动提升百分比。未引入 SSG；启动壳不含伪造媒体内容。完整采样、资源哈希见 [startup-report.json](startup-report.json)。
+
+## 实际截图
+
+以下均为真实 Chromium 页面截图；桌面 1648×928、窄屏 390×844（部分为完整页面截图），使用明确标记的合成 IPC、媒体与图片 fixture。没有生成、拼接或修补截图。目录选择验证的是原生调用适配契约，截图不证明 OS 文件夹窗口、真实 Provider、keyring 或实际文件修改已通过。
+
+| 场景 | 截图 |
+| --- | --- |
+| 文件夹选择与自动名称 | [目录](automatic-fixture-directory-1648.png) / [窄屏](automatic-fixture-directory-narrow.png) |
+| 添加后可浏览、后台补全 | [媒体库](automatic-fixture-auto-library-1648.png) / [实际任务进度](automatic-fixture-auto-progress-1648.png) |
+| 成人仅为资源类型 | [统一浏览](automatic-fixture-adult-type-1648.png) / [窄屏](automatic-fixture-adult-type-narrow.png) |
+| 同一详情、工具与目录表单 | [详情](automatic-fixture-adult-detail-1648.png) / [工具](automatic-fixture-adult-tools-1648.png) / [目录](automatic-fixture-adult-roots-1648.png) |
+| 首页与减少动态效果 | [首页](automatic-fixture-home-1648.png) / [窄屏](automatic-fixture-home-narrow-reduced-motion.png) |
+| 必要状态 | [加载](automatic-fixture-loading-1648.png) / [空](automatic-fixture-empty-1648.png) / [错误](automatic-fixture-error-1648.png) / [缺图](automatic-fixture-missing-1648.png) |
+| 键盘与对话框 | [版本选择](automatic-fixture-version-dialog-1648.png) |
+| 生产构建与静态启动壳 | [首页](startup-browser-home-1648.png) / [禁用脚本](startup-bootstrap-scripts-disabled-1648.png) |
+
+复现：启动 `pnpm dev:web` 后运行 `scripts/desktop-ui-qa.py`、`scripts/desktop-usability-qa.py`、`scripts/desktop-queue-qa.py`、`scripts/desktop-adult-type-qa.py`；建议设置 `MEDIAATLAS_QA_OUTPUT_DIR` 到独立工作目录，避免覆盖历史截图。生产测量使用 `scripts/desktop-startup-qa.py --baseline <基线生产构建目录> --baseline-ref 375c321 --samples 5 --output <报告路径> --screenshots <截图目录>`。
+
+当前环境缺 GTK/WebKit 开发依赖，未运行原生宿主或完整桌面构建。Rust 服务测试使用临时数据库/合成媒体，浏览器使用测试 IPC；二者不替代端到端原生宿主、实时来源或各平台安装验收。历史记录保留如下，不作为本轮通过证据。
+
+---
+
 # 社区实践优化与二次移动 tag（2026-11-03）
 
 本轮从 `23f61bd` 增量开发，功能源码为 `52f25f2`。重新运行 `pnpm check`：**36 文件 / 250 项测试**、lint、typecheck、前端 build 全部通过；另有 **46 项发布、18 项许可证、7 项 CI 测试**通过，1001 个锁定依赖、1625 条许可引用通过完整验证。发布 preflight 通过。Vite 主 chunk 550.21kB（gzip 177.74kB），构建成功并保留默认体积提示。

@@ -1,4 +1,4 @@
-"""Exercise directory -> scan review -> scrape using test-only IPC fixtures.
+"""Exercise directory -> automatic library update -> manual correction using test-only IPC fixtures.
 
 The OS folder window and real provider/filesystem services are NOT simulated
 as proof of native execution. These are real browser UI screenshots with an
@@ -33,7 +33,7 @@ WORKFLOW = r"""
   window.__TAURI_INTERNALS__.invoke = async (cmd, args = {}) => {
     const input = args.input || {};
     const commands = ['plugin:dialog|open','library_list_roots','library_save_root',
-      'scan_start','scan_list_tasks','scan_get_preview','scan_confirm','provider_snapshot',
+      'scan_start','library_sync','scan_list_tasks','scan_get_preview','scan_confirm','provider_snapshot',
       'scraper_history','library_tools_detail','provider_auth_status','scraper_search',
       'scraper_detail','scraper_preview','scraper_confirm','scraper_output_preview',
       'scraper_output_discard','organization_history','scraper_media_detail','provider_auth_save'];
@@ -46,6 +46,14 @@ WORKFLOW = r"""
         created_at:stamp,updated_at:stamp,last_scan_at:null};
       __qa.roots = [root];
       return wrap(root);
+    }
+    if (cmd === 'library_sync') {
+      const task = {id:'qa-sync',root_id:input.root_id,state:'running',mode:'automatic',phase:'metadata',
+        visited_files:1,skipped_files:0,candidate_count:1,imported_count:1,
+        matched_count:0,review_count:0,metadata_failed_count:0,
+        warnings:0,error_code:null,created_at:stamp,updated_at:stamp};
+      __qa.tasks = [task];
+      return wrap(task);
     }
     if (cmd === 'scan_start') {
       const task = {id:'qa-scan',root_id:input.root_id,state:'waiting_for_user',
@@ -124,22 +132,22 @@ def main():
         page.get_by_role("button", name="选择文件夹", exact=True).click()
         expect(page.get_by_label("目录名称", exact=True)).to_have_value("Movies")
         capture(page, "usability-fixture-directory-1648.png")
-        page.get_by_role("button", name="保存并扫描", exact=True).click()
-        expect(page).to_have_url(re.compile(r"/scanner\?.*task=qa-scan"))
-        expect(page.get_by_text("QA media 01.mkv", exact=True)).to_be_visible()
+        page.get_by_role("button", name="添加到媒体库", exact=True).click()
+        expect(page).to_have_url(re.compile(r"/library\?root=qa-root"))
+        expect(page.locator(".poster-card").first).to_be_visible()
         calls = page.evaluate("__qa.calls")
         assert len([c for c in calls if c["cmd"] == "library_save_root"]) == 1
-        assert len([c for c in calls if c["cmd"] == "scan_start"]) == 1
-        assert not any(c["cmd"] == "scan_confirm" for c in calls)
-        capture(page, "usability-fixture-scan-review-1648.png")
-        page.get_by_role("checkbox", name="选择本页待入库项", exact=True).check()
-        page.get_by_role("button", name="确认所选入库", exact=True).click()
-        expect(page.get_by_role("dialog", name="确认入库预览")).to_be_visible()
-        assert not any(c["cmd"] == "scan_confirm" for c in page.evaluate("__qa.calls"))
-        page.get_by_role("button", name="确认入库", exact=True).click()
-        expect(page.get_by_role("link", name="浏览已入库媒体", exact=True)).to_be_visible()
+        assert len([c for c in calls if c["cmd"] == "library_sync"]) == 1
+        assert not any(c["cmd"] in ["scan_start", "scan_confirm"] for c in calls)
+        capture(page, "usability-fixture-auto-library-1648.png")
+        page.locator('a[href*="/scanner"][href*="qa-sync"]').click()
+        expect(page.get_by_text("正在获取媒体资料", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="确认所选入库", exact=True)).to_have_count(0)
+        expect(page.get_by_role("checkbox", name="选择本页待入库项", exact=True)).to_have_count(0)
+        assert not any(c["cmd"] in ["scan_get_preview", "scan_confirm"] for c in page.evaluate("__qa.calls"))
+        capture(page, "usability-fixture-auto-progress-1648.png")
         page.goto(URL + "/tools?media=qa-0")
-        page.get_by_role("link", name="刮削此媒体", exact=True).click()
+        page.locator('a[href="/scraper?media=qa-0"]').first.click()
         expect(page).to_have_url(URL + "/scraper?media=qa-0")
         expect(page.get_by_label("影片名称", exact=True)).to_have_value("QA 媒体 01")
         expect(page.get_by_label("发行年份（可选）", exact=True)).to_have_value("2020")
@@ -188,7 +196,7 @@ def main():
         capture(mobile, "usability-fixture-scrape-context-narrow.png")
         browser.close()
 
-    print("Usability browser QA passed: picker cancel/autoname, save-and-scan, explicit scan confirmation, contextual scrape, merge/output separation, missing credentials, narrow layout.")
+    print("Usability browser QA passed: picker cancel/autoname, automatic library update without manual import, contextual correction, merge/output separation, missing credentials, narrow layout.")
 
 
 if __name__ == "__main__":
