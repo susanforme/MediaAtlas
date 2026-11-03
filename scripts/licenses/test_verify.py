@@ -92,6 +92,11 @@ class IntegrityTests(unittest.TestCase):
         self.check()
         self.assertEqual(self.notice.read_bytes(), self.notice_bytes)
 
+    def test_spdx_declaration_alone_cannot_count_as_complete_license_terms(self):
+        self.inventory['dependencies'][0]['notices'][0]['original_path'] = 'LICENSE.spdx'
+        with self.assertRaisesRegex(ValueError, 'SPDX declaration is not full license terms'):
+            self.check()
+
     def test_changed_notice_bytes_fail(self):
         self.notice.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'Notice hash mismatch'):

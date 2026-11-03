@@ -341,6 +341,20 @@
   "cargo:r-efi@6.0.0": [],
   "cargo:selectors@0.31.0": [],
   "cargo:selectors@0.38.0": [],
+  "cargo:tauri-plugin@2.7.2": [
+    {
+      "origin": "https://raw.githubusercontent.com/tauri-apps/tauri/59b63ab500da9859f12d8888c3298bc29bba0b92/LICENSE-MIT",
+      "original_path": "LICENSE-MIT",
+      "path": "docs/third-party-licenses/texts/9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d.txt",
+      "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+    },
+    {
+      "origin": "https://raw.githubusercontent.com/tauri-apps/tauri/59b63ab500da9859f12d8888c3298bc29bba0b92/LICENSE-APACHE-2.0",
+      "original_path": "LICENSE-APACHE-2.0",
+      "path": "docs/third-party-licenses/texts/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+    }
+  ],
   "cargo:valuable@0.1.1": [
     {
       "origin": "https://raw.githubusercontent.com/tokio-rs/valuable/9efc29b6e58cef28f6566a47aa7e142a55fead77/LICENSE",
@@ -4723,6 +4737,28 @@
       "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
     }
   ],
+  "npm:@tauri-apps/plugin-dialog@2.8.4:full-terms": [
+    {
+      "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_APACHE-2.0",
+      "original_path": "LICENSE_APACHE-2.0",
+      "path": "docs/third-party-licenses/texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt",
+      "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9"
+    },
+    {
+      "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_MIT",
+      "original_path": "LICENSE_MIT",
+      "path": "docs/third-party-licenses/texts/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+      "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
+    }
+  ],
+  "npm:@tauri-apps/plugin-dialog@2.8.4:registry-metadata": {
+    "gitHead": "128190689dbe59b59d344e01bf07b00862aa3791",
+    "license": "MIT OR Apache-2.0",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/tauri-apps/plugins-workspace.git"
+    }
+  },
   "npm:@testing-library/dom@10.4.2": {
     "metadata": {
       "author": {
@@ -7447,6 +7483,14 @@
       "original_path": "LICENSE",
       "path": "docs/third-party-licenses/texts/da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93.txt",
       "sha256": "da6d3703ed11cbe42bd212c725957c98da23cbff1998c05fa4b3d976d1a58e93"
+    }
+  ],
+  "npm:react-remove-scroll-bar@2.3.8:upstream": [
+    {
+      "origin": "https://raw.githubusercontent.com/theKashey/react-remove-scroll-bar/master/LICENSE",
+      "original_path": "LICENSE",
+      "path": "docs/third-party-licenses/texts/a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84.txt",
+      "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84"
     }
   ],
   "npm:react@19.3.1": {

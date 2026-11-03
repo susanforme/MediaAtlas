@@ -16,6 +16,10 @@ Unmodified MPL-2.0 covered Rust crate sources are supplied in `docs/third-party-
 
 The npm `lightningcss` MPL packages are development CSS compiler tooling; the compiler binaries and its source are not distributed inside the application. The npm `caniuse-lite` package is CC-BY-4.0 development browser-compatibility data; its original attribution/license is retained in the inventory. No compiler binary or browser-compatibility database is included as an application runtime. Inspect the inventory's source URLs for their exact versions.
 
+## Desktop controls and native directory selection
+
+The desktop shared controls use Radix primitives and their supporting React packages under the original MIT notices recorded in the inventory. Native directory selection uses the official Tauri dialog plugin and `rfd`; their original MIT/Apache license alternatives and attributions are retained. The npm dialog package ships an SPDX declaration rather than complete terms, so its declaration is preserved alongside original full upstream license files fetched from the exact npm version's recorded VCS commit. An SPDX declaration by itself does not pass the inventory's full-license check.
+
 ## Native components and platform packaging
 
 - **Rust standard library/runtime 1.90.0**, linked into the application binaries, retains the official pinned toolchain's complete `COPYRIGHT-library.html` content and referenced original license texts under `native/rust/`. The HTML content is saved byte for byte with a `.txt` extension so it remains an immutable notice resource. This covers library/runtime attributions omitted from `Cargo.lock`; compiler/toolchain executables are not distributed.

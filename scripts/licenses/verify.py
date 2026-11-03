@@ -80,6 +80,8 @@ def verify():
     for entry in records:
         if not entry['notices'] or entry['license'] == 'UNSPECIFIED':
             raise ValueError(f'Missing license terms for {entry["name"]}')
+        if all(n.get('original_path', '').lower().endswith('.spdx') for n in entry['notices']):
+            raise ValueError(f'SPDX declaration is not full license terms: {entry["name"]}')
         if entry['notice_provenance'] == 'upstream_metadata+standard_terms':
             if not entry.get('notice_limitation') or not entry.get('selected_license'):
                 raise ValueError('Undisclosed upstream notice omission')

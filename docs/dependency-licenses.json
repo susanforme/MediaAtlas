@@ -2,8 +2,8 @@
   "schema_version": 1,
   "scope": "Complete Cargo.lock and pnpm-lock.yaml package union; includes dependencies not shipped on every target.",
   "lockfiles": {
-    "Cargo.lock": "aa3638cbe13c7ec9d9723d22f1a8c67a5fe511403da2717cc4d54bb89504937e",
-    "pnpm-lock.yaml": "02f97c85c45db287b7ac3464fdd3253d93b7ffc9ea59f91faca1ccc44548466e"
+    "Cargo.lock": "db01baad885f306a028ccb3961ea7934ab2d5e30246f8ec4de67c4ba01c38f17",
+    "pnpm-lock.yaml": "f910d792c14ef7921a0ae1f7dd72df37dd26ba134cfd4bb8aa7c8048620cf19c"
   },
   "missing_notices": [],
   "upstream_notice_omissions": [
@@ -10082,6 +10082,32 @@
     },
     {
       "ecosystem": "cargo",
+      "name": "rfd",
+      "version": "0.17.2",
+      "license": "MIT",
+      "authors": ["Poly <marynczak.bartlomiej@gmail.com>"],
+      "repository": "https://github.com/PolyMeilex/rfd",
+      "source": "https://static.crates.io/crates/rfd/rfd-0.17.2.crate",
+      "source_sha256": "20dafead71c16a34e1ff357ddefc8afc11e7d51d6d2b9fbd07eaa48e3e540220",
+      "scope": "locked union: runtime/build/dev/target-conditional; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071.txt",
+          "sha256": "65fc947f4bac882a2cd104ef73c246b1b037059df9f2b3a58b7f77f0b9e56071",
+          "original_path": "LICENSE",
+          "origin": "https://static.crates.io/crates/rfd/rfd-0.17.2.crate"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/ae26bc7b1bc91fb8648f6a298decbb1a77090a56c9d04e2c23b8365e5f54acb5.txt",
+          "sha256": "ae26bc7b1bc91fb8648f6a298decbb1a77090a56c9d04e2c23b8365e5f54acb5",
+          "original_path": "src/backend/xdg_desktop_portal/window_identifier/LICENSE",
+          "origin": "https://static.crates.io/crates/rfd/rfd-0.17.2.crate"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "cargo",
       "name": "ring",
       "version": "0.17.14",
       "license": "Apache-2.0 AND ISC",
@@ -10860,7 +10886,7 @@
           "path": "docs/third-party-licenses/texts/fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85.txt",
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
           "original_path": "LICENSE (standard MPL 2.0 text)",
-          "origin": "https://static.crates.io/crates/cssparser/cssparser-0.37.0.crate"
+          "origin": "https://static.crates.io/crates/cssparser/cssparser-macros-0.7.1.crate"
         },
         {
           "path": "docs/third-party-licenses/texts/766674381e88a468d55e07de3596987391cf0e8beebe51baf4fddf11078785b3.txt",
@@ -10887,7 +10913,7 @@
           "path": "docs/third-party-licenses/texts/fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85.txt",
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85",
           "original_path": "LICENSE (standard MPL 2.0 text)",
-          "origin": "https://static.crates.io/crates/cssparser/cssparser-0.37.0.crate"
+          "origin": "https://static.crates.io/crates/cssparser/cssparser-macros-0.7.1.crate"
         },
         {
           "path": "docs/third-party-licenses/texts/766674381e88a468d55e07de3596987391cf0e8beebe51baf4fddf11078785b3.txt",
@@ -12619,6 +12645,96 @@
           "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d",
           "original_path": "LICENSE-MIT",
           "origin": "https://static.crates.io/crates/tauri-macros/tauri-macros-2.7.4.crate"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "tauri-plugin",
+      "version": "2.7.2",
+      "license": "Apache-2.0 OR MIT",
+      "authors": ["Tauri Programme within The Commons Conservancy"],
+      "repository": "https://github.com/tauri-apps/tauri",
+      "source": "https://static.crates.io/crates/tauri-plugin/tauri-plugin-2.7.2.crate",
+      "source_sha256": "67fb21a77e8f94e8beb3325e583102488659365af0a3948b7ea244c5b779c291",
+      "scope": "locked union: runtime/build/dev/target-conditional; over-inclusive",
+      "notices": [
+        {
+          "origin": "https://raw.githubusercontent.com/tauri-apps/tauri/59b63ab500da9859f12d8888c3298bc29bba0b92/LICENSE-MIT",
+          "original_path": "LICENSE-MIT",
+          "path": "docs/third-party-licenses/texts/9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d.txt",
+          "sha256": "9dd42ea92cff2ede5cd477cbfcce051b2d0115c0ac7f368ee88cb545055dff1d"
+        },
+        {
+          "origin": "https://raw.githubusercontent.com/tauri-apps/tauri/59b63ab500da9859f12d8888c3298bc29bba0b92/LICENSE-APACHE-2.0",
+          "original_path": "LICENSE-APACHE-2.0",
+          "path": "docs/third-party-licenses/texts/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt",
+          "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "tauri-plugin-dialog",
+      "version": "2.8.4",
+      "license": "Apache-2.0 OR MIT",
+      "authors": ["Tauri Programme within The Commons Conservancy"],
+      "repository": "https://github.com/tauri-apps/plugins-workspace",
+      "source": "https://static.crates.io/crates/tauri-plugin-dialog/tauri-plugin-dialog-2.8.4.crate",
+      "source_sha256": "ce0fb9c2b6d34a9720627ed930ebc8af26f61e648695aecaeb03d5c33c5896f5",
+      "scope": "locked union: runtime/build/dev/target-conditional; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/eb8a6c84630461b352badcab1dbe5d0168c56d377358b2b8c86b51003272d5ef.txt",
+          "sha256": "eb8a6c84630461b352badcab1dbe5d0168c56d377358b2b8c86b51003272d5ef",
+          "original_path": "LICENSE.spdx",
+          "origin": "https://static.crates.io/crates/tauri-plugin-dialog/tauri-plugin-dialog-2.8.4.crate"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt",
+          "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9",
+          "original_path": "LICENSE_APACHE-2.0",
+          "origin": "https://static.crates.io/crates/tauri-plugin-dialog/tauri-plugin-dialog-2.8.4.crate"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "original_path": "LICENSE_MIT",
+          "origin": "https://static.crates.io/crates/tauri-plugin-dialog/tauri-plugin-dialog-2.8.4.crate"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "cargo",
+      "name": "tauri-plugin-fs",
+      "version": "2.7.1",
+      "license": "Apache-2.0 OR MIT",
+      "authors": ["Tauri Programme within The Commons Conservancy"],
+      "repository": "https://github.com/tauri-apps/plugins-workspace",
+      "source": "https://static.crates.io/crates/tauri-plugin-fs/tauri-plugin-fs-2.7.1.crate",
+      "source_sha256": "5d58eb1d4984e535f47a642ffec09a2da6f5c18a12b5902d12126cb7626d628b",
+      "scope": "locked union: runtime/build/dev/target-conditional; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/eb8a6c84630461b352badcab1dbe5d0168c56d377358b2b8c86b51003272d5ef.txt",
+          "sha256": "eb8a6c84630461b352badcab1dbe5d0168c56d377358b2b8c86b51003272d5ef",
+          "original_path": "LICENSE.spdx",
+          "origin": "https://static.crates.io/crates/tauri-plugin-fs/tauri-plugin-fs-2.7.1.crate"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt",
+          "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9",
+          "original_path": "LICENSE_APACHE-2.0",
+          "origin": "https://static.crates.io/crates/tauri-plugin-fs/tauri-plugin-fs-2.7.1.crate"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "original_path": "LICENSE_MIT",
+          "origin": "https://static.crates.io/crates/tauri-plugin-fs/tauri-plugin-fs-2.7.1.crate"
         }
       ],
       "notice_provenance": "upstream_file"
@@ -19179,6 +19295,326 @@
     },
     {
       "ecosystem": "npm",
+      "name": "@radix-ui/primitive",
+      "version": "1.2.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/primitive/-/primitive-1.2.0.tgz",
+      "source_integrity": "sha512-KABY+VMIRPJL+Vyzv/335FEhXXD/xDv8BMb1kl48/aXJZMH0LtHCTx5ga5RnxaEP3nZHtmTLf1P9vanmFX46bw==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/primitive/-/primitive-1.2.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-compose-refs",
+      "version": "1.1.5",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-compose-refs/-/react-compose-refs-1.1.5.tgz",
+      "source_integrity": "sha512-+48PbAAbq3didjJxa+OaWY2ZwgAKsNiRGyeHKszblZMQ+kcpd9pAaT11cMkGEie0vsOi3QdeTE6d5Fe3Gn61kA==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-compose-refs/-/react-compose-refs-1.1.5.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-context",
+      "version": "1.3.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-context/-/react-context-1.3.0.tgz",
+      "source_integrity": "sha512-v5AYEocMISkbJ+1fTXzZpiFv7NRr3D2WiYbLIKf+FkmJ8VkP6d503eV2n34MFussHXY1pcoq3yfJiQH77dc4Mg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-context/-/react-context-1.3.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-dialog",
+      "version": "1.3.1",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-dialog/-/react-dialog-1.3.1.tgz",
+      "source_integrity": "sha512-+0E4qvVTwjAWra9sEhJ+9BTsvHE00zkUuNw1VGh7S+Gc13dfYk+S1PVQdchWDj+XYHhAai7Z7IpzXVDCGsDplg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-dialog/-/react-dialog-1.3.1.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-dismissable-layer",
+      "version": "1.2.1",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-dismissable-layer/-/react-dismissable-layer-1.2.1.tgz",
+      "source_integrity": "sha512-KIfDcAsx+oVylFZ4xryVKusJUrLLhTQmfnJW4kwk4Km5myvhHCrj04hnWWUC166+xD4DHdH8tQGylwYX1h6+Pg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-dismissable-layer/-/react-dismissable-layer-1.2.1.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-focus-guards",
+      "version": "1.2.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-focus-guards/-/react-focus-guards-1.2.0.tgz",
+      "source_integrity": "sha512-MPm5R0iRGUDrDnPNxmLBkv+X7pN4XKzt+MbWJEuJQsH3NFH4omrbpXpucyYCCKTSt+na/ZxGhEWQrWTZ0285cA==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-focus-guards/-/react-focus-guards-1.2.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-focus-scope",
+      "version": "1.3.1",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-focus-scope/-/react-focus-scope-1.3.1.tgz",
+      "source_integrity": "sha512-ugeMhbXt4y5S2T1GnIqbWDKEN962PDwnX1fN0eKOOgf5f63Dh2mn8F1FUySlgW0iF6GiVsRF32DzuDIWTUyQJg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-focus-scope/-/react-focus-scope-1.3.1.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-id",
+      "version": "1.1.4",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-id/-/react-id-1.1.4.tgz",
+      "source_integrity": "sha512-TMQp2llA+RYn7JcjnrMnz7wN4pcVttPZnRZo52PLQsoLVKzNlVwUeHmfePgTgRluXFvlD3GD5g5MOVVTJCO0qA==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-id/-/react-id-1.1.4.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-portal",
+      "version": "1.2.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-portal/-/react-portal-1.2.0.tgz",
+      "source_integrity": "sha512-StX7xXnaRU41VvFtMm9zlhVGz8XF6GmWWTXftkQaY+tqVkbs/R9UmAp5mLzHHapk5hM9RMZQvO/3usyIP/g42g==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-portal/-/react-portal-1.2.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-presence",
+      "version": "1.1.11",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-presence/-/react-presence-1.1.11.tgz",
+      "source_integrity": "sha512-Z7/atlkab36Z8hm+V8zYc79r0W+tiOB1o0tun1By94JyadkekLQmtEAnBSP9XKXBNQsStoStS4+gX10JpS5akA==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-presence/-/react-presence-1.1.11.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-primitive",
+      "version": "2.2.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-primitive/-/react-primitive-2.2.0.tgz",
+      "source_integrity": "sha512-HCTSPMNqv55Qk0IX4geJbpyXazmqulcimwuyjxTkKi29v+QZbG2Zho9BnbBq4YS2PF+KlNb2CXoLz66uUmblkg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-primitive/-/react-primitive-2.2.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-slot",
+      "version": "1.5.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.5.0.tgz",
+      "source_integrity": "sha512-tyYd9ddPXAysAbdbD9eYxgwpCSv6f3PncqVSNKQFSR5lcJVLz3cb/pANDoYrLiHBpXv7skortyUgGUWsYuPPFQ==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-slot/-/react-slot-1.5.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-use-callback-ref",
+      "version": "1.1.5",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-use-callback-ref/-/react-use-callback-ref-1.1.5.tgz",
+      "source_integrity": "sha512-Y5GBf4NKeADoXI1geiMlMuMoURT3k9MizzzKhGb/m55H94aGigZ01PIpkvsO6lML13BA6XYAXSJ6gza7vTn5nw==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-use-callback-ref/-/react-use-callback-ref-1.1.5.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-use-controllable-state",
+      "version": "1.3.0",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.3.0.tgz",
+      "source_integrity": "sha512-TAcBI7bw2ljYCbv4+zuTSd6zICu8pRt6SDN2vJ/Z06K2MXh6I9WYFe/A9ovlFDtR5HVHGm5iDxDoABm/++dbKg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-use-controllable-state/-/react-use-controllable-state-1.3.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-use-effect-event",
+      "version": "0.0.5",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.5.tgz",
+      "source_integrity": "sha512-7cshFL8HGS/7HEiHH+9kL9HBwp2sa9yX18Knwek6KYWmXwM7pegMgta2AXMQKI+rq3JnfSj9x8wYqFMTdG1Jgg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-use-effect-event/-/react-use-effect-event-0.0.5.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "@radix-ui/react-use-layout-effect",
+      "version": "1.1.4",
+      "license": "MIT",
+      "authors": [],
+      "repository": "git+https://github.com/radix-ui/primitives.git",
+      "source": "https://registry.npmjs.org/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.4.tgz",
+      "source_integrity": "sha512-K20DkRkUwDnxEYMBPcg3Y6voLkEy5p5QQmszZgLngKKiC7dzBR/aEuK3w1qlx2JWDUNH6FluahYdgR3BP+QbYw==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138.txt",
+          "sha256": "0e80a2d229d2fd4fc7e8636142ec5d0ff0bc031f14c15b682e2ac01dfd5b5138",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/@radix-ui/react-use-layout-effect/-/react-use-layout-effect-1.1.4.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
       "name": "@rolldown/pluginutils",
       "version": "1.0.0-rc.3",
       "license": "MIT",
@@ -20573,6 +21009,38 @@
     },
     {
       "ecosystem": "npm",
+      "name": "@tauri-apps/plugin-dialog",
+      "version": "2.8.4",
+      "license": "MIT OR Apache-2.0",
+      "authors": [],
+      "repository": "https://github.com/tauri-apps/plugins-workspace",
+      "source": "https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.8.4.tgz",
+      "source_integrity": "sha512-+6ZOiXenOaxXwb8qCbBPdT2jX2cFPaVVHGIskrpmJLpmWj+qKRTD6X/z9x7hTdSQn7NedcoXCkWGej4a7dC4lw==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/eb8a6c84630461b352badcab1dbe5d0168c56d377358b2b8c86b51003272d5ef.txt",
+          "sha256": "eb8a6c84630461b352badcab1dbe5d0168c56d377358b2b8c86b51003272d5ef",
+          "original_path": "LICENSE.spdx",
+          "origin": "https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.8.4.tgz"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt",
+          "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9",
+          "original_path": "LICENSE_APACHE-2.0",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_APACHE-2.0"
+        },
+        {
+          "path": "docs/third-party-licenses/texts/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "original_path": "LICENSE_MIT",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_MIT"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
       "name": "@testing-library/dom",
       "version": "10.4.2",
       "license": "MIT",
@@ -21081,6 +21549,26 @@
     },
     {
       "ecosystem": "npm",
+      "name": "aria-hidden",
+      "version": "1.2.6",
+      "license": "MIT",
+      "authors": "Anton Korzunov <thekashey@gmail.com>",
+      "repository": "git+https://github.com/theKashey/aria-hidden.git",
+      "source": "https://registry.npmjs.org/aria-hidden/-/aria-hidden-1.2.6.tgz",
+      "source_integrity": "sha512-ik3ZgC9dY/lYVVM++OISsaYDeg1tb0VtP5uL3ouh1koGOaUMDPpbFIei4JkFimWUFPn90sbMNMXQAIVOlnYKJA==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9.txt",
+          "sha256": "30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/aria-hidden/-/aria-hidden-1.2.6.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
       "name": "aria-query",
       "version": "5.3.0",
       "license": "Apache-2.0",
@@ -21523,6 +22011,26 @@
     },
     {
       "ecosystem": "npm",
+      "name": "detect-node-es",
+      "version": "1.1.0",
+      "license": "MIT",
+      "authors": "Ilya Kantor",
+      "repository": "https://github.com/thekashey/detect-node",
+      "source": "https://registry.npmjs.org/detect-node-es/-/detect-node-es-1.1.0.tgz",
+      "source_integrity": "sha512-ypdmJU/TbBby2Dxibuv7ZLW3Bs1QEmM7nHjEANfohJLvE0XVujisn1qPJcZxg+qDucsr+bP6fLD1rPS3AhJ7EQ==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/54b32293ea560d22cd9b62af9b2cda1a030d910a48c6601d227c5ff2338d95f8.txt",
+          "sha256": "54b32293ea560d22cd9b62af9b2cda1a030d910a48c6601d227c5ff2338d95f8",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/detect-node-es/-/detect-node-es-1.1.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
       "name": "dom-accessibility-api",
       "version": "0.5.16",
       "license": "MIT",
@@ -21781,6 +22289,26 @@
           "sha256": "e3a956681ee067f971ac413994171b3d90ca801ec6324e76c9c55366cfe31cb0",
           "original_path": "LICENSE",
           "origin": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "get-nonce",
+      "version": "1.0.1",
+      "license": "MIT",
+      "authors": "Anton Korzunov <thekashey@gmail.com>",
+      "repository": "git@github.com:theKashey/get-nonce.git",
+      "source": "https://registry.npmjs.org/get-nonce/-/get-nonce-1.0.1.tgz",
+      "source_integrity": "sha512-FJhYRoDaiatfEkUK8HKlicmu/3SGFD51q3itKDGoSTysQJBnfOcxU5GxnhE1E6soB76MbT0MBtnKJuXyAx+96Q==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/acf3b087b348d2f2e731b9d4131af185aad694c1204ce14a46909483fd42da05.txt",
+          "sha256": "acf3b087b348d2f2e731b9d4131af185aad694c1204ce14a46909483fd42da05",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/get-nonce/-/get-nonce-1.0.1.tgz"
         }
       ],
       "notice_provenance": "upstream_file"
@@ -22822,6 +23350,66 @@
     },
     {
       "ecosystem": "npm",
+      "name": "react-remove-scroll",
+      "version": "2.7.2",
+      "license": "MIT",
+      "authors": "Anton Korzunov <thekashey@gmail.com>",
+      "repository": "https://github.com/theKashey/react-remove-scroll",
+      "source": "https://registry.npmjs.org/react-remove-scroll/-/react-remove-scroll-2.7.2.tgz",
+      "source_integrity": "sha512-Iqb9NjCCTt6Hf+vOdNIZGdTiH1QSqr27H/Ek9sv/a97gfueI/5h1s3yRi1nngzMUaOOToin5dI1dXKdXiF+u0Q==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9.txt",
+          "sha256": "30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/react-remove-scroll/-/react-remove-scroll-2.7.2.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "react-remove-scroll-bar",
+      "version": "2.3.8",
+      "license": "MIT",
+      "authors": "Anton Korzunov <thekashey@gmail.com>",
+      "repository": "https://github.com/theKashey/react-remove-scroll-bar",
+      "source": "https://registry.npmjs.org/react-remove-scroll-bar/-/react-remove-scroll-bar-2.3.8.tgz",
+      "source_integrity": "sha512-9r+yi9+mgU33AKcj6IbT9oRCO78WriSj6t/cF8DWBZJ9aOGPOTEDvdUDz1FwKim7QXWwmHqtdHnRJfhAxEG46Q==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "origin": "https://raw.githubusercontent.com/theKashey/react-remove-scroll-bar/master/LICENSE",
+          "original_path": "LICENSE",
+          "path": "docs/third-party-licenses/texts/a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84.txt",
+          "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "react-style-singleton",
+      "version": "2.2.3",
+      "license": "MIT",
+      "authors": "Anton Korzunov (thekashey@gmail.com)",
+      "repository": "https://github.com/theKashey/react-style-singleton",
+      "source": "https://registry.npmjs.org/react-style-singleton/-/react-style-singleton-2.2.3.tgz",
+      "source_integrity": "sha512-b6jSvxvVnyptAiLjbkWLE/lOnR4lfTtDAl+eUC7RZy+QQWc6wRzIV2CE6xBuMmDxc2qIihtDCZD5NPOFl7fRBQ==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9.txt",
+          "sha256": "30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/react-style-singleton/-/react-style-singleton-2.2.3.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
       "name": "redent",
       "version": "3.0.0",
       "license": "MIT",
@@ -23345,6 +23933,26 @@
     },
     {
       "ecosystem": "npm",
+      "name": "tslib",
+      "version": "2.9.1",
+      "license": "0BSD",
+      "authors": "Microsoft Corp.",
+      "repository": "https://github.com/Microsoft/tslib.git",
+      "source": "https://registry.npmjs.org/tslib/-/tslib-2.9.1.tgz",
+      "source_integrity": "sha512-a4Ux9VKuIMHsOS7ENbEq6hK2ZGYIT27Rtl0E4eD9KqwxhKiQeMZE/9xb3IdYwWaSOyIBQLExhQgXDTYoiCxnWA==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751.txt",
+          "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
+          "original_path": "LICENSE.txt",
+          "origin": "https://registry.npmjs.org/tslib/-/tslib-2.9.1.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
       "name": "typescript",
       "version": "5.9.3",
       "license": "Apache-2.0",
@@ -23399,6 +24007,46 @@
           "sha256": "9877e90da14aa8c931a1f9d07cc2a20ce119106e5dab1ebb41af865266d0cd2a",
           "original_path": "LICENSE",
           "origin": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.4.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "use-callback-ref",
+      "version": "1.3.3",
+      "license": "MIT",
+      "authors": "theKashey <thekashey@gmail.com>",
+      "repository": "https://github.com/theKashey/use-callback-ref/",
+      "source": "https://registry.npmjs.org/use-callback-ref/-/use-callback-ref-1.3.3.tgz",
+      "source_integrity": "sha512-jQL3lRnocaFtu3V00JToYz/4QkNWswxijDaCVNZRiRTO3HQDLsdu1ZtmIUvV4yPp+rvWm5j0y0TG/S61cuijTg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9.txt",
+          "sha256": "30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/use-callback-ref/-/use-callback-ref-1.3.3.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "use-sidecar",
+      "version": "1.1.3",
+      "license": "MIT",
+      "authors": "theKashey <thekashey@gmail.com>",
+      "repository": "https://github.com/theKashey/use-sidecar",
+      "source": "https://registry.npmjs.org/use-sidecar/-/use-sidecar-1.1.3.tgz",
+      "source_integrity": "sha512-Fedw0aZvkhynoPYlA5WXrMCAMm+nSWdZt6lzJQ7Ok8S6Q+VsHmHpRWndVRJ8Be0ZbkfPc5LRYH+5XrzXcEeLRQ==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9.txt",
+          "sha256": "30f0cfddf483d1128e3610205020f2041a6c5e837aa999e0aa82e5576187d4a9",
+          "original_path": "LICENSE",
+          "origin": "https://registry.npmjs.org/use-sidecar/-/use-sidecar-1.1.3.tgz"
         }
       ],
       "notice_provenance": "upstream_file"

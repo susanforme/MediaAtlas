@@ -74,7 +74,7 @@ def upstream_notices(key, repository, revision, subdir=''):
         return []
     repo = match[1]
     candidates = ['LICENSE', 'LICENSE-MIT', 'LICENSE-APACHE', 'LICENSE.txt', 'LICENSE.md',
-                  'COPYING', 'COPYRIGHT', 'NOTICE', 'LICENSE-APACHE-2.0', 'UNLICENSE',
+                  'COPYING', 'COPYRIGHT', 'NOTICE', 'LICENSE-APACHE-2.0', 'LICENSE_APACHE-2.0', 'LICENSE_MIT', 'UNLICENSE',
                   'LICENSES/MIT.txt', 'LICENSES/Apache-2.0.txt', 'LICENSES/MPL-2.0.txt', 'LICENSES/BSL-1.0.txt']
     refs = [revision] if revision else ['master', 'main']
     # Packages in workspaces often omit root notices. Fetch their exact VCS commit.
@@ -262,6 +262,24 @@ def npm_inventory():
             entry['notices'] = local_notices(parent[0], f'exact-version parent package {family}@{entry["version"]}') if parent else []
             if not entry['notices']:
                 entry['notices'] = upstream_notices(f'npm:{entry["name"]}@{entry["version"]}:upstream', entry['repository'], meta.get('gitHead'))
+    for entry in entries:
+        # An SPDX declaration preserves attribution but is not the full terms.
+        # Resolve the exact registry version's VCS revision, never branch HEAD.
+        if entry['notices'] and all(n['original_path'].lower().endswith('.spdx') for n in entry['notices']):
+            key = f"npm:{entry['name']}@{entry['version']}"
+            metadata_key = key + ':registry-metadata'
+            metadata = PROVENANCE.get(metadata_key)
+            if metadata is None:
+                metadata = json.loads(fetch(f"https://registry.npmjs.org/{urllib.parse.quote(entry['name'], safe='@')}/{entry['version']}"))
+                metadata = {k: metadata[k] for k in ['gitHead', 'license', 'repository'] if k in metadata}
+                PROVENANCE[metadata_key] = metadata
+            revision = metadata.get('gitHead')
+            if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{40}', revision):
+                raise RuntimeError(f"Cannot pin full upstream license terms for {key}")
+            full_terms = upstream_notices(key + ':full-terms', entry['repository'], revision)
+            if not full_terms or all(n['original_path'].lower().endswith('.spdx') for n in full_terms):
+                raise RuntimeError(f"SPDX declaration is not full license terms for {key}")
+            entry['notices'].extend(full_terms)
     for entry in entries:
         if not entry['notices'] and entry['name'] in {'@napi-rs/lzma-linux-x64-gnu', 'stackback'}:
             cargo_home = Path(os.environ.get('CARGO_HOME', Path.home() / '.cargo'))
