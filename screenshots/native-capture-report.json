@@ -1,7 +1,7 @@
 {
   "version": "0.1.0-beta.1",
-  "mode": "Actual locally built Tauri release application and real Rust/SQLite IPC in Ubuntu 22.04 container; not a published GitHub Release artifact",
-  "binary_sha256": "e492dc82ba7881c3d104d26ee3ec030800bfd27e9b06e61ce8b00495b7896a22",
+  "mode": "Actual Tauri release application built from committed source A and real Rust/SQLite IPC in Ubuntu 22.04; not a tagged or published GitHub Release artifact",
+  "binary_sha256": "57160fbd60084cc6f5e6c1b74032bbd151c31db28eb6b42eb2b55dc1140deac1",
   "runtime": {
     "os": "Ubuntu 22.04",
     "webview": "system WebKitGTK 4.1",
@@ -22,7 +22,7 @@
     "root": "Synthetic Demo Library",
     "media_items": 1,
     "title": "Synthetic Demo Mountain Journey",
-    "source": "generated dummy video bytes and local NFO, imported via real native Root -> Scan -> Preview -> explicit second Confirm",
+    "source": "Existing generated dummy video and NFO, imported through real native UI in the prior local session; reused unchanged for source A screenshots",
     "playback_attempted": false,
     "source_bytes_preserved": true,
     "adult_content": false,
@@ -30,45 +30,46 @@
     "music": "actual empty library; no invented native album records"
   },
   "maintenance_evidence": {
-    "backup_preview_and_confirm": "performed through real native UI",
+    "backup_preview_and_confirm": "Performed and verified in the prior local native candidate session; existing backup displayed read-only during source A refresh",
     "backup_bytes": 602112,
     "manifest_sha256_verified": true,
     "sqlite_integrity_check": "ok",
-    "backup_app_version": "0.1.0-beta.1"
+    "backup_app_version": "0.1.0-beta.1",
+    "creation_session_binary_sha256": "e492dc82ba7881c3d104d26ee3ec030800bfd27e9b06e61ce8b00495b7896a22"
   },
   "scope_limits": [
-    "This is a local uncommitted beta candidate, not GitHub Release availability.",
+    "Application source A is committed locally; these screenshots and locally built binary do not establish a tag or GitHub Release.",
     "No live Provider, OS keyring save, media playback, Windows or macOS interactive acceptance is claimed.",
-    "Initial numeric UID 1000 had no passwd entry and caused D-Bus warnings. A standard user entry was created before the normal-close retest; OS keyring saving was still not tested."
+    "The native music page shows the real empty library; browser album entries remain clearly synthetic Mock IPC."
   ],
   "screenshots": [
     {
       "file": "native-linux-01-library.png",
-      "sha256": "069889534963ceb2a7bf905df58d3bcf09b589ba29e57f29b077ea4edb03d919",
+      "sha256": "cbcb506266ae9aba1747ff263852c3e59a4d3be25fa09c1290f53210aa354cdc",
       "visually_inspected": true,
       "loading_or_error_notice": false
     },
     {
       "file": "native-linux-02-tools.png",
-      "sha256": "9e8379a2cfaafd90e9f1f31b49d8966a573d20108650a11302e2e9350d996b5a",
+      "sha256": "c1a308472c7bcc01c61f63e4059738747f2039276bfd0dcdf40a79de35d982fc",
       "visually_inspected": true,
       "loading_or_error_notice": false
     },
     {
       "file": "native-linux-03-music.png",
-      "sha256": "54b8da5ccc79d07757a36d42e56564a9773134ccc3272ad083d8596048919bff",
+      "sha256": "84f400d6219f95c00dd33670171e425d941cfe3a3c1d05ca57b9770b517885cc",
       "visually_inspected": true,
       "loading_or_error_notice": false
     },
     {
       "file": "native-linux-04-settings.png",
-      "sha256": "b894a3ce3ecf544d66df97dc26adf3312d2558ad0652ff48e61fb1a813a3bdc0",
+      "sha256": "376708b58d0c11b72ffe308e525572a008b6e895b9f9d4f0701f21c2959d1ccc",
       "visually_inspected": true,
       "loading_or_error_notice": false
     },
     {
       "file": "native-linux-05-maintenance.png",
-      "sha256": "05b6599d5bcef5a17b5c563d3bc4a175e7ad4694c0a079cbe4f395a6c1ec2807",
+      "sha256": "36b8d8e4c1b4774ffd3ea9cc474dc8f232d8a490eb8db3283a3853b1597a8e25",
       "visually_inspected": true,
       "loading_or_error_notice": false
     }
@@ -76,11 +77,24 @@
   "normal_close_evidence": {
     "method": "Direct X11 ClientMessage: message_type WM_PROTOCOLS, format 32, data[0]=WM_DELETE_WINDOW, data[1]=CurrentTime; no window manager required",
     "reopened_same_isolated_app_data": true,
-    "app_pid": 18058,
-    "app_ready_utc": "2026-11-03T09:40:07Z",
+    "app_pid": 18422,
+    "app_ready_utc": "2026-11-03T10:09:05Z",
     "app_and_dbus_session_exit_code": 0,
     "product_changes": false,
     "sandbox_disabled": false,
-    "historical_automation_error": "Earlier xdotool windowclose used XDestroyWindow and caused GDK BadWindow exit 133. The standard WM_DELETE_WINDOW retest exits 0; the earlier destructive automation is not evidence of a normal application close failure."
-  }
+    "historical_automation_error": "An earlier screenshot candidate session used xdotool windowclose (XDestroyWindow) and exited with GDK BadWindow/133. Correct WM_DELETE_WINDOW retests, including source A, exit 0. This history is not a normal-close product failure.",
+    "source_commit": "d50b4dd03c15e45428c4b455f3e8755d40732a48"
+  },
+  "candidateAppSourceCommit": "d50b4dd03c15e45428c4b455f3e8755d40732a48",
+  "appSourceInputsUnchanged": true,
+  "captureOutputs": "screenshots only; committed separately after the source commit",
+  "fullWorktreeCleanAtCapture": false,
+  "fullWorktreeChanges": "screenshots outputs only; application source inputs unchanged",
+  "captured_at": "2026-11-03T10:09:58.448308+00:00",
+  "capture_actions": [
+    "Reused existing isolated synthetic library and verified backup.",
+    "Navigated library, tools, music, settings and maintenance; selected existing synthetic item only.",
+    "No new scan, backup, restore, import, credential write or installer action during this refresh.",
+    "Closed app with the standard WM_PROTOCOLS / WM_DELETE_WINDOW ClientMessage."
+  ]
 }

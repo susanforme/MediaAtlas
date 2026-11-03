@@ -21,7 +21,7 @@
 
 | 检查 | 实际结果 |
 | --- | --- |
-| `pnpm check` | 通过：Biome、TypeScript、156 tests / 25 files、生产构建；主 bundle 491.98 kB |
+| `pnpm check` | 通过：Biome、TypeScript、156 tests / 25 files、生产构建；主 bundle 485.75 kB（界面精简后） |
 | `cargo fmt --all -- --check` | 通过 |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | 通过：完整 workspace/Tauri/测试，0 warnings |
 | `cargo test --workspace --locked` | 通过：303 项，0 失败（210 infrastructure unit）；不计 0 项 doc-tests |
@@ -44,10 +44,12 @@ SQLite VM progress handler 每 4,096 指令检查取消、120 秒预算与旧 gr
 
 真实 Windows/macOS 安装/更新/卸载/默认应用打开、系统 keyring、真实 Provider 账号与可信代理仍 pending。Linux 真实标准发行环境构建、WebKit native 启动/截图按实际执行记录；浏览器 Mock UI 截图明确标注。媒体库没有内置播放器/FFmpeg runtime。测试不操作用户真实媒体。
 
-用户要求的应用截图已实际交付 [screenshots](../../screenshots/README.md)：5 页 Chromium 实际渲染与明确 Synthetic Demo/Mock IPC，逐张 view 验证非空、无 loading/error，密码为空且无执行/保存/导入。版本 0.1.0-beta.1，非原生或真实用户媒体验收；原生截图按后续真实执行补充。
+用户要求的应用截图已在界面精简后全部重拍：[screenshots](../../screenshots/README.md) 含 5 张中文浏览器 Synthetic Demo/Mock IPC 与 5 张英文 Linux 真原生截图，逐张实际查看，非空、无 loading/error、无秘密输入。候选应用源码为 `d50b4dd03c15e45428c4b455f3e8755d40732a48`，版本 0.1.0-beta.1；原生二进制 SHA-256 为 `57160fbd60084cc6f5e6c1b74032bbd151c31db28eb6b42eb2b55dc1140deac1`，标准关窗 app/DBus session 均退出 0。复用合成数据，仅导航取图；没有重新执行扫描、备份或安装验收。截图输出使工作树非空，但实际核对应用源码输入与候选 A 完全一致。
 
 Linux 本地候选实际验证：标准 Ubuntu 22.04 内使用自身 `/usr` WebKitGTK/GTK/DBus 与 glibc 2.35，不继承宿主 sysroot 环境；`.deb` 16,095,924 bytes，包内 0.1.0-beta.1/amd64，ELF x86_64、最大 GLIBC 符号需求 2.34，动态依赖系统 WebKitGTK 4.1/GTK3/libdbus。拆包没有其他 ELF/so 或浏览器引擎/FFmpeg，全部许可逐文件 SHA 校验通过。真实 dpkg 安装后，非 root 的 Tauri/WebKitGTK+Xvfb 运行、合成 NFO/临时媒体确认、备份与标准 WM_DELETE_WINDOW 退出 0 均执行；同版本重装及卸载后，专用 synthetic XDG 数据目录 15 文件的 SHA 全保持。跨版本升级未执行，不能把重装写成升级。
 
 这些证据来自明确标识的未提交本地候选，便于验证打包流程；不代表最终 source commit 的正式构建。正式 Release 仅由最终 clean tag 在四个原生 CI runner 重新构建、拆包和校验，不通过给旧候选 manifest 改 SHA 代替。历史宿主 `/usr` helper 缺失已由标准容器解决，不列为正式 deb 的依赖问题。真实 OS keyring、实时 Provider、Windows/macOS 交互式安装/升级/卸载仍 pending。
 
 LF/CRLF 专项兼容仅允许官方精确 SHA384、完整成功前缀及官方实际 schema；事前一致内部快照与事务 CAS 保全，不接受额外索引/触发器或未知历史，不修改原备份。由独立 reviewer 针对 history 表、快照置换、manifest 与候选绑定反例复核；不泛化为任意 checksum 修复。
+
+界面精简与规则已提交为候选 A `d50b4dd`：删除重复产品介绍/次级标签，保留字段名称、反馈、真实元数据及影响决策的备份/恢复/缓存/会话说明；根 `AGENTS.md` 固定六条规则。完整 `pnpm check` 仍为 156 tests / 25 files、Biome/typecheck/build 通过。P8 source `6db616a` 的 main run [41615154922](https://github.com/susanforme/MediaAtlas/actions/runs/41615154922) 已获得 Windows/macOS/Linux 全部成功；最终截图提交后的新 main CI 与 clean tag 原生分发仍须实际执行。

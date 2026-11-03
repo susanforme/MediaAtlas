@@ -4,9 +4,32 @@ const { chromium } = require(
     "/opt/codex/cua_node/lib/node_modules/playwright",
 );
 const fs = require("node:fs");
+const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 const assert = require("node:assert/strict");
 const out = __dirname;
+const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], {
+  cwd: path.resolve(out, ".."),
+  encoding: "utf8",
+}).trim();
+const appSourceInputsUnchanged =
+  execFileSync(
+    "git",
+    [
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+      "--",
+      "apps",
+      "crates",
+      "Cargo.toml",
+      "Cargo.lock",
+      "package.json",
+      "pnpm-lock.yaml",
+      ".github/tauri.release.conf.json",
+    ],
+    { cwd: path.resolve(out, ".."), encoding: "utf8" },
+  ).trim().length === 0;
 (async () => {
   const browser = await chromium.launch({
     executablePath: process.env.CHROMIUM_PATH || "/usr/bin/chromium",
@@ -323,6 +346,11 @@ const out = __dirname;
       `${JSON.stringify(
         {
           version: "0.1.0-beta.1",
+          candidateAppSourceCommit: sourceCommit,
+          appSourceInputsUnchanged,
+          captureOutputs:
+            "screenshots only; committed separately after the source commit",
+          captured_at: new Date().toISOString(),
           mode: "Browser rendering only; not native application, real backend or installation evidence",
           locale: "zh-CN",
           viewport: { width: 1440, height: 1080 },

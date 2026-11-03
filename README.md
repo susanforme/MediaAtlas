@@ -123,4 +123,4 @@ P7 契约与验证：[组织与消费契约](docs/phase-7-contract.md)、[P7 验
 
 项目源码许可尚未指定，见 [LICENSE-STATUS.md](LICENSE-STATUS.md)；第三方许可与完整原文见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和随安装包附带的清单。开发夹具使用的 FFmpeg/ffprobe 不作为运行依赖或随包分发。
 
-应用截图见 [screenshots/README.md](screenshots/README.md)：真实 Chromium 渲染的合成 Mock IPC 演示，涵盖媒体库、工具、音乐、设置和备份维护；截图模式与原生验收边界逐项说明。
+应用截图见 [screenshots/README.md](screenshots/README.md)：5 张真实 Linux 原生截图及 5 张明确使用合成 Mock IPC 的浏览器截图，涵盖媒体库、工具、音乐、设置和备份维护；模式、候选源码与验收边界逐项说明。

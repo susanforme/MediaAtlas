@@ -13,37 +13,51 @@
     {
       "route": "/library",
       "file": "browser-mock-01-library.png",
-      "heading": "媒体库",
+      "heading": "\u5a92\u4f53\u5e93",
       "mode": "Chromium browser with synthetic Mock IPC",
-      "errors": 0
+      "errors": 0,
+      "sha256": "66533e08221410aa8cfafacead7f6a34e1fbb85191f20411ad1f437f23d64453",
+      "visually_inspected": true
     },
     {
       "route": "/tools?media=synthetic-film-1",
       "file": "browser-mock-02-tools.png",
-      "heading": "媒体工具",
+      "heading": "\u5a92\u4f53\u5de5\u5177",
       "mode": "Chromium browser with synthetic Mock IPC",
-      "errors": 0
+      "errors": 0,
+      "sha256": "aff0df6053650897df96dc6576d67bc135b1aa1f1431a42585a123719c943326",
+      "visually_inspected": true
     },
     {
       "route": "/music",
       "file": "browser-mock-03-music.png",
-      "heading": "音乐",
+      "heading": "\u97f3\u4e50",
       "mode": "Chromium browser with synthetic Mock IPC",
-      "errors": 0
+      "errors": 0,
+      "sha256": "834be8d75614fd67b8633c00b60f6c13cec5a5cda8c7489c3fddc8d835a98b7c",
+      "visually_inspected": true
     },
     {
       "route": "/settings",
       "file": "browser-mock-04-settings.png",
-      "heading": "设置",
+      "heading": "\u8bbe\u7f6e",
       "mode": "Chromium browser with synthetic Mock IPC",
-      "errors": 0
+      "errors": 0,
+      "sha256": "c548c746bc528368cc591e256144c9161da1acd9d87d5b9ceeca66201cb57bf7",
+      "visually_inspected": true
     },
     {
       "route": "/diagnostics",
       "file": "browser-mock-05-maintenance.png",
-      "heading": "备份与维护",
+      "heading": "\u5907\u4efd\u4e0e\u7ef4\u62a4",
       "mode": "Chromium browser with synthetic Mock IPC",
-      "errors": 0
+      "errors": 0,
+      "sha256": "d203bc6cdc6c47db61fe10fd07c213b2696a80fc365c129e6e0f52718d52b9b6",
+      "visually_inspected": true
     }
-  ]
+  ],
+  "candidateAppSourceCommit": "d50b4dd03c15e45428c4b455f3e8755d40732a48",
+  "appSourceInputsUnchanged": true,
+  "captureOutputs": "screenshots only; committed separately after the source commit",
+  "captured_at": "2026-11-03T10:06:15.641732+00:00"
 }
