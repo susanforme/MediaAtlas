@@ -1,3 +1,5 @@
+import "../scraper/translations";
+import { Link } from "@tanstack/react-router";
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "../../components/ui/checkbox";
@@ -14,11 +16,25 @@ const ProviderAuthSettings = lazy(() =>
   })),
 );
 
-export function SettingsPage() {
+export function SettingsPage({
+  returnMediaId,
+  returnToScraper = false,
+}: {
+  returnMediaId?: string;
+  returnToScraper?: boolean;
+} = {}) {
   const { t, i18n } = useTranslation();
   return (
     <>
-      <PageHeading title={t("settings")} />
+      <PageHeading title={t("settings")}>
+        {returnToScraper && (
+          <Button asChild variant="outline">
+            <Link to="/scraper" search={{ media: returnMediaId }}>
+              {t("scraperReturn")}
+            </Link>
+          </Button>
+        )}
+      </PageHeading>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <Suspense fallback={<Loading />}>
           <ProviderAuthSettings />

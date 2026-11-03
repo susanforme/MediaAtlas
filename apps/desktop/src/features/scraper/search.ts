@@ -11,3 +11,15 @@ export function validateScraperSearch(
     ? { media: value.media }
     : {};
 }
+
+export interface ScraperReturnSearch extends ScraperSearch {
+  from?: "scraper";
+}
+
+export function validateScraperReturnSearch(
+  value: Record<string, unknown>,
+): ScraperReturnSearch {
+  return value.from === "scraper"
+    ? { from: "scraper", ...validateScraperSearch(value) }
+    : {};
+}

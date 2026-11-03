@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 import { validateToolsSearch } from "../tools/search";
 import { scrapeKind } from "./scraper-model";
-import { validateScraperSearch } from "./search";
+import { validateScraperReturnSearch, validateScraperSearch } from "./search";
 
 it.each([validateScraperSearch, validateToolsSearch])(
   "accepts only a bounded media context and drops unrelated values",
@@ -36,4 +36,31 @@ it("maps only explicitly supported ordinary media kinds", () => {
     "unknown",
   ])
     expect(scrapeKind(kind)).toBeNull();
+});
+
+it("preserves only the fixed scraper return context, never a return URL", () => {
+  expect(
+    validateScraperReturnSearch({
+      from: "scraper",
+      media: "local-media",
+      returnUrl: "https://example.com",
+    }),
+  ).toEqual({ from: "scraper", media: "local-media" });
+  expect(validateScraperReturnSearch({ from: "scraper" })).toEqual({
+    from: "scraper",
+  });
+  expect(
+    validateScraperReturnSearch({ from: "scraper", media: "x".repeat(129) }),
+  ).toEqual({ from: "scraper" });
+  for (const from of [
+    undefined,
+    null,
+    "https://example.com",
+    "/adult",
+    ["scraper"],
+    { from: "scraper" },
+  ])
+    expect(validateScraperReturnSearch({ from, media: "local-media" })).toEqual(
+      {},
+    );
 });

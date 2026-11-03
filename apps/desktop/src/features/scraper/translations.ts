@@ -3,6 +3,7 @@ export const scraperTranslations = {
   "en-US": {
     scraper: "Scraper",
     scraperThisMedia: "Scrape this media",
+    scraperReturn: "Return to scraper",
     scraperCancelSelection: "Cancel candidate selection",
     scraperStopWaiting: "Stop waiting",
     scraperCancelMerge: "Cancel merge preview",
@@ -142,6 +143,7 @@ export const scraperTranslations = {
   },
   "zh-CN": {
     scraperThisMedia: "刮削此媒体",
+    scraperReturn: "返回刮削",
     scraperCancelSelection: "取消候选选择",
     scraperStopWaiting: "停止等待",
     scraperCancelMerge: "取消合并预览",

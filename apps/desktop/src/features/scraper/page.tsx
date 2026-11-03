@@ -289,10 +289,20 @@ function ScraperWorkspace({ mediaId }: { mediaId?: string }) {
         ) && (
           <div className="mb-4 flex flex-wrap gap-3">
             <Button asChild variant="outline" size="sm">
-              <Link to="/providers">{t("scraperConfigureProviders")}</Link>
+              <Link
+                to="/providers"
+                search={{ from: "scraper", media: target || undefined }}
+              >
+                {t("scraperConfigureProviders")}
+              </Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link to="/settings">{t("scraperConfigureAuth")}</Link>
+              <Link
+                to="/settings"
+                search={{ from: "scraper", media: target || undefined }}
+              >
+                {t("scraperConfigureAuth")}
+              </Link>
             </Button>
           </div>
         )}

@@ -1,4 +1,5 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Diagnostic rows have no local state; multiple requests can share one origin and attempt. */
+import "../scraper/translations";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
@@ -105,7 +106,15 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
     </Details>
   );
 }
-function ProviderCard({ provider }: { provider: ProviderView }) {
+function ProviderCard({
+  provider,
+  returnToScraper = false,
+  returnMediaId,
+}: {
+  provider: ProviderView;
+  returnToScraper?: boolean;
+  returnMediaId?: string;
+}) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const [query, setQuery] = useState("");
@@ -185,10 +194,22 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
       ) : (
         <div className="flex flex-wrap gap-3">
           <Button asChild variant="outline">
-            <Link to="/scraper">{t("providerOpenScraper")}</Link>
+            <Link
+              to="/scraper"
+              search={{ media: returnToScraper ? returnMediaId : undefined }}
+            >
+              {t("providerOpenScraper")}
+            </Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/settings">{t("providerOpenAuthSettings")}</Link>
+            <Link
+              to="/settings"
+              search={
+                returnToScraper ? { from: "scraper", media: returnMediaId } : {}
+              }
+            >
+              {t("providerOpenAuthSettings")}
+            </Link>
           </Button>
         </div>
       )}
@@ -264,12 +285,26 @@ function ProviderCard({ provider }: { provider: ProviderView }) {
     </article>
   );
 }
-export function ProvidersPage() {
+export function ProvidersPage({
+  returnMediaId,
+  returnToScraper = false,
+}: {
+  returnMediaId?: string;
+  returnToScraper?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const snapshot = useSnapshot();
   return (
     <>
-      <PageHeading title={t("providers")} />
+      <PageHeading title={t("providers")}>
+        {returnToScraper && (
+          <Button asChild variant="outline">
+            <Link to="/scraper" search={{ media: returnMediaId }}>
+              {t("scraperReturn")}
+            </Link>
+          </Button>
+        )}
+      </PageHeading>
       {snapshot.isPending ? (
         <Loading />
       ) : snapshot.isError ? (
@@ -280,7 +315,12 @@ export function ProvidersPage() {
       ) : snapshot.data.providers.length ? (
         <div className="grid items-start gap-5 2xl:grid-cols-2">
           {snapshot.data.providers.map((provider) => (
-            <ProviderCard key={provider.descriptor.id} provider={provider} />
+            <ProviderCard
+              key={provider.descriptor.id}
+              provider={provider}
+              returnToScraper={returnToScraper}
+              returnMediaId={returnMediaId}
+            />
           ))}
         </div>
       ) : (

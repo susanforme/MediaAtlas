@@ -11,17 +11,26 @@ import { NetworkInspectorPage, ProvidersPage, ProviderTasks } from "./pages";
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     to,
+    search,
     children,
     className,
   }: {
     to: string;
+    search?: Record<string, string | undefined>;
     children: React.ReactNode;
     className?: string;
-  }) => (
-    <a href={to} className={className}>
-      {children}
-    </a>
-  ),
+  }) => {
+    const query = new URLSearchParams(
+      Object.entries(search ?? {}).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    ).toString();
+    return (
+      <a href={to + (query ? `?${query}` : "")} className={className}>
+        {children}
+      </a>
+    );
+  },
 }));
 vi.mock("../../api/providers", async (original) => ({
   ...(await original<typeof import("../../api/providers")>()),
@@ -267,4 +276,28 @@ it("never displays an opaque credential reference while editing limits", async (
       expect.objectContaining({ credential_ref: null }),
     ),
   );
+});
+
+it("returns to the fixed scraper route with the originating local media", async () => {
+  show(<ProvidersPage returnToScraper returnMediaId="media-1" />);
+  expect(
+    screen.getByRole("link", { name: "Return to scraper" }),
+  ).toHaveAttribute("href", "/scraper?media=media-1");
+  await screen.findByText("Offline demo");
+});
+
+it("keeps scraper context when continuing from providers to authentication settings", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor.fixture = false;
+  snapshot.providers[0].descriptor.id = "tmdb";
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  show(<ProvidersPage returnToScraper returnMediaId="media-1" />);
+  expect(
+    await screen.findByRole("link", {
+      name: "Save authentication in Settings",
+    }),
+  ).toHaveAttribute("href", "/settings?from=scraper&media=media-1");
+  expect(
+    screen.getByRole("link", { name: "Search in Scraper" }),
+  ).toHaveAttribute("href", "/scraper?media=media-1");
 });

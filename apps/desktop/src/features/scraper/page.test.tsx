@@ -24,9 +24,22 @@ import {
 import { ScraperPage } from "./page";
 
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    to,
+    search,
+    children,
+  }: {
+    to: string;
+    search?: Record<string, string | undefined>;
+    children: React.ReactNode;
+  }) => {
+    const query = new URLSearchParams(
+      Object.entries(search ?? {}).filter(
+        (entry): entry is [string, string] => typeof entry[1] === "string",
+      ),
+    ).toString();
+    return <a href={to + (query ? `?${query}` : "")}>{children}</a>;
+  },
 }));
 vi.mock("../../api/provider-auth", () => ({
   providerAuthApi: { status: vi.fn() },
@@ -571,7 +584,10 @@ it("requires configured credentials and offers manual setup without enabling pro
   ).toBeDisabled();
   expect(
     screen.getByRole("link", { name: "Configure credentials" }),
-  ).toHaveAttribute("href", "/settings");
+  ).toHaveAttribute("href", "/settings?from=scraper&media=media-1");
+  expect(
+    screen.getByRole("link", { name: "Configure providers" }),
+  ).toHaveAttribute("href", "/providers?from=scraper&media=media-1");
   expect(scraperApi.search).not.toHaveBeenCalled();
 });
 it("rejects adult and unsupported local targets instead of defaulting to movie", async () => {
