@@ -15,3 +15,7 @@
 ## 远程 macOS 验证
 
 修复提交 `68d58fa2990f562c61ff2a9818a3f720ec14fc62` 的 [CI run 41764803917](https://github.com/susanforme/MediaAtlas/actions/runs/41764803917) 中，[macOS job 126360568627](https://github.com/susanforme/MediaAtlas/actions/runs/41764803917/job/126360568627) 已 `completed / success`：前端测试与 Rust core/database 步骤均通过。这是实际 macOS runner 的结果，不是 Linux 模拟或旧提交的重跑。后续 beta.5 仅在该修复基础上同步版本与许可锁文件摘要；新 tag 的原生包仍由其独立发布流水线构建和验收。
+
+## 相邻输出测试的同类同步（beta.6）
+
+后续 [0fdfae8 的 macOS job](https://github.com/susanforme/MediaAtlas/actions/runs/41766592580/job/126366280323) 已通过全部 8 项真实签名/DMG 回归，但相邻用例 `releases an unexecuted sidecar preview before leaving a queue item` 同样直接轮询下一步输出按钮。现在相关用例统一先等待可见的元数据确认成功反馈，再读取已启用的输出按钮并在异步 act 中点击；保留取消、离开、卸载和迟到响应的丢弃/不写入断言。未加大超时或加入自动重试。更新后本地完整 `pnpm check`：50 文件 / 425 项测试、lint、typecheck 与生产构建通过。

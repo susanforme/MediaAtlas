@@ -36,3 +36,5 @@ xattr -dr com.apple.quarantine "/Applications/MediaAtlas.app"
 ## 当前验证
 
 Linux 本地发布工具回归：61 项中 55 项执行通过，6 项因缺少原生工具未执行（4 项 macOS、1 项 Rust exporter、1 项 NSIS）。CI 工具 7 项通过。macOS 原生回归和最终 DMG 的实际结果需分别由新 main CI 与包含本修复的新 tag 发布流水线记录，旧包编译成功不能代替。
+
+修复提交 `0fdfae812a2a02fbdb1953b96a6e76a52512d589` 的 [真实 macOS job](https://github.com/susanforme/MediaAtlas/actions/runs/41766592580/job/126366280323) 在新增原生步骤中执行 8 项测试，全部通过（含 clang 本机程序执行、删除资源封装拒绝、签名后篡改拒绝、只读挂载 DMG 验签）。该 job 随后在相邻前端异步测试失败，不能称整个 job 已成功；相关页面测试已另行同步修复。本地使用现有 Rust 编译器补跑后，发布工具 61 项中 56 项通过，5 项平台工具测试未在 Linux 执行。最终发布版本为 beta.6，实际 Tauri DMG 仍须通过新 tag 的严格验签门槛。

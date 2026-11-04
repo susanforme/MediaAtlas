@@ -2,7 +2,7 @@
   "schema_version": 1,
   "scope": "Complete Cargo.lock and pnpm-lock.yaml package union; includes dependencies not shipped on every target.",
   "lockfiles": {
-    "Cargo.lock": "4e673b3127636441a4145077fba66d288d4bf79c69b8b78e5cb1cbc7ca577e0d",
+    "Cargo.lock": "156843851242de56896c1365777b368942a825996f111fc3a07ee21b8febf260",
     "pnpm-lock.yaml": "f910d792c14ef7921a0ae1f7dd72df37dd26ba134cfd4bb8aa7c8048620cf19c"
   },
   "missing_notices": [],
@@ -21025,16 +21025,16 @@
           "origin": "https://registry.npmjs.org/@tauri-apps/plugin-dialog/-/plugin-dialog-2.8.4.tgz"
         },
         {
-          "path": "docs/third-party-licenses/texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt",
-          "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_APACHE-2.0",
           "original_path": "LICENSE_APACHE-2.0",
-          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_APACHE-2.0"
+          "path": "docs/third-party-licenses/texts/0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9.txt",
+          "sha256": "0cec06e0e55fbc3dc5cee4fca9b607f66cb8f4e4dbcf3b3c013594dd156732e9"
         },
         {
-          "path": "docs/third-party-licenses/texts/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
-          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607",
+          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_MIT",
           "original_path": "LICENSE_MIT",
-          "origin": "https://raw.githubusercontent.com/tauri-apps/plugins-workspace/128190689dbe59b59d344e01bf07b00862aa3791/LICENSE_MIT"
+          "path": "docs/third-party-licenses/texts/89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607.txt",
+          "sha256": "89ff9689dcf9dd53968785d05a26f7898bb169dbfcada8d032b3e68cf0d55607"
         }
       ],
       "notice_provenance": "upstream_file"

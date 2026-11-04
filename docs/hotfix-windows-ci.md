@@ -76,3 +76,13 @@ Final Linux validation passes all 305 Rust workspace tests, workspace formatting
 成人详情撤权与并发图库测试改用实际请求进入/响应 gate 同步。图库并发用例明确配置两个图片并发槽，不再依赖固定 25ms 延时；成人响应保持到取消实际完成，避免撤权轮询与立即响应之间的测试竞争。
 
 [CI run 41757918195](https://github.com/susanforme/MediaAtlas/actions/runs/41757918195) 的 Windows、macOS、Linux 全部成功。Windows [job 126338312682](https://github.com/susanforme/MediaAtlas/actions/runs/41757918195/job/126338312682) 于 2026-11-04 10:08:51（北京时间）完成 Rust 核心步骤；原三个失败测试及新增规范化身份测试均通过，infrastructure 单元 214 通过、0 失败。此证据属于独立修复，不代替后续 P0 队列版本的跨平台 CI。
+
+## Provider 取消与禁用的测试时序（2026-11-04）
+
+[beta.5 main CI 41765406478 的 Windows job](https://github.com/susanforme/MediaAtlas/actions/runs/41765406478/job/126362795209) 在 `provider_runtime` 的 `cancel_and_disable_are_terminal_and_do_not_overwrite_success` 失败：任务终态为取消，`snapshot.requests.is_empty()` 却不成立。
+
+旧用例把默认 250ms 的离线 fixture 延迟当作同步保证。Windows DB 操作可能晚于解析完成、早于结果事务提交；终态取消可以保持正确，已实际发生的 FIXTURE 解析审计记录仍应保留。这些不是取消后新发出的 HTTP 请求，不能通过清除真实审计记录满足测试。
+
+用例改为受控 adapter：明确等待任务进入执行，成功路径由零 permit 的 Semaphore 阻塞；取消第二项、禁用第一项后分别等待取消退出事件，再断言两个终态和请求记录为空。第三项仅在显式 permit 后成功，再取消及禁用仍保持成功、无 failure，历史恰有该项两条记录。移除原 300ms sleep，生产实现保持不变。
+
+本地 `cargo test --locked --offline -p mediaatlas-infrastructure --test provider_runtime`：7/7；关键用例独立重复 20 次全通过，Rustfmt 与 diff 检查通过。最终 Windows 结果以包含本改动的新 main CI 为准。修复随 beta.6 新 tag 发布，不移动 beta.5。

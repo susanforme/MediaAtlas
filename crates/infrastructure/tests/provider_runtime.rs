@@ -1,9 +1,14 @@
-use mediaatlas_domain::{ProviderConfig, ProviderFailure, TaskState};
+use mediaatlas_domain::{
+    ProviderConfig, ProviderDescriptor, ProviderFailure, ProviderInfo, ProviderJob, TaskState,
+};
 use mediaatlas_infrastructure::{
     library::{LibraryRepository, RepositoryError},
-    providers::{ProviderService, FIXTURE_PROVIDER_ID},
+    network::{CancellationToken, NetworkEngine},
+    providers::{OfflineFixtureProvider, ProviderAdapter, ProviderService, FIXTURE_PROVIDER_ID},
 };
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 use tempfile::TempDir;
+use tokio::sync::{mpsc, Semaphore};
 use uuid::Uuid;
 
 async fn setup() -> (TempDir, LibraryRepository, ProviderService) {
@@ -104,39 +109,135 @@ async fn explicit_fixture_combines_parsers_persists_history_and_shared_task_audi
     );
 }
 
+const CANCELLATION_FIXTURE_ID: &str = "fixture.controlled-cancellation";
+
+/// Hold parser completion until the test explicitly permits success. Cancellation
+/// is a separate event, so a slow database cannot let the fixture finish first.
+struct CancellationFixtureProvider {
+    started: mpsc::UnboundedSender<Uuid>,
+    exited: mpsc::UnboundedSender<(Uuid, Option<ProviderFailure>)>,
+    complete: Arc<Semaphore>,
+}
+
+impl ProviderAdapter for CancellationFixtureProvider {
+    fn descriptor(&self) -> ProviderDescriptor {
+        let mut descriptor = ProviderInfo::descriptor(&OfflineFixtureProvider);
+        descriptor.id = CANCELLATION_FIXTURE_ID.into();
+        descriptor
+    }
+
+    fn execute<'a>(
+        &'a self,
+        job: &'a ProviderJob,
+        _engine: &'a NetworkEngine,
+        cancel: &'a CancellationToken,
+    ) -> Pin<Box<dyn Future<Output = Result<String, ProviderFailure>> + Send + 'a>> {
+        Box::pin(async move {
+            self.started.send(job.id).unwrap();
+            let result = tokio::select! {
+                _ = cancel.cancelled() => Err(ProviderFailure::Cancelled),
+                permit = self.complete.acquire() => {
+                    permit.unwrap().forget();
+                    Ok("fixture_combined".into())
+                }
+            };
+            self.exited
+                .send((job.id, result.as_ref().err().copied()))
+                .unwrap();
+            result
+        })
+    }
+}
+
+async fn event<T>(receiver: &mut mpsc::UnboundedReceiver<T>) -> T {
+    tokio::time::timeout(Duration::from_secs(5), receiver.recv())
+        .await
+        .expect("controlled fixture did not reach the expected stage")
+        .expect("controlled fixture stopped before the expected event")
+}
+
 #[tokio::test]
 async fn cancel_and_disable_are_terminal_and_do_not_overwrite_success() {
     let (_dir, _repo, service) = setup().await;
+    let (started, mut starts) = mpsc::unbounded_channel();
+    let (exited, mut exits) = mpsc::unbounded_channel();
+    let complete = Arc::new(Semaphore::new(0));
     service
-        .set_enabled(FIXTURE_PROVIDER_ID, true)
+        .register_adapter(Arc::new(CancellationFixtureProvider {
+            started,
+            exited,
+            complete: complete.clone(),
+        }))
         .await
         .unwrap();
-    let id = service.start(FIXTURE_PROVIDER_ID, "First").await.unwrap();
-    let queued = service.start(FIXTURE_PROVIDER_ID, "Second").await.unwrap();
-    assert!(service.cancel(queued).await.unwrap());
-    assert!(!service.cancel(queued).await.unwrap());
+    service
+        .set_enabled(CANCELLATION_FIXTURE_ID, true)
+        .await
+        .unwrap();
+    let id = service
+        .start(CANCELLATION_FIXTURE_ID, "First")
+        .await
+        .unwrap();
+    assert_eq!(event(&mut starts).await, id);
+    let cancelled = service
+        .start(CANCELLATION_FIXTURE_ID, "Second")
+        .await
+        .unwrap();
+    assert_eq!(event(&mut starts).await, cancelled);
+    assert!(service.cancel(cancelled).await.unwrap());
+    assert_eq!(
+        event(&mut exits).await,
+        (cancelled, Some(ProviderFailure::Cancelled))
+    );
+    assert!(!service.cancel(cancelled).await.unwrap());
     assert!(!service.cancel(Uuid::new_v4()).await.unwrap());
     service
-        .set_enabled(FIXTURE_PROVIDER_ID, false)
+        .set_enabled(CANCELLATION_FIXTURE_ID, false)
         .await
         .unwrap();
+    assert_eq!(
+        event(&mut exits).await,
+        (id, Some(ProviderFailure::Cancelled))
+    );
     assert_eq!(terminal(&service, id).await, TaskState::Cancelled);
-    assert_eq!(terminal(&service, queued).await, TaskState::Cancelled);
-    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert_eq!(terminal(&service, cancelled).await, TaskState::Cancelled);
     let snapshot = service.snapshot().await.unwrap();
     assert!(snapshot
         .tasks
         .iter()
         .all(|t| t.failure == Some(ProviderFailure::Cancelled)));
     assert!(snapshot.requests.is_empty());
+
     service
-        .set_enabled(FIXTURE_PROVIDER_ID, true)
+        .set_enabled(CANCELLATION_FIXTURE_ID, true)
         .await
         .unwrap();
-    let done = service.start(FIXTURE_PROVIDER_ID, "Third").await.unwrap();
+    let done = service
+        .start(CANCELLATION_FIXTURE_ID, "Third")
+        .await
+        .unwrap();
+    assert_eq!(event(&mut starts).await, done);
+    complete.add_permits(1);
+    assert_eq!(event(&mut exits).await, (done, None));
     assert_eq!(terminal(&service, done).await, TaskState::Succeeded);
     assert!(!service.cancel(done).await.unwrap());
-    assert_eq!(terminal(&service, done).await, TaskState::Succeeded);
+    service
+        .set_enabled(CANCELLATION_FIXTURE_ID, false)
+        .await
+        .unwrap();
+    let snapshot = service.snapshot().await.unwrap();
+    let completed = snapshot.tasks.iter().find(|task| task.id == done).unwrap();
+    assert_eq!(completed.state, TaskState::Succeeded);
+    assert_eq!(completed.failure, None);
+    assert_eq!(
+        completed.result_summary.as_deref(),
+        Some("fixture_combined")
+    );
+    assert_eq!(snapshot.requests.len(), 2);
+    assert!(snapshot
+        .requests
+        .iter()
+        .all(|request| request.task_id == done));
 }
 
 #[tokio::test]

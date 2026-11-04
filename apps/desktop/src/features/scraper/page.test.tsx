@@ -209,6 +209,17 @@ async function confirmMerge() {
     fireEvent.click(screen.getByRole("button", { name: /^Confirm merge/ }));
   });
 }
+async function openOutputPreview() {
+  // Query notifications are asynchronous; observe confirmation before its next action.
+  await screen.findByText("Metadata confirmed. 1 fields applied.");
+  const button = screen.getByRole("button", {
+    name: "Preview NFO and poster output",
+  });
+  expect(button).toBeEnabled();
+  await act(async () => {
+    fireEvent.click(button);
+  });
+}
 async function searchAndChoose() {
   const view = show();
   await screen.findByText("Local film · 2024");
@@ -256,9 +267,7 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
   await screen.findByText("Metadata confirmed. 1 fields applied.");
   expect(scraperApi.confirm).toHaveBeenCalledWith("merge-1");
   expect(scraperOutputApi.preview).not.toHaveBeenCalled();
-  fireEvent.click(
-    screen.getByRole("button", { name: "Preview NFO and poster output" }),
-  );
+  await openOutputPreview();
   await screen.findByText("/synthetic/library/film.nfo");
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
   expect(
@@ -486,9 +495,7 @@ it("discards an abandoned output preview on component unmount without executing 
   );
   await confirmMerge();
   await screen.findByText("Metadata confirmed. 1 fields applied.");
-  fireEvent.click(
-    screen.getByRole("button", { name: "Preview NFO and poster output" }),
-  );
+  await openOutputPreview();
   await screen.findByText("/synthetic/library/film.nfo");
   view.unmount();
   await waitFor(() =>
@@ -555,11 +562,7 @@ it("discards a sidecar preview that arrives after target context is left", async
         finish = resolve;
       }),
   );
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: "Preview NFO and poster output",
-    }),
-  );
+  await openOutputPreview();
   await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalled());
   view.changeTarget("media-2");
   await act(async () => {
@@ -588,11 +591,7 @@ it("cancels merge and output previews without any writes", async () => {
     screen.getByRole("button", { name: "Choose this candidate" }),
   );
   await confirmMerge();
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: "Preview NFO and poster output",
-    }),
-  );
+  await openOutputPreview();
   fireEvent.click(
     await screen.findByRole("button", { name: "Cancel output preview" }),
   );
@@ -850,11 +849,7 @@ it("disables queue navigation during a mutation and ignores the cancelled item's
 it("releases an unexecuted sidecar preview before leaving a queue item", async () => {
   await chooseQueueCandidate();
   await confirmMerge();
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: "Preview NFO and poster output",
-    }),
-  );
+  await openOutputPreview();
   await screen.findByText("/synthetic/library/film.nfo");
   expect(
     screen.queryByRole("button", { name: "Skip current item" }),
