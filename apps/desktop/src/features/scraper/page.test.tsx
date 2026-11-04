@@ -205,7 +205,9 @@ async function waitForMergeReady() {
 }
 async function confirmMerge() {
   await waitForMergeReady();
-  fireEvent.click(screen.getByRole("button", { name: /^Confirm merge/ }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /^Confirm merge/ }));
+  });
 }
 async function searchAndChoose() {
   const view = show();
@@ -869,8 +871,38 @@ it("releases an unexecuted sidecar preview before leaving a queue item", async (
   expect(scraperApi.confirm).toHaveBeenCalledTimes(1);
 });
 it("discards a late output preview from a queue item after an external route change", async () => {
+  let confirmMetadata!: (
+    value: Awaited<ReturnType<typeof scraperApi.confirm>>,
+  ) => void;
+  vi.mocked(scraperApi.confirm).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        confirmMetadata = resolve;
+      }),
+  );
   const view = await chooseQueueCandidate();
   await confirmMerge();
+  expect(scraperApi.confirm).toHaveBeenCalledExactlyOnceWith("merge-1");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Skip current item" }),
+    ).toBeDisabled(),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Preview NFO and poster output" }),
+  ).not.toBeInTheDocument();
+  expect(scraperOutputApi.preview).not.toHaveBeenCalled();
+  await act(async () => {
+    confirmMetadata({
+      schema_version: 1,
+      preview_id: "merge-1",
+      applied_fields: 1,
+      already_applied: false,
+    });
+  });
+  expect(
+    await screen.findByText("Metadata confirmed. 1 fields applied."),
+  ).toBeVisible();
   let finish!: (value: typeof syntheticOutput) => void;
   vi.mocked(scraperOutputApi.preview).mockImplementation(
     () =>
@@ -878,25 +910,34 @@ it("discards a late output preview from a queue item after an external route cha
         finish = resolve;
       }),
   );
-  fireEvent.click(
-    await screen.findByRole("button", {
-      name: "Preview NFO and poster output",
-    }),
+  const outputButton = screen.getByRole("button", {
+    name: "Preview NFO and poster output",
+  });
+  expect(outputButton).toBeEnabled();
+  await act(async () => {
+    fireEvent.click(outputButton);
+  });
+  expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1");
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled(),
   );
-  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalled());
-  expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled();
   view.changeTarget("media-2");
+  await screen.findByText("Review queue · Item 2 of 2");
   await act(async () => {
     finish(syntheticOutput);
   });
   await waitFor(() =>
-    expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
+    expect(scraperOutputApi.discard).toHaveBeenCalledExactlyOnceWith(
+      "output-1",
+    ),
   );
   expect(
     screen.queryByText("/synthetic/library/film.nfo"),
   ).not.toBeInTheDocument();
+  expect(scraperApi.confirm).toHaveBeenCalledTimes(1);
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
 });
+
 it("preserves the whole review queue in both manual provider setup links", async () => {
   const snapshot = fixtureSnapshot();
   snapshot.providers[0].descriptor.id = "tmdb";
