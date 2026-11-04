@@ -1,19 +1,28 @@
 {
   "date": "2026-11-04",
   "mode": "real Chromium + synthetic IPC only",
-  "source_commit": "226b1b91fbe3d238573d40c05522c1b6db580d17",
-  "worktree_diff_sha256": "b793cb167a67e811917c107cd8c966dae328a328a1e866f3084675275335b851",
+  "source_commit": "8a8c28d2aa4838c670e70022c0ec9d7377a4a1fe",
+  "worktree_diff_sha256": "4023410361b64555258e3a1c5d14cbe1891434231f19fab65aa9dbc8d9e2f3ae",
   "queue_source_sha256": {
     "apps/desktop/src/components/ui/badge.tsx": "5b972a827e247b317ccfad4c316f38c54a652b54a144ffa03d8e95713e18781a",
+    "apps/desktop/src/components/ui/tabs.tsx": "e7c4c929efadf37fbbbed2c5c0d68d324cbc48511fa6968640e8bd4eb76dd335",
+    "apps/desktop/src/components/shell/app-shell.tsx": "e9d7fb990a156ac67f7cddaa5bc01863fe8124c62dfe3dd61da2b4658f515b26",
+    "apps/desktop/src/components/shell/shell.css": "ce1920e7043d644a57acab91fe5bf4553a58ede26e0edd1328ab5f89f27e36e0",
+    "apps/desktop/src/features/scraper/merge-preview-model.test.ts": "29b87491fd6a3015a8c261393ae5049d6158f78f1ff0f8bac559daab4d36f890",
+    "apps/desktop/src/features/scraper/merge-translations.ts": "198fed26238bbdcad369f363bc5e4eb7f336a15cf86890ed45db48e57de77da8",
+    "apps/desktop/src/features/scraper/merge-preview-model.ts": "06f469edd7528b272893c617eb18467b221841269ad0914dfdc641d0a6e8599c",
+    "apps/desktop/src/features/scraper/use-live-merge-preview.ts": "c308b94b8b08a2adcbd9a88c61a8139da311f27a3702fad7645d00b23c38aa6d",
+    "apps/desktop/src/features/scraper/use-live-merge-preview.test.tsx": "56469d0b72a34b871006af7a443387a0b94856e6c28660b1c7d87b65446ec750",
+    "apps/desktop/src/features/scraper/merge-workspace.tsx": "9d693582f3605f9e4dfaca4e442a399ccabb6629198a8aa0d618c629b1b9de9f",
     "apps/desktop/src/api/review-queue.ts": "82df9d3173d6cc9a7e301c01736b728138483903aed86535200583163e7bf428",
     "apps/desktop/src/features/scraper/use-review-queue.ts": "88978f6b14117abac5345d4d173ec4c1acf28047dc1d393bd4593cd9552ebc3e",
     "apps/desktop/src/features/scraper/queue-navigation.tsx": "6bd872a59335388dac144f5e9cb4c0292be82d1fa3bfadefe500aa68f0b94c25",
     "apps/desktop/src/features/scraper/review-queue-translations.ts": "095f6b19663f2ed71c4677307501d49bd7e5b380f2905b5f6f7d97679d48cc85",
     "apps/desktop/src/features/scraper/persistent-queue-navigation.test.tsx": "4284de7f6ec8393c0753f62facc6319ec2988dc331b7099b067b82be6dbdcc93",
-    "apps/desktop/src/features/scraper/persistent-queue-navigation.tsx": "130645ef55211d440ef7c0b263d0be16b64eafcf0ac9e43f6f49fdc9e5efe268",
+    "apps/desktop/src/features/scraper/persistent-queue-navigation.tsx": "2fd73bccbb88c63203e220bbe879962329f9dadd83485030e084b19068fe4092",
     "apps/desktop/src/features/scraper/review-queue-launcher.tsx": "e1cc9811e553ca34e9a04c6f75608baa6742ae02fcb1905ea728ba6c2f50678a",
-    "apps/desktop/src/features/scraper/page.tsx": "0f0f103a9c3d0b1b5ef1052cf219d8bac1d720481975f12907393c565fb6b050",
-    "apps/desktop/src/features/scraper/use-scraper.ts": "e81425a60e4d04bc0050609ac33178f6491525257515cf859f97c56c1ccb410a",
+    "apps/desktop/src/features/scraper/page.tsx": "7e35d8d140ba92259b69f00146a10f6190dfd8efc7656f3319af393ff5e1e2bd",
+    "apps/desktop/src/features/scraper/use-scraper.ts": "e6190efa35b7e69c4e4fcaacc5910e6a7f2712d6732b14fb00d25358457a8f01",
     "apps/desktop/src/features/scraper/recovery-actions.tsx": "bead69d67401bc47be8bf635216a6c8b77443e413d24a76264013f6b3dd619e6",
     "apps/desktop/src/features/scraper/recovery-actions.test.tsx": "07da3a727b2d1c44eb8421af85683787f2449fd9403342774a3aaa4c78d04d09",
     "apps/desktop/src/features/tools/ordinary-candidates.tsx": "5a901edae7d18fdda10a9c58a82eb99dc74a9046dcaf2a2aba75e8451fa2ebb8",
@@ -22,40 +31,61 @@
     "crates/infrastructure/src/review_queue.rs": "95a7bff00e02e26e1358269fea9368f0de1d3a29c414eeab75f71fe1c7c64b70",
     "crates/infrastructure/src/review_queue/tests.rs": "d80eae1482466336a237fc3393e4f1f5e4eb0750b4e3dd3683ce87221ea4f1e1",
     "crates/application/src/review_queue.rs": "82b4aac943b321fd1517d4f25cc706fdbdd53928bc01f335fa36e5e3257f635d",
-    "scripts/desktop-review-queue-qa.py": "ef4503c80677b75e7f1314482ec2c3153e6c73e383d75b63ed9216872a2f13ca"
+    "scripts/desktop-review-queue-qa.py": "1425f70c3fd4433a76658eae99002dd489d4f2b7934cb6a025e6dd8471875d45"
   },
   "checks": [
+    "keyboard focus scrolls the right content below the fixed toolbar",
     "create session and defer persist across actual browser reload without writes",
     "manual credential configuration returns to same persistent session and media",
     "search failure persists and reload does not retry or write",
     "failed item requires explicit recheck and a separate search; successful retry does not confirm",
+    "wheel scroll moves only right content; sidebar and bottom settings stay fixed while document scroll remains zero",
+    "live merged view and keyboard comparison update with selection; missing-only and zero-change states; validation failure blocks confirmation until explicit retry",
     "explicit confirmation uses preview then checkpoint then confirm then proven ledger update; no file execution",
     "return restores original server filters and sort",
     "expired checkpoint requires explicit recheck and never replays confirmation",
     "disabled directory and removed media block continuation",
     "32 items use a non-interactive shared Badge and compact navigation rather than status buttons",
     "cross-page 32-item bound rejects whole overflowing page addition without truncation",
-    "390×844 no page overflow, reduced motion and keyboard defer without writes"
+    "390×844 no page overflow, reduced motion and keyboard defer without writes",
+    "live merge stacks at 390×844 with no overflow, missing-poster fallback and no automatic confirmation",
+    "short 390×360 viewport scrolls only sidebar navigation items internally and keeps bottom settings visible"
   ],
   "limits": [
     "No native Tauri, real provider, keyring or filesystem execution",
     "Browser fixture validates command ordering only; Rust service proof/persistence is separate",
-    "This status UI change did not re-run Rust tests or native package checks"
+    "This frontend change did not re-run local Rust tests or native package checks; new release workflow validates its own artifacts"
   ],
   "screenshots": {
-    "fixture-confirmed-proof-order-1648.png": "9c194ac1196965e8f6f365f2a40f154621e1840eaea15cd4e1bd4b04f552261c",
-    "fixture-created-session-1648.png": "a92bb1ff814651b781ab59f746bea3e98adafbc0739cc10356c3b34d84b01ba1",
-    "fixture-disabled-root-1648.png": "278da74d9f018ac96866a2aaa6c42a6470611bdeb27251ebb3ced4f7406a033f",
-    "fixture-explicit-failure-retry-1648.png": "541fd6a595db1c693149fb7d6136a5a9c3d36302ff7d939a3ce9506ac197abc1",
-    "fixture-keyboard-narrow-390.png": "f534cbc1d7709be3c9fee72335396d01b78ee2b36eea27c66e7bdff4ee0e2325",
-    "fixture-persisted-failure-1648.png": "c259b0ff1c720e1b8d0b2652d9a09d066a59d3becf9d386dffb72077ab80e543",
-    "fixture-restored-session-1648.png": "668df254d47d0eeab749b2714fc38c68232726b6b4eb96d5cbb7265abc3f4035",
-    "fixture-settings-return-1648.png": "668df254d47d0eeab749b2714fc38c68232726b6b4eb96d5cbb7265abc3f4035"
+    "fixture-confirmed-proof-order-1648.png": "1953711096ad8c5807f4e9587623697d7a5fb934cb3d3bcd4770ab0c268ae7f3",
+    "fixture-created-session-1648.png": "bae1cad659a7f8c84aae005da024c52def6fc158df66cf3416c6d7ee0753436d",
+    "fixture-disabled-root-1648.png": "78eea52e4865c8e7af618af62c809da05e86fcdf27d3559e3369b3e7ba437697",
+    "fixture-explicit-failure-retry-1648.png": "f70577455c90ad72bc576a8d012d5ac3aa42c019604a4e0e305ee3bf034ad1c3",
+    "fixture-fixed-navigation-scroll-1648.png": "d081f626140ffe4d3e01c14a32df874251a29bd2017b76a43a73ee2d62d45989",
+    "fixture-fixed-navigation-short-390.png": "4203d72c6b231b0fb77cd955d7f923c335fc153f9be18c6b59b75d718f5b4d13",
+    "fixture-keyboard-narrow-390.png": "3aa70a15a3b87e8d7a59e41a011fcbed7df1d58e88ceacbbb923890fcd2446d4",
+    "fixture-live-merge-1648.png": "5a5d6aba1761ee2b0ed460399c3f764452a21e8468b196025c9239924858131b",
+    "fixture-live-merge-narrow-390.png": "61356de68b6b3522f921b921da4d6aead1d6d1e1dc5fa0629a71c8bfad35a9b4",
+    "fixture-merge-compare-1648.png": "3cad26588037ecb9e8f087159251355fcd35732bbc8ce882b33c709f329a3659",
+    "fixture-merge-missing-only-1648.png": "732460e22c81607c053fae18edc773dbaa42783c86c0eebdc73ff0874c9d87dc",
+    "fixture-merge-validation-error-1648.png": "012a2dcc74ca8479fbfdec1423fe44ff74d869eda6e1e749e8fa70e7df756494",
+    "fixture-persisted-failure-1648.png": "32183c23a745973dcfbc99815d19fa868a424bd4f6949b2694365426954244a7",
+    "fixture-restored-session-1648.png": "dc05fa77f7cb43f48ff9385565daf295950e00383cab89c9ef18b20d1ef0435f",
+    "fixture-settings-return-1648.png": "dc05fa77f7cb43f48ff9385565daf295950e00383cab89c9ef18b20d1ef0435f"
   },
+  "implementation_commit": "8ee518d6f98cdfb90987df91526e8b8e70a31439",
   "frontend_checks": {
     "command": "pnpm check",
-    "test_files": 47,
-    "tests": 401,
-    "status": "passed"
+    "test_files": 50,
+    "tests": 425,
+    "status": "passed",
+    "final_css_check": "Biome and production build passed after fixed-toolbar focus and backdrop refinement"
+  },
+  "release_checks": {
+    "command": "python -m unittest discover -s scripts/release -p test_release.py -v",
+    "tests": 24,
+    "status": "passed",
+    "version_preflight": "v0.1.0-beta.4",
+    "license_inventory": "1001 dependencies, 1625 notice references; verified"
   }
 }
