@@ -1,7 +1,6 @@
-# MediaAtlas 架构与 Phase 0 接口
+# MediaAtlas 架构与版本化 IPC
 
-状态：Phase 0 实施约定；业务模型和 Provider 契约在对应阶段补充并验收。
-基线：[Universal Media Scraper — Agent 执行计划](UNIVERSAL_MEDIA_SCRAPER_AGENT_PLAN.md)。阶段顺序见 [agent-plan.md](agent-plan.md)。
+本文保留当前分层、接口和权限边界。产品流程见 [自动媒体库](automatic-library.md)和 [Emby 流程基准](emby-scraper-workflow.md)，详细接口见 [文档索引](README.md)。阶段编号用于识别协议来源，不作为开发前置审批或验收成绩。
 
 ## 分层与依赖
 
@@ -26,7 +25,7 @@ flowchart TD
 | `crates/infrastructure/` | 日志及后续数据库、网络、文件系统适配 | 通过应用/领域边界提供能力，不反向调用 UI |
 | `crates/desktop-bridge/` | 可独立测试的 IPC DTO 和错误转换 | 不依赖 Tauri；宿主将其接到 Tauri 命令与事件 |
 
-Phase 0 只创建四个具备实际职责的 core crate 和桌面宿主。`scraper`、`media-scanner`、`media-export` 按后续阶段引入，避免没有实现的业务空壳。引入新 crate 前记录真实依赖隔离或复用需求；不因基线推荐目录就预先创建全部 Provider 和媒体页面。详见 [ADR-001](adr/ADR-001-tech-stack.md)。
+核心分为四个 core crate 与独立只读 `media-scanner`，刮削和输出服务按实际职责组织。新增 crate 需要真实依赖隔离或复用需求，不预建业务空壳。详见 [ADR-001](adr/ADR-001-tech-stack.md)。
 
 ## Phase 0 冻结接口
 
@@ -65,7 +64,7 @@ Tauri command 失败通过 Promise rejection 返回可序列化对象：
 
 P0 UI 仅通过 `get_app_info` 完成握手。宿主启动时可发送应用就绪诊断事件 `app-ready`，载荷与 `get_app_info` 相同，不伪装任务进度。该事件可能早于 UI 订阅，不保证 P0 UI 接收，也不要求 UI 先监听再请求信息；`get_app_info` 是应用信息的可重取来源，不能依赖启动事件必达。
 
-P2 开始实现持久化任务后，引入基线规定的 `task-created`、`task-updated`、`task-log`、`task-needs-review`、`task-completed`。任务载荷必须包含 `schema_version`、任务 ID 和关联 ID，具体字段在 P2 DTO 审查时冻结。事件更新 Query 缓存或触发重查，不再建立一份重复媒体数据库。
+持久化任务使用 `task-created`、`task-updated`、`task-log`、`task-needs-review`、`task-completed`。任务载荷必须包含 `schema_version`、任务 ID 和关联 ID，具体字段在 P2 DTO 审查时冻结。事件更新 Query 缓存或触发重查，不再建立一份重复媒体数据库。
 
 ### 版本规则
 
@@ -80,11 +79,11 @@ P2 开始实现持久化任务后，引入基线规定的 `task-created`、`task
 
 默认采用允许字段列表，不整包记录 command 输入、HTTP headers、Provider 配置、元数据或调试结构。Cookie、Authorization、Token、API Key、邮箱、敏感 URL query 和用户目录片段不得进入日志。错误详情保留在受控诊断边界，向 UI 返回稳定错误码及脱敏消息。日志和脱敏应可独立测试；P3 引入网络时另测 URL/请求/响应日志。
 
-P0 只验证自身启动和诊断日志。尚未接入的 Cookie、系统密钥存储、网络检查或日志导出不能声明已受实测保护。
+日志、网络、凭据和诊断分别验证脱敏边界；本地 Mock 测试不证明真实来源或系统凭据服务已通过。
 
 ## 后续业务边界
 
-- 媒体库是本地资产索引；Provider 搜索结果先进入候选和 Preview，用户确认后才能成为正式媒体条目。
+- 媒体库以本地可用文件为索引基础。添加目录后后台扫描、索引并补全唯一可靠匹配；歧义留待人工核对。远端候选不能替代本地文件，资料缺失不隐藏已发现的本地资源。
 - Movie/TV、Anime、JAV、Music 使用独立扩展模型和类型专属匹配策略；统一公共身份、文件、图片、外部 ID 和字段来源。详见 [ADR-003](adr/ADR-003-media-model.md)。
 - 全部采集在 Rust 后端，经 API + HTTP/HTML 双引擎执行；不使用浏览器自动化抓取。详见 [ADR-002](adr/ADR-002-dual-engine.md)。
 - SQLite Repository 隔离持久化，迁移和模型先设计后实施。详见 [ADR-004](adr/ADR-004-database.md)。
@@ -93,7 +92,7 @@ P0 只验证自身启动和诊断日志。尚未接入的 Cookie、系统密钥�
 
 ## 实施与验收边界
 
-本架构文档确定 Phase 0 的接口和依赖方向，不代表 Phase 0 验收通过。Windows 空应用启动、macOS/Linux 编译和 Rust/TS 测试需分别记录实际结果；未运行的检查明确标记未验证。P0 未验收不得进入 P1 的数据库和媒体模型实现。
+本文说明接口和依赖方向，不构成通过声明。每次变更重新运行适用检查；平台编译、原生运行与安装结果分别记录，见 [发布矩阵](release-matrix.md)及[截图记录](../screenshots/README.md)。
 
 ## P4 typed scraping and output boundary
 
@@ -104,12 +103,12 @@ P0 只验证自身启动和诊断日志。尚未接入的 Cookie、系统密钥�
 
 ## Phase 5 adult capability boundary
 
-Adult commands form a separate backend lane. Persistent exposure preferences are independent of a process-local revocable grant: a visible navigation entry can remain after lock/restart without authorizing content. Ordinary queries, stats, tasks, provider snapshots and Inspector exclude adult records even while unlocked. Dedicated adult search/detail/merge/browse/output/batch commands require the grant and recheck it after asynchronous reads and before write commits/publication. Lock cancels in-flight adult requests, including requests tied to completed runs; invalidates unfinished output intents durably; and releases revoked platform leases. Adult roots cannot overlap ordinary roots through product root management. Adult cache directories and frontend query keys are separate. Credentials remain Settings→keyring/session references, never UI-editable opaque authority. See [P5 acceptance](acceptance/phase-5.md).
+Adult commands form a separate backend lane. The frontend uses one enabled resource type and shared routes; it automatically acquires the backend session grant after the saved setting enables the type. No separate unlock/lock UI is exposed. Persistent preferences do not themselves replace the process-local revocable grant. Ordinary queries, stats, tasks, provider snapshots and Inspector exclude adult records even while unlocked. Dedicated adult search/detail/merge/browse/output/batch commands require the grant and recheck it after asynchronous reads and before write commits/publication. Lock cancels in-flight adult requests, including requests tied to completed runs; invalidates unfinished output intents durably; and releases revoked platform leases. Adult roots cannot overlap ordinary roots through product root management. Adult cache directories and frontend query keys are separate. Credentials remain Settings→keyring/session references, never UI-editable opaque authority. See [adult contract](phase-5-contract.md).
 
 ## Phase 7 local consumption and review tools
 
-Library consumption and tools have separate query scopes. Consumption requires backend evidence from explicit typed metadata confirmation or explicitly imported, parsed local metadata, and an authorized playable local file association. P2 filename inference is insufficient; remote Music editions without linked local tracks remain in tools. SQL applies completion and privacy predicates before pagination; tool cursors and consumption cursors cannot be interchanged. Movie/TV/Anime/adult cards and details request the current OS file association through an ID-only typed backend command. Multiple versions/Parts require file selection. There is no embedded player, transcoder, FFmpeg runtime or media server.
+Library consumption and tools have separate query scopes. Consumption requires an authorized playable local file association; metadata completion is an independent health state, not a visibility gate. Remote Music editions without linked local tracks remain in tools. SQL applies local availability and privacy predicates before pagination; tool cursors and consumption cursors cannot be interchanged. Poster cards navigate to details; an explicit action requests the current OS file association through an ID-only typed backend command. Multiple versions/Parts require file selection. There is no embedded player, transcoder, FFmpeg runtime or media server.
 
 `organization` owns immutable source/target/attachment snapshots, streaming byte hashes, no-follow capabilities, no-clobber filesystem publication, per-stage persistent intent/completion logs and separately confirmed rollback. Filesystem changes and SQLite commits cannot be atomic together; retained owned staging/quarantine bytes and journal identity provide explicit recovery evidence. Startup only marks interrupted work. The ordinary/adult channels remain separate; revoked adult previews cannot be revived by unlocking.
 
-`watcher` uses maintained native `notify` handles, durable opt-in settings, bounded event queues, debounce and coalescing. It feeds the existing read-only scan candidate pipeline; no event imports metadata or moves files. Process lifetime and persisted configuration are distinct. `health` performs bounded read-only maintenance review and navigates to explicit tool workflows. App-private quarantine/backup names are excluded without changing the existing user hidden/Git/exclusion semantics.
+`watcher` uses maintained native `notify` handles, durable opt-in settings, bounded event queues, debounce and coalescing. For explicitly opted-in ordinary directories it feeds the existing backend automatic update pipeline; source files remain read-only and no event authorizes sidecar output or file organization. Process lifetime and persisted configuration are distinct. `health` performs bounded read-only maintenance review and navigates to explicit tool workflows. App-private quarantine/backup names are excluded without changing the existing user hidden/Git/exclusion semantics.

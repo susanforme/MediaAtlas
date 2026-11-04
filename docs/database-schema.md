@@ -1,10 +1,10 @@
-# Phase 1 SQLite Schema
+# SQLite Schema 与追加迁移
 
-状态：P1 公共存储契约 v1，迁移实施前冻结。领域定义见 [domain-model.md](domain-model.md)，接口约定见 [phase-1-contract.md](phase-1-contract.md)。
+本文记录公共表与已追加的持久化边界；完整实际 schema 以 `crates/infrastructure/migrations/` 的追加迁移为准。领域定义见 [domain-model.md](domain-model.md)，接口约定见 [phase-1-contract.md](phase-1-contract.md)。
 
 ## 连接与迁移
 
-- SQLx + SQLite；所有 Repository 连接开启 foreign_keys、WAL 和 busy_timeout。数据库写入位于用户明确给定的本地路径；P1 不接入 Tauri 应用启动，不在打开 UI 时擅自创建媒体库。
+- SQLx + SQLite；所有 Repository 连接开启 foreign_keys、WAL 和 busy_timeout。桌面宿主在应用数据目录打开数据库并完成迁移；媒体盘访问只在用户配置的 Root 和相应权限范围内发生。
 - UUID 存为规范字符串；UTC 时间存为 Unix 毫秒整数。日期字段在后续类型表实施时使用 `YYYY-MM-DD`。JSON 存为 TEXT 并通过 SQLite JSON 校验。
 - 存储时间精度明确为毫秒：写入丢弃不足一毫秒的精度，读取返回该毫秒对应的 UTC 时间。调用方不能用写入前的纳秒时间构造下一页游标，必须使用 Repository 返回的持久化值；负 Unix 时间按统一时间戳转换处理。
 - 文件数据库测试验证 WAL；内存数据库不强求 WAL，因为 SQLite 内存模式不支持 WAL。
@@ -28,7 +28,7 @@ ExternalId 不跨作品全局唯一：一个远端实体可能关联不同本地
 
 元数据 locale 的 None 规范化为空串，非空键按领域规则转为 ASCII 小写并拒绝歧义空格；`en-US` 与 `en-us` 不得绕过同一字段保护。不允许多个 NULL 绕过唯一约束。锁定和人工标记为 0/1；confidence 必须有限且在 0..1。Provider 更新必须在与保护条件一致的原子写入中检查现值，不采取先查后无条件覆盖的竞态流程。
 
-P1 不实现所有 Person/Organization/Credit 的业务 Repository，也不预建全部电影/JAV/音乐扩展表。类型结构在领域中完成；对应业务阶段通过新迁移追加存储，避免有表无行为的空模块。
+公共身份表与类型专属业务分层，影视、成人和音乐的新增存储通过后续迁移追加，不把类型差异塞进万能元数据表。
 
 ## 任务基础表
 
@@ -50,7 +50,7 @@ P1 不实现所有 Person/Organization/Credit 的业务 Repository，也不预�
 - Root 过滤使用 EXISTS，避免同一作品在同 Root 有多个文件时被 JOIN 重复返回。kind/query/root 与游标条件同时生效。
 - 每页 limit 为 1..=200；多取一项判断是否有下一页；next_cursor 以最后一项产生，不能把额外探测项当成下一页已读取内容。
 - query 对 title/original_title 做参数化文本搜索；包含 `%`/`_` 时必须明确转义，不能把输入拼接为 SQL。
-- P1 不实现 P2 的 Facets、健康统计和 UI 查询，不承诺并发写入期间的跨页快照一致性；游标由调用方在同一过滤条件下使用。
+- 浏览服务另提供 Facets、健康状态和多种服务端排序。不承诺并发写入期间的跨页快照一致性；过滤条件变化时复位游标，不能混用工具和媒体库的游标。
 
 ## 关键验收
 
@@ -72,7 +72,7 @@ Migrations `0006_media_output.sql`, `0007_scraper_workflow.sql`, `0008_provider_
 
 Append-only migrations `0013_music.sql` and `0014_music_tags.sql` add real independent Music entities, Medium/Track/Recording relationships, ordered credits/aliases, typed identifiers and one-active-Track-per-local-file links. Releases retain source, locale, partial date text and disambiguation. `metadata_values` records per-entity field provenance and protection. Import acquires a writer reservation and remains atomic; concrete Release MBID uniqueness prevents accidental cross-edition ownership.
 
-`music_tag_operations` stores immutable plan JSON, original bytes, intended tagged bytes, operation kind/original restoration relation and persistent result state. A trigger prevents changing the snapshot/payload. Ordinary authority is rechecked inside the mutation transaction; success updates the scanned size/mtime so subsequent native Open consumes the new confirmed audio. Recovery records interruption only and requires an explicit new Preview. Full byte snapshots intentionally impose a 256 MiB single-source limit; no automatic backup deletion or destructive replay occurs. See [P6 acceptance](acceptance/phase-6.md).
+`music_tag_operations` stores immutable plan JSON, original bytes, intended tagged bytes, operation kind/original restoration relation and persistent result state. A trigger prevents changing the snapshot/payload. Ordinary authority is rechecked inside the mutation transaction; success updates the scanned size/mtime so subsequent native Open consumes the new confirmed audio. Recovery records interruption only and requires an explicit new Preview. Full byte snapshots intentionally impose a 256 MiB single-source limit; no automatic backup deletion or destructive replay occurs. See [Music contract](phase-6-contract.md).
 
 ## Phase 7 appended review state
 

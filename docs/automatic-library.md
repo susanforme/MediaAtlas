@@ -49,7 +49,7 @@
 - Tauri `.setup` 原先等待旧 NFO 文件检查和目录监听恢复。两者移到后台，慢媒体盘不再是该阶段结束的前置条件。数据库打开、迁移、恢复及必要服务初始化仍保留先后约束。
 - 日志记录固定启动阶段名、耗时和成功状态，便于实机区分服务初始化、旧资料检查和监听恢复，不记录用户路径、Token 或原始错误。
 
-生产前端测量与原生启动是两种证据。Chromium 的资源字节、首次绘制和页面可见时间不能替代 Windows WebView2、macOS WKWebView 或 Linux WebKit 的实机冷启动；最终实测记录见 [screenshots/README.md](../screenshots/README.md)。
+生产前端测量与原生启动是两种证据。Chromium 的资源字节、首次绘制和页面可见时间不能替代 Windows WebView2、macOS WKWebView 或 Linux WebKit 的实机冷启动；当前界面证据见 [screenshots/README.md](../screenshots/README.md)；首屏性能须基于当前生产构建另行测量，不延用已移除的旧启动截图或历史数值。
 
 ## 验收重点
 

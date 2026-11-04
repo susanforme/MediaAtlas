@@ -16,7 +16,7 @@ from playwright.sync_api import sync_playwright, expect
 
 
 ROOT = Path(__file__).resolve().parents[1]
-OUT = Path(os.environ.get("MEDIAATLAS_QA_OUTPUT_DIR", ROOT / "screenshots"))
+OUT = Path(os.environ.get("MEDIAATLAS_QA_OUTPUT_DIR", ROOT / "work/qa/desktop-ui-qa"))
 OUT.mkdir(parents=True, exist_ok=True)
 URL = os.environ.get("MEDIAATLAS_QA_URL", "http://localhost:1420")
 

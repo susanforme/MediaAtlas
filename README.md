@@ -2,16 +2,18 @@
 
 Windows 优先、兼容 macOS/Linux 的本地媒体管理桌面应用。采用 Tauri 2、React、TypeScript 和 Rust，复用系统 WebView，不捆绑 Chromium：Windows 使用系统 WebView2（安装器可下载官方 bootstrapper），macOS 使用系统 WKWebView，Linux deb 依赖系统 WebKitGTK/GTK。
 
-最新发布 tag 为 **0.1.0-beta.3**，只包含 Windows 安装包提取修复与版本更新；以下自动媒体库与统一分类改动在 main，未纳入该 tag。Phase 8 发布与维护增加完整数据库 Preview/确认备份、下次启动独占恢复、安全诊断与缓存清理。维护说明见 [数据维护与升级](docs/maintenance.md)，原生包状态见 [发布矩阵](docs/release-matrix.md)。已实现的文件整理与高级媒体库：独立工具区提供命名模板、Preserve / Move / Copy / Hardlink、关联附件、不可变 Preview、明确确认、逐步日志及独立回滚预览；原始字节保留在隔离目录，启动仅标记 Interrupted。Watcher 按 Root 显式开启，普通目录复用后台自动更新；健康检测提供有界检查与工具入口。Movie/TV/Anime、成人和 Music 媒体库只读浏览本地资源，尚未补全资料也可见，点击资源请求系统关联应用打开，多版本/Part 明确选择。没有本地文件的远端音乐版本保留在工具区。Provider 默认禁用，实时站点、系统默认应用与 Windows/macOS 原生运行仍 pending；当前不是已通过全平台验收的发布版本。
+main 默认进入媒体库海报墙：添加目录后后台扫描、建立本地索引并补全可靠匹配的资料，缺资料时仍可浏览。海报进入详情，系统应用打开是明确操作，多版本/Part 需要选择。来源未配置、歧义和失败通过实际状态处理；磁盘旁车、标签与组织操作仍独立预览和确认。流程基准见 [Emby 与成熟刮削工具流程](docs/emby-scraper-workflow.md)及[自动媒体库](docs/automatic-library.md)。
 
-在 **Settings → Provider 认证** 手动保存 TMDB v4 Bearer/v3 API Key；启用成人资源类型后可设置 FANZA/DMM 的 API ID + affiliate ID。默认系统密钥服务，不可用明确失败；可显式选择退出即失效的会话存储，秘密从不回显或进入 DB/日志/localStorage。保存认证与启用来源分开。AniList、Wikipedia 和 Wikidata 使用公共读取访问。
+在“设置 → 数据来源”手动保存认证并明确启用来源。TMDB 支持 v4 Bearer / v3 API Key；FANZA/DMM 使用 API ID + affiliate ID。默认使用系统密钥服务；也可显式选择退出即失效的会话存储。秘密不回显、不写入数据库/日志/localStorage，不从运行环境自动配置。保存凭据、启用来源与更新媒体库是独立动作。
 
-成人资源类型默认关闭，可在 Settings 保存“启用成人资源类型”，之后在统一媒体界面选择该类型。偏好重启后保留，应用自动建立后台会话授权，不需要额外解锁；前端复用浏览、详情与工具。普通“全部”列表、首页、统计、查询、任务及 Network Inspector 排除成人数据。UI 支持 `zh-CN` / `en-US`，网页预览需要桌面后端。
+成人资源类型默认关闭，启用后复用统一浏览、详情与工具，应用建立后台会话授权，无额外解锁页面。普通“全部”、统计、查询与任务保持隔离，关闭开关会取消并清理私有查询。支持 `zh-CN` / `en-US`；没有桌面后端的网页预览只展示真实能力限制。
+
+最新发布 tag 为 **v0.1.0-beta.3**；main 的后续功能不等于该 tag 已发布。安装包、许可材料、平台验收与待验证项见 [发布矩阵](docs/release-matrix.md)，备份、恢复和手动升级见 [维护说明](docs/maintenance.md)。当前本地/浏览器检查不能替代各平台安装、系统关联打开、keyring 或实时 Provider 验收。
 
 ## 开发环境
 
 - Node.js 24 LTS（前端最低 22.12）。
-- **pnpm 12.17.0**：本轮查询到的最新稳定 12.x，固定在 `package.json`；CI 读取同一版本。升级后同步锁文件。
+- **pnpm 12.17.0**：固定在 `package.json`；CI 读取同一版本。升级后同步锁文件。
 - Rust **1.90.0**，由 `rust-toolchain.toml` 固定，含 rustfmt 和 clippy。
 - [Tauri 2 平台前置依赖](https://v2.tauri.app/start/prerequisites/)：Windows 需要 MSVC C++ Build Tools 和 WebView2；macOS 需要 Xcode Command Line Tools。
 - Ubuntu/Debian 还需 GTK/WebKit 开发包，例如：
@@ -39,7 +41,7 @@ pnpm build           # 前端生产构建
 pnpm build:desktop   # 本平台桌面可执行文件，不生成安装包、不发布
 ```
 
-桌面启动后添加媒体目录，通过系统文件夹选择器选择目录及类型。目录自动在后台扫描、建立索引并补全可靠匹配的资料，本地媒体先显示，无需手动“入库”；只需处理未识别或失败项目。媒体仍由系统关联应用打开，源文件保持只读。诊断页提供数据库备份/恢复与缓存维护；网页模式无法调用后端，不伪造媒体记录。完整行为见 [自动媒体库](docs/automatic-library.md)。
+桌面启动后添加媒体目录，通过系统文件夹选择器选择目录及类型。目录自动在后台扫描、建立索引并补全可靠匹配的资料，本地媒体先显示，无需手动“入库”；只需处理未识别或失败项目。媒体仍由系统关联应用打开，源文件保持只读。“设置 → 诊断与维护”提供数据库备份/恢复与缓存维护；网页模式无法调用后端，不伪造媒体记录。完整行为见 [自动媒体库](docs/automatic-library.md)。
 
 默认使用本机应用数据目录中的 `library.sqlite`；扫描阶段只读；视频输出仅在用户明确确认后创建 NFO/海报 sidecar，已有文件保持原样。P6 音频标签修改和恢复各自要求 Preview 与明确确认，备份原字节保留，外部改动或来源关联变化时拒绝旧计划。海报使用本地缓存缩略图，远程图片由受控后端获取。成人资源使用统一前端及独立后台授权，关闭开关会清除相关查询缓存。语言选择持久化，默认 `zh-CN`，缺失翻译回退 `en-US`。
 
@@ -67,17 +69,17 @@ cargo test --workspace --locked
 - main 的 Windows 便携 ZIP 只包含 `MediaAtlas.exe`，运行依赖系统已安装的 WebView2。第三方许可全文嵌入 EXE，可用 `MediaAtlas.exe --export-licenses <新目录>` 导出；Release 仍单独提供 `license-materials.zip`。此包装调整未纳入既有 beta.3 tag。
 - tag 名称不会自动修改应用版本，发布前需同步 Cargo workspace、Tauri 和前端包的版本。本 beta 未接入发行签名、Apple 公证或自动更新，请按手动更新说明操作；CI 包验证不替代交互式安装/卸载、实机播放、OS keyring 或实时 Provider 验收。
 
-工作流配置及静态检查不等于远端 CI/安装包已验证；Phase 0 平台启动待验收项仍保留在记录中。
+工作流配置及静态检查不等于远端 CI、可下载安装包或平台交互已验证，实际状态以发布矩阵为准。
 
-## Phase 1 本地存储示例
+## 本地存储示例
 
 ```bash
 cargo run -p mediaatlas-infrastructure --example library_roundtrip --locked
 ```
 
-该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。P2 桌面启动会打开应用自身的 SQLite，但不会自动扫描用户媒体目录。
+该示例只在临时目录创建 Fixture SQLite，验证 Root/媒体/文件索引、按 Root 分页、人工字段保护及关闭重开；不会扫描、移动或写入真实媒体。桌面启动打开应用自身 SQLite；只处理用户明确添加、启用的媒体目录。
 
-Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体在线业务按阶段追加。P2 支持目录扫描任务的后台执行、取消和遗留任务标记 Interrupted；等待确认的候选保留，运行中任务不会自动重放。P4 已提供普通视频在线适配与本地 Mock 全闭环；P6 已提供独立音乐图谱与可恢复音频标签修改；P7 已提供显式组织/回滚预览和 opt-in Watcher，完整限制见阶段验收。Windows 输出使用限时源文件/目录句柄，重启或预览过期后需要重新生成预览，实际 Windows 运行仍待验收。
+文件组织支持 Preserve / Move / Copy / Hardlink、关联附件、执行日志及独立回滚预览；保留原始恢复字节，中断后不自动重放文件修改。目录监听按用户显式开启的范围工作。音乐保留独立图谱、标签写入和恢复边界。
 
 ## 目录与契约
 
@@ -85,46 +87,23 @@ Movie/TV/Anime/JAV/Music 类型扩展已完成独立结构及序列化，具体�
 apps/desktop/src/             React、路由、i18n、typed IPC
 apps/desktop/src-tauri/       Tauri 宿主、窗口、command/event、最小权限
 crates/domain/               公共实体、独立媒体模型、路径与元数据验证
-crates/application/          应用信息用例
+crates/application/          应用用例、端口与版本化传输模型
 crates/desktop-bridge/       不依赖 Tauri 的 DTO 和错误协议
-crates/infrastructure/       结构化日志、SQLite Repository、追加迁移
+crates/infrastructure/       SQLite、网络、扫描/输出服务及追加迁移
 crates/media-scanner/        只读遍历、分类型文件名解析、本地 NFO/音频标签
-docs/                        基线、架构决策、任务与验收
+docs/                        当前流程、架构决策、接口契约、维护与发布
 ```
 
 P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{schema_version:1,data:T}`。任务事件用于刷新提示，持久化查询和轮询为权威来源，UI 不依赖事件必达。完整契约见 [Phase 2 接口](docs/phase-2-contract.md)。前端不访问刮削站点。
 
 日志写入 Tauri `app_log_dir`，每日滚动、最多保留 7 份，并向 stderr 输出 JSON。P0 日志只记录固定启动信息，不接收用户 payload；网络和文件业务的脱敏在对应阶段落实。
 
-- [原始实施基线](docs/UNIVERSAL_MEDIA_SCRAPER_AGENT_PLAN.md)
-- [阶段任务](docs/agent-plan.md)
-- [架构与 IPC](docs/architecture.md)
-- [初始仓库审计](docs/repo-audit.md)
-- [Phase 0 验收记录](docs/acceptance/phase-0.md)
-- [领域模型](docs/domain-model.md)
-- [数据库 Schema](docs/database-schema.md)
-- [Phase 1 验收记录](docs/acceptance/phase-1.md)
-- [扫描工作流](docs/library-workflow.md)
-- [社区刮削实践与后续优化](docs/community-scraper-best-practices.md)
-- [自动媒体库与首屏加载](docs/automatic-library.md)
-- [Emby 与成熟刮削工具流程改进](docs/emby-scraper-workflow.md)
-- [界面规范](docs/ui-spec.md)
-- [Phase 2 验收记录](docs/acceptance/phase-2.md)
+当前文档见 [docs/README.md](docs/README.md)，视觉与开发规范见根 [design.md](design.md)和两级 `AGENTS.md`。旧实施计划、阶段成绩和旧 UI 走查已移除，不作为当前行为或本轮验收依据。
 
-本会话按用户授权逐阶段实施、验收并以 Codex 身份提交/推送 P3→P4→P5→视频 MVP→P6→P7→P8；未验收项保留 pending；用户最新授权在 P7/P8 完成必要检查后创建 beta tag，并由并行 CI 生成支持平台的 Release 可用包，P7 不提前发布。
+## 验证与截图
 
-## Provider 开发与验收
+本轮验证重新运行适用的前端、Rust、IPC 和发布检查。实际浏览器截图、源码和数据模式见 [screenshots/README.md](screenshots/README.md)。浏览器合成 IPC 验证界面与交互，不证明真实系统目录窗口、keyring、在线来源或媒体写入已通过。
 
-在桌面 Providers 页显式启用 Offline Fixture 后运行；Task Center 与 Network Inspector 可查看持久化任务和脱敏记录。Fixture 不联网、不写媒体；P4/P5已接入真实请求代码，live授权与可用性独立验收。网络引擎和Adapter可脱离Tauri测试，常规CI仅依赖Mock HTTP和Fixtures。详见 [Provider契约](docs/provider-contract.md) 与 [Phase 3验收](docs/acceptance/phase-3.md)。
+## 许可与分发
 
-P4 契约与边界：[phase-4-contract](docs/phase-4-contract.md)、[Provider 访问条件](docs/provider-access.md)、[安全输出](docs/media-output.md)、[阶段验收](docs/acceptance/phase-4.md)。系统密钥服务真实读写、实时授权及原生/跨平台 GUI 验收不由 Mock 测试替代。
-
-P5 契约与边界：[phase-5-contract](docs/phase-5-contract.md)、[P5/视频 MVP 验收](docs/acceptance/phase-5.md)。成人通道的 Preview/Confirm/批量取消不放宽普通输出隔离，测试只操作临时合成媒体。
-
-P6 契约与验证：[Music 契约](docs/phase-6-contract.md)、[P6 验收](docs/acceptance/phase-6.md)。音乐 Library 仅供浏览与系统应用打开；刮削、标签编辑和恢复在独立工具区。P7 已将影视/成人的刮削、导出、批量写入和整理迁入独立工具区。
-
-P7 契约与验证：[组织与消费契约](docs/phase-7-contract.md)、[P7 验收](docs/acceptance/phase-7.md)。原生打开仅返回已提交系统请求，不内置播放器、转码或媒体服务。
-
-项目源码许可尚未指定，见 [LICENSE-STATUS.md](LICENSE-STATUS.md)；第三方许可与完整原文见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 和随安装包附带的清单。开发夹具使用的 FFmpeg/ffprobe 不作为运行依赖或随包分发。
-
-应用截图见 [screenshots/README.md](screenshots/README.md)：5 张真实 Linux 原生截图及 5 张明确使用合成 Mock IPC 的浏览器截图，涵盖媒体库、工具、音乐、设置和备份维护；模式、候选源码与验收边界逐项说明。
+项目源码许可状态见 [LICENSE-STATUS.md](LICENSE-STATUS.md)。第三方许可说明、完整清单与原文/必要源包分别保存在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[dependency-licenses.json](docs/dependency-licenses.json)及 `docs/third-party-licenses/`。这些材料是构建和发布输入，必须随分发包保留，不能作为旧文档或缓存清理。

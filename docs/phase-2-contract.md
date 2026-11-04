@@ -1,8 +1,8 @@
-# Phase 2 共享接口冻结记录
+# 媒体库与扫描 IPC 契约
 
-状态：P2 v1。主代理确认后供 UI、扫描、存储和 IPC 并行实现。模型与 JSON 形状定义在 `crates/application/src/library.rs`，扫描内部契约在 `crates/media-scanner`；不允许各层另造同名不同字段的结构。
+此处保留浏览与扫描的版本化基础契约，后续字段和服务以实际类型及追加迁移为准。模型与 JSON 形状定义在 `crates/application/src/library.rs`，扫描内部契约在 `crates/media-scanner`；不允许各层另造同名不同字段的结构。
 
-本阶段工作流见 [library-workflow.md](library-workflow.md)，界面和语言范围见 [ui-spec.md](ui-spec.md)。P0/P1 平台待验收事实保留；本轮用户明确授权启动 P2，不将顺序例外伪装成已有平台验收通过。
+当前默认流程见 [自动媒体库](automatic-library.md)，界面范围见根 [design.md](../design.md)。`scan_start` / `scan_confirm` 保留用于旧任务兼容；默认目录操作使用 `library_sync`，不要求手动确认入库。
 
 ## JSON 与错误协议
 
@@ -120,7 +120,7 @@ ConfirmInput 每次最多 200 个不重复、属于指定任务的候选 ID。�
 
 ## Scanner 内部 API
 
-扫描器为独立 crate，不依赖 Tauri、SQLite 或前端。主代理和 scanner 实现者确认以下接口：
+扫描器为独立 crate，不依赖 Tauri、SQLite 或前端。基础接口如下：
 
 ```text
 run_scan(

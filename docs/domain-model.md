@@ -1,8 +1,6 @@
 # Phase 1 领域模型
 
-状态：P1 共享契约 v1，先于实现冻结。基线：[执行计划第 5 节](UNIVERSAL_MEDIA_SCRAPER_AGENT_PLAN.md)。存储映射见 [database-schema.md](database-schema.md)，精确接口约定见 [phase-1-contract.md](phase-1-contract.md)。
-
-用户本轮明确要求开始 Phase 1。P0 的平台启动和远端 CI 仍待验收，本次属于用户授权的阶段顺序例外；不把这些待验证项目改写为通过。
+公共模型与身份契约。存储映射见 [database-schema.md](database-schema.md)，接口约定见 [phase-1-contract.md](phase-1-contract.md)，当前流程见 [自动媒体库](automatic-library.md)。
 
 ## 表示与依赖
 
@@ -11,7 +9,7 @@
 - 领域实体支持 serde，字段名及枚举值使用稳定 `snake_case`。领域不依赖 SQLx、SQLite、Tauri 或 HTTP。
 - 核心模型在 `mediaatlas_domain` 根重导出。模块拆分只是代码组织，不改变公共名称。
 - `MediaKind` 保留基线全部变体：Movie、TvSeries、TvSeason、TvEpisode、Anime、AdultVideo、MusicArtist、MusicReleaseGroup、MusicRelease、MusicTrack、MusicRecording、MusicVideo、Concert。没有 Game/Book 等业务空壳。
-- P1 只实现各类型数据结构/序列化，以及公共媒体索引的 Repository；不实现采集、匹配、合并、标签写入或媒体文件操作。
+- 领域层定义各类型结构及校验，不执行 HTTP、SQLite 或文件写入；完整流程由应用服务和基础设施组合。
 
 ## 公共实体
 
@@ -53,7 +51,7 @@
 - `confidence` 若存在必须是有限数并落在 0..=1；不得持久化 NaN、Infinity 或超范围值。
 - 用户写入和 Provider 写入必须使用显式不同模式。Provider 更新遇到当前 `is_locked` 或 `is_user_modified` 时返回受保护结果，不能默默覆盖。
 - 人工编辑具有最高优先级；用户可以显式修改自己锁定的值和锁定状态。Provider 来源不能把自身字段冒充成人工修改。
-- P1 只保证上述持久化与写入保护，不提前实现 P4 的跨 Provider 优先级、候选比较和完整 Merge Preview。
+- 持久化层保证上述写入保护；候选比较、来源优先级和 Merge Preview 由独立刮削服务承担。
 - 文本字段选择与图片选择独立。多语言字段使用不同 locale，保存一门语言不覆盖其他语言。
 
 ## 类型扩展模型

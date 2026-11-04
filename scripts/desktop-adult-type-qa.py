@@ -13,7 +13,7 @@ from playwright.sync_api import expect, sync_playwright
 
 ROOT = Path(__file__).resolve().parents[1]
 support = runpy.run_path(str(ROOT / "scripts/desktop-ui-qa.py"))
-OUT = Path(os.environ.get("MEDIAATLAS_QA_OUTPUT_DIR", ROOT / "screenshots"))
+OUT = Path(os.environ.get("MEDIAATLAS_QA_OUTPUT_DIR", ROOT / "work/qa/desktop-adult-type-qa"))
 URL = support["URL"]
 
 PRIVATE_ADAPTER = r"""
