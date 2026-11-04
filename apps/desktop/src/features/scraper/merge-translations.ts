@@ -1,0 +1,78 @@
+import i18n from "../../i18n";
+
+const resources = {
+  "zh-CN": {
+    mergeTitle: "合并媒体元数据",
+    mergeDone: "完成",
+    mergeChanged: "本地资料已变化，请刷新预览后重新核对。",
+    mergeRefresh: "刷新预览",
+    mergeDescription: "选择来源字段，实时预览合并结果。",
+    mergeSources: "数据源",
+    mergeBase: "本地媒体 · 保留为基础",
+    mergeSupplement: "合并来源 · 补充所选字段",
+    mergeSourceDetails: "来源详情",
+    mergeFields: "合并字段",
+    mergeMoreFields: "更多字段（{{count}} 项）",
+    mergeOptions: "合并选项",
+    mergeOnlyMissing: "仅合并空缺字段和图片",
+    mergeLivePreview: "实时预览",
+    mergePreviewMode: "预览模式",
+    mergeAfter: "合并后",
+    mergeCompare: "对比",
+    mergeChanges: "合并变更明细",
+    mergeResult: "结果",
+    mergeResult_added: "新增",
+    mergeResult_overwritten: "覆盖",
+    mergeResult_unchanged: "无变化",
+    mergeResult_skipped: "跳过",
+    mergeSummary:
+      "将应用 {{count}} 处变更（新增 {{added}}，覆盖 {{overwritten}}，图片 {{artwork}}，跳过 {{skipped}}）",
+    mergeConfirm: "确认合并（{{count}} 处变更）",
+    mergeValidating: "正在校验当前选择…",
+    mergeNoChanges: "当前选择没有变更。",
+    mergePosterNotLoaded: "所选海报尚未加载，请预览图片。",
+  },
+  "en-US": {
+    mergeTitle: "Merge media metadata",
+    mergeDone: "Done",
+    mergeChanged:
+      "Local metadata has changed. Refresh the preview and review it again.",
+    mergeRefresh: "Refresh preview",
+    mergeDescription:
+      "Select source fields and preview the merged result live.",
+    mergeSources: "Sources",
+    mergeBase: "Local media · Keep as base",
+    mergeSupplement: "Merge source · Supplement selected fields",
+    mergeSourceDetails: "Source details",
+    mergeFields: "Merge fields",
+    mergeMoreFields: "More fields ({{count}})",
+    mergeOptions: "Merge options",
+    mergeOnlyMissing: "Only fill missing fields and artwork",
+    mergeLivePreview: "Live preview",
+    mergePreviewMode: "Preview mode",
+    mergeAfter: "Merged",
+    mergeCompare: "Compare",
+    mergeChanges: "Merge changes",
+    mergeResult: "Result",
+    mergeResult_added: "Added",
+    mergeResult_overwritten: "Replaced",
+    mergeResult_unchanged: "Unchanged",
+    mergeResult_skipped: "Skipped",
+    mergeSummary:
+      "{{count}} changes ({{added}} added, {{overwritten}} replaced, {{artwork}} artwork, {{skipped}} skipped)",
+    mergeConfirm: "Confirm merge ({{count}} changes)",
+    mergeValidating: "Validating current selection…",
+    mergeNoChanges: "No changes in the current selection.",
+    mergePosterNotLoaded:
+      "Selected poster is not loaded. Preview the image to view it.",
+  },
+} as const;
+
+for (const language of ["zh-CN", "en-US"] as const)
+  i18n.addResourceBundle(
+    language,
+    "translation",
+    resources[language],
+    true,
+    true,
+  );

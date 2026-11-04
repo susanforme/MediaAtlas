@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持原有前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 仍使用 `--no-bundle`。当前发布 tag 为 `v0.1.0-beta.3`，固定在 `67782a25b6594050dc57014199bc7eaec7f3def3`，仅包含此前 Windows NSIS 提取修复及版本递增；[对应发布构建](https://github.com/susanforme/MediaAtlas/actions/runs/41650428810)的实际结果决定其产物状态。beta.1、beta.2 保留不移动。下述单 EXE 便携 ZIP 改动属于后续 main，等待下一次发布，不属于已有 beta.3 产物。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.4`，包含 main 的流程优化、持久核对队列、shadcn 状态展示、双栏实时合并预览、Windows 测试修复与单 EXE 便携 ZIP。版本检查和当前实现验证完成后创建新 tag；不等待原生打包，不以历史 beta 的测试成绩宣称新包通过。既有 beta.1、beta.2、beta.3 保持不动；beta.3 仍指向 `67782a25b6594050dc57014199bc7eaec7f3def3`。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |
@@ -73,7 +73,7 @@ $p.ExitCode
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 actionlint .github/workflows/release.yml
-python3 scripts/release/release.py preflight --tag v0.1.0-beta.3
+python3 scripts/release/release.py preflight --tag v0.1.0-beta.4
 ```
 
 首次准备时 24 个 verifier 测试与 actionlint 1.7.12 已在本地通过，合并 Tauri release 配置通过官方 JSON schema 验证；preflight 需 P8 的版本统一及真实许可文件齐全。模拟 fixture 测试验证发布校验器的拒绝路径和完整汇总，不把 fixture 当作 MediaAtlas 安装包通过证据。

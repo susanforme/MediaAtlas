@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -145,7 +146,17 @@ beforeEach(async () => {
   vi.mocked(scraperApi.search).mockResolvedValue(syntheticSearch);
   vi.mocked(scraperApi.searchPreview).mockResolvedValue(syntheticSearch);
   vi.mocked(scraperApi.detail).mockResolvedValue(syntheticMetadata);
-  vi.mocked(scraperApi.preview).mockResolvedValue(syntheticMerge);
+  vi.mocked(scraperApi.preview).mockImplementation(async (request) => ({
+    ...syntheticMerge,
+    media_item_id: request.media_item_id,
+    fields: syntheticMerge.fields.map((field) => ({
+      ...field,
+      selected: request.selected_fields.includes(field.key) && !field.protected,
+    })),
+    artwork: request.selected_artwork.map(
+      (index) => syntheticMetadata.data.artwork[index],
+    ),
+  }));
   vi.mocked(scraperApi.confirm).mockResolvedValue({
     schema_version: 1,
     preview_id: "merge-1",
@@ -185,6 +196,17 @@ beforeEach(async () => {
     next_cursor: null,
   });
 });
+async function waitForMergeReady() {
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: /^Confirm merge/ }),
+    ).toBeEnabled(),
+  );
+}
+async function confirmMerge() {
+  await waitForMergeReady();
+  fireEvent.click(screen.getByRole("button", { name: /^Confirm merge/ }));
+}
 async function searchAndChoose() {
   const view = show();
   await screen.findByText("Local film · 2024");
@@ -206,7 +228,7 @@ async function searchAndChoose() {
   fireEvent.click(
     screen.getByRole("button", { name: "Choose this candidate" }),
   );
-  await screen.findByText("Selected metadata: Synthetic film");
+  await screen.findByRole("region", { name: "Merge media metadata" });
   return view;
 }
 it("keeps search, explicit candidate selection, protected merge and sidecar execution separate", async () => {
@@ -215,9 +237,12 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
   expect(scraperApi.artworkPreview).not.toHaveBeenCalled();
   expect(screen.queryByRole("img")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  await screen.findByText("Protected: locked or manually edited");
-  expect(screen.getByText("My manual title")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByRole("checkbox", { name: /^Title/ })).toBeDisabled(),
+  );
+  expect(
+    within(screen.getByRole("table")).getAllByText("My manual title").length,
+  ).toBeGreaterThan(0);
   expect(scraperApi.preview).toHaveBeenCalledWith({
     run_id: "run-1",
     candidate_index: 0,
@@ -225,9 +250,7 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
     selected_fields: ["title", "overview"],
     selected_artwork: [],
   });
-  fireEvent.click(
-    screen.getByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   await screen.findByText("Metadata confirmed. 1 fields applied.");
   expect(scraperApi.confirm).toHaveBeenCalledWith("merge-1");
   expect(scraperOutputApi.preview).not.toHaveBeenCalled();
@@ -250,7 +273,6 @@ it("loads only an explicitly requested validated thumbnail without changing artw
   fireEvent.click(screen.getByRole("button", { name: "Preview image" }));
   await screen.findByRole("img", { name: "poster preview" });
   expect(scraperApi.artworkPreview).toHaveBeenCalledWith("run-1", 0, 0);
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
   await waitFor(() =>
     expect(scraperApi.preview).toHaveBeenCalledWith(
       expect.objectContaining({ selected_artwork: [] }),
@@ -311,11 +333,10 @@ it("does not confirm a preview containing only protected fields", async () => {
     fields: [syntheticMerge.fields[0]],
   });
   await searchAndChoose();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  await screen.findByText("Protected: locked or manually edited");
-  expect(
-    screen.getByRole("button", { name: "Confirm selected metadata" }),
-  ).toBeDisabled();
+  await waitFor(() =>
+    expect(screen.getByRole("checkbox", { name: /^Title/ })).toBeDisabled(),
+  );
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
   expect(scraperApi.confirm).not.toHaveBeenCalled();
 });
 it("renders TV seasons with their explicit aired numbering", async () => {
@@ -453,16 +474,15 @@ it("restores saved candidates without issuing a new provider search", async () =
   fireEvent.click(
     screen.getByRole("button", { name: "Choose this candidate" }),
   );
-  await screen.findByText("Selected metadata: Synthetic film");
+  await screen.findByRole("region", { name: "Merge media metadata" });
   expect(scraperApi.detail).toHaveBeenCalledWith("run-1", 0);
 });
 it("discards an abandoned output preview on component unmount without executing it", async () => {
   const view = await searchAndChoose();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  await screen.findByText("Protected: locked or manually edited");
-  fireEvent.click(
-    screen.getByRole("button", { name: "Confirm selected metadata" }),
+  await waitFor(() =>
+    expect(screen.getByRole("checkbox", { name: /^Title/ })).toBeDisabled(),
   );
+  await confirmMerge();
   await screen.findByText("Metadata confirmed. 1 fields applied.");
   fireEvent.click(
     screen.getByRole("button", { name: "Preview NFO and poster output" }),
@@ -516,19 +536,16 @@ it("ignores a late candidate detail after switching the actual local target", as
     finish(syntheticMetadata);
   });
   expect(
-    screen.queryByText("Selected metadata: Synthetic film"),
+    screen.queryByRole("region", { name: "Merge media metadata" }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "Preview merge" }),
+    screen.queryByRole("button", { name: /^Confirm merge/ }),
   ).not.toBeInTheDocument();
   expect(scraperApi.preview).not.toHaveBeenCalled();
 });
 it("discards a sidecar preview that arrives after target context is left", async () => {
   const view = await searchAndChoose();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   let finish!: (value: typeof syntheticOutput) => void;
   vi.mocked(scraperOutputApi.preview).mockImplementation(
     () =>
@@ -556,18 +573,19 @@ it("discards a sidecar preview that arrives after target context is left", async
 });
 it("cancels merge and output previews without any writes", async () => {
   await searchAndChoose();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Cancel merge preview" }),
-  );
+  await waitForMergeReady();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(
-    screen.queryByRole("button", { name: "Confirm selected metadata" }),
+    screen.queryByRole("region", { name: "Merge media metadata" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /^Confirm merge/ }),
   ).not.toBeInTheDocument();
   expect(scraperApi.confirm).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
   fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+    screen.getByRole("button", { name: "Choose this candidate" }),
   );
+  await confirmMerge();
   fireEvent.click(
     await screen.findByRole("button", {
       name: "Preview NFO and poster output",
@@ -704,18 +722,18 @@ it("keeps disabled sources disabled and allows an explicitly selected public sou
   expect(providerAuthApi.status).not.toHaveBeenCalled();
 });
 
-it("invalidates a merge preview when a local target selection changes", async () => {
-  await searchAndChoose();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  await screen.findByRole("button", { name: "Confirm selected metadata" });
-  fireEvent.change(screen.getByLabelText("Local media item"), {
-    target: { value: "" },
-  });
+it("invalidates a live merge preview when the actual local target changes", async () => {
+  const view = await searchAndChoose();
+  await waitForMergeReady();
+  view.changeTarget("media-2");
+  await waitFor(() =>
+    expect(libraryApi.toolsDetail).toHaveBeenCalledWith("media-2"),
+  );
   expect(
-    screen.queryByRole("button", { name: "Confirm selected metadata" }),
+    screen.queryByRole("button", { name: /^Confirm merge/ }),
   ).not.toBeInTheDocument();
   expect(
-    screen.queryByText("Selected metadata: Synthetic film"),
+    screen.queryByRole("region", { name: "Merge media metadata" }),
   ).not.toBeInTheDocument();
   expect(scraperApi.confirm).not.toHaveBeenCalled();
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
@@ -745,7 +763,7 @@ it("cancels a pending candidate selection and ignores its late response", async 
     finish(syntheticMetadata);
   });
   expect(
-    screen.queryByText("Selected metadata: Synthetic film"),
+    screen.queryByRole("region", { name: "Merge media metadata" }),
   ).not.toBeInTheDocument();
   expect(scraperApi.preview).not.toHaveBeenCalled();
 });
@@ -762,7 +780,7 @@ async function chooseQueueCandidate(onNavigate = vi.fn()) {
   fireEvent.click(
     await screen.findByRole("button", { name: "Choose this candidate" }),
   );
-  await screen.findByText("Selected metadata: Synthetic film");
+  await screen.findByRole("region", { name: "Merge media metadata" });
   return view;
 }
 it("navigates the real queue boundaries without searching, choosing or writing automatically", async () => {
@@ -829,10 +847,7 @@ it("disables queue navigation during a mutation and ignores the cancelled item's
 });
 it("releases an unexecuted sidecar preview before leaving a queue item", async () => {
   await chooseQueueCandidate();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   fireEvent.click(
     await screen.findByRole("button", {
       name: "Preview NFO and poster output",
@@ -855,10 +870,7 @@ it("releases an unexecuted sidecar preview before leaving a queue item", async (
 });
 it("discards a late output preview from a queue item after an external route change", async () => {
   const view = await chooseQueueCandidate();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   let finish!: (value: typeof syntheticOutput) => void;
   vi.mocked(scraperOutputApi.preview).mockImplementation(
     () =>
@@ -910,37 +922,161 @@ it("preserves the whole review queue in both manual provider setup links", async
 });
 
 it("applies real field presets, invalidates old previews and preserves protected fields", async () => {
+  const detail = {
+    ...localDetail(),
+    metadata_values: [
+      {
+        id: "manual-title",
+        field_key: "title",
+        locale: "en-US",
+        value: "My manual title",
+        provider_id: null,
+        source_url: null,
+        is_locked: true,
+        is_user_modified: true,
+      },
+      {
+        id: "overview-1",
+        field_key: "overview",
+        locale: "en-US",
+        value: "Local summary",
+        provider_id: null,
+        source_url: null,
+        is_locked: false,
+        is_user_modified: false,
+      },
+    ],
+  };
+  vi.mocked(libraryApi.toolsDetail).mockResolvedValue(detail);
+  vi.mocked(scraperApi.preview).mockImplementation(async (request) => ({
+    ...syntheticMerge,
+    fields: syntheticMerge.fields.map((field) => ({
+      ...field,
+      old:
+        detail.metadata_values.find((value) => value.field_key === field.key) ??
+        null,
+      selected: request.selected_fields.includes(field.key) && !field.protected,
+    })),
+  }));
   await searchAndChoose();
+  await waitForMergeReady();
+  expect(screen.getByRole("checkbox", { name: /^Title/ })).toBeDisabled();
+  expect(scraperApi.preview).toHaveBeenLastCalledWith(
+    expect.objectContaining({ selected_fields: ["overview"] }),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Deselect all fields" }));
-  expect(screen.getByRole("button", { name: "Preview merge" })).toBeDisabled();
-  expect(scraperApi.preview).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /^Overview/ })).not.toBeChecked();
   fireEvent.click(
     screen.getByRole("button", { name: "Select all unprotected fields" }),
   );
-  expect(screen.getByRole("button", { name: "Preview merge" })).toBeEnabled();
+  await waitForMergeReady();
+  expect(screen.getByRole("checkbox", { name: /^Title/ })).not.toBeChecked();
+  expect(screen.getByRole("checkbox", { name: /^Overview/ })).toBeChecked();
   fireEvent.click(
     screen.getByRole("button", { name: "Fill missing fields only" }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  await waitFor(() =>
-    expect(scraperApi.preview).toHaveBeenLastCalledWith(
-      expect.objectContaining({ selected_fields: ["overview"] }),
-    ),
-  );
-  await screen.findByRole("button", { name: "Confirm selected metadata" });
+  expect(screen.getByRole("checkbox", { name: /^Overview/ })).not.toBeChecked();
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
   fireEvent.click(
     screen.getByRole("button", { name: "Select all unprotected fields" }),
   );
-  expect(
-    screen.queryByRole("button", { name: "Confirm selected metadata" }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Preview merge" }));
-  await waitFor(() => expect(scraperApi.preview).toHaveBeenCalledTimes(2));
+  await waitForMergeReady();
   expect(scraperApi.preview).toHaveBeenLastCalledWith(
     expect.objectContaining({ selected_fields: ["overview"] }),
   );
   expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
 });
+it("updates the visible merged result immediately and requires new validation before confirming changed fields", async () => {
+  vi.mocked(scraperApi.preview).mockImplementation(async (request) => ({
+    ...syntheticMerge,
+    media_item_id: request.media_item_id,
+    fields: syntheticMerge.fields.map((field) => ({
+      ...field,
+      old: null,
+      protected: false,
+      selected: request.selected_fields.includes(field.key),
+    })),
+  }));
+  await searchAndChoose();
+  await waitForMergeReady();
+  expect(
+    within(screen.getByRole("tabpanel", { name: "Merged" })).getByText(
+      "Synthetic provider summary",
+    ),
+  ).toBeVisible();
+  let finish!: () => void;
+  vi.mocked(scraperApi.preview).mockImplementationOnce(
+    (request) =>
+      new Promise((resolve) => {
+        finish = () =>
+          resolve({
+            ...syntheticMerge,
+            preview_id: "changed-fields",
+            media_item_id: request.media_item_id,
+            fields: syntheticMerge.fields.map((field) => ({
+              ...field,
+              old: null,
+              protected: false,
+              selected: request.selected_fields.includes(field.key),
+            })),
+          });
+      }),
+  );
+  fireEvent.click(screen.getByRole("checkbox", { name: /^Overview/ }));
+  expect(
+    within(screen.getByRole("tabpanel", { name: "Merged" })).queryByText(
+      "Synthetic provider summary",
+    ),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: /^Confirm merge/ }));
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  await waitFor(() =>
+    expect(scraperApi.preview).toHaveBeenLastCalledWith(
+      expect.objectContaining({ selected_fields: ["title"] }),
+    ),
+  );
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
+  await act(async () => finish());
+  await waitForMergeReady();
+  await confirmMerge();
+  await waitFor(() =>
+    expect(scraperApi.confirm).toHaveBeenCalledWith("changed-fields"),
+  );
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("only fills missing fields in the live result and the validated request", async () => {
+  await searchAndChoose();
+  await waitForMergeReady();
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Only fill missing fields and artwork",
+    }),
+  );
+  expect(screen.getByRole("checkbox", { name: /^Title/ })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: /^Title/ })).not.toBeChecked();
+  expect(
+    within(screen.getByRole("tabpanel", { name: "Merged" })).getByRole(
+      "heading",
+      { name: "Local film" },
+    ),
+  ).toBeVisible();
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
+  await waitForMergeReady();
+  expect(scraperApi.preview).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      selected_fields: ["overview"],
+      selected_artwork: [],
+    }),
+  );
+  expect(screen.getByRole("checkbox", { name: /^Overview/ })).toBeChecked();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
 it("keeps the last-item return action disabled while a mutation is executing", async () => {
   let finish!: (value: typeof syntheticSearch) => void;
   vi.mocked(scraperApi.search).mockImplementation(
@@ -1165,10 +1301,7 @@ it("binds a durable checkpoint before explicit confirmation and leaves sidecar o
   fireEvent.click(
     await screen.findByRole("button", { name: "Choose this candidate" }),
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   await screen.findByText("Metadata confirmed. 1 fields applied.");
   expect(reviewQueueApi.checkpoint).toHaveBeenCalledWith({
     queue_id: savedSessionId,
@@ -1250,10 +1383,7 @@ it("refuses confirmation after a checkpoint conflict and never marks the item co
   fireEvent.click(
     await screen.findByRole("button", { name: "Choose this candidate" }),
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   await screen.findByText(
     "This item failed. Review it again to retry the search; metadata and files are never applied automatically.",
   );
@@ -1336,10 +1466,7 @@ it("does not apply a checkpoint response that arrives after leaving the queue", 
   fireEvent.click(
     await screen.findByRole("button", { name: "Choose this candidate" }),
   );
-  fireEvent.click(await screen.findByRole("button", { name: "Preview merge" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Confirm selected metadata" }),
-  );
+  await confirmMerge();
   await waitFor(() => expect(reviewQueueApi.checkpoint).toHaveBeenCalled());
   view.unmount();
   await act(async () => {
@@ -1361,5 +1488,86 @@ it("does not apply a checkpoint response that arrives after leaving the queue", 
       .mocked(reviewQueueApi.update)
       .mock.calls.some(([input]) => input.action === "confirmed"),
   ).toBe(false);
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("refuses a concurrent only-missing overwrite and refreshes to a proof containing only the remaining empty field", async () => {
+  const genre = { key: "genres", value: ["Drama"], language: null };
+  if (syntheticMetadata.kind !== "movie")
+    throw new Error("Expected movie fixture");
+  const remoteFields = [...syntheticMetadata.data.fields, genre];
+  vi.mocked(scraperApi.detail).mockResolvedValue({
+    ...syntheticMetadata,
+    data: { ...syntheticMetadata.data, fields: remoteFields },
+  });
+  let filledConcurrently = false;
+  const filledOverview = {
+    id: "concurrent-overview",
+    field_key: "overview",
+    locale: "en-US",
+    value: "Filled concurrently",
+    provider_id: "tmdb",
+    source_url: syntheticMetadata.data.identity.source_url,
+    is_locked: false,
+    is_user_modified: false,
+  };
+  vi.mocked(libraryApi.toolsDetail).mockImplementation(async (id) => ({
+    ...localDetail(id),
+    metadata_values: filledConcurrently ? [filledOverview] : [],
+  }));
+  vi.mocked(scraperApi.preview).mockImplementation(async (request) => ({
+    ...syntheticMerge,
+    preview_id: `proof-${request.selected_fields.join("-")}`,
+    media_item_id: request.media_item_id,
+    fields: remoteFields.map((field) => ({
+      key: field.key,
+      language: field.language,
+      old:
+        filledConcurrently && field.key === "overview" ? filledOverview : null,
+      new: field,
+      provider_id: "tmdb",
+      source_url: syntheticMetadata.data.identity.source_url,
+      protected: false,
+      needs_review: filledConcurrently && field.key === "overview",
+      selected: request.selected_fields.includes(field.key),
+    })),
+  }));
+  await searchAndChoose();
+  await waitForMergeReady();
+  filledConcurrently = true;
+  fireEvent.click(
+    screen.getByRole("checkbox", {
+      name: "Only fill missing fields and artwork",
+    }),
+  );
+  await screen.findByText(
+    "Local metadata has changed. Refresh the preview and review it again.",
+  );
+  expect(scraperApi.preview).toHaveBeenLastCalledWith(
+    expect.objectContaining({ selected_fields: ["overview", "genres"] }),
+  );
+  expect(screen.getByRole("button", { name: /^Confirm merge/ })).toBeDisabled();
+  expect(
+    screen.getByText("1 changes (1 added, 0 replaced, 0 artwork, 2 skipped)"),
+  ).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: /^Confirm merge/ }));
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh preview" }));
+  await waitForMergeReady();
+  expect(scraperApi.preview).toHaveBeenLastCalledWith(
+    expect.objectContaining({ selected_fields: ["genres"] }),
+  );
+  expect(screen.getByRole("checkbox", { name: /^Overview/ })).not.toBeChecked();
+  expect(screen.getByRole("checkbox", { name: /^Overview/ })).toBeDisabled();
+  expect(
+    within(screen.getByRole("tabpanel", { name: "Merged" })).getByText(
+      "Filled concurrently",
+    ),
+  ).toBeVisible();
+  await confirmMerge();
+  await waitFor(() =>
+    expect(scraperApi.confirm).toHaveBeenCalledWith("proof-genres"),
+  );
+  expect(scraperOutputApi.preview).not.toHaveBeenCalled();
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
 });

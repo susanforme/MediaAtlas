@@ -12,7 +12,9 @@ export function PersistentQueueNavigation({
   review,
   busy,
   onNavigate,
+  compact = false,
 }: {
+  compact?: boolean;
   review: ReviewSession;
   busy: boolean;
   onNavigate?: (mediaId: string) => void;
@@ -61,7 +63,14 @@ export function PersistentQueueNavigation({
     selected.reason === "missing_media" ||
     selected.reason === "unavailable_media";
   return (
-    <section className="panel mb-6 space-y-4" aria-label={t("reviewQueues")}>
+    <section
+      className={
+        compact
+          ? "mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+          : "panel mb-6 space-y-4"
+      }
+      aria-label={t("reviewQueues")}
+    >
       <p aria-live="polite" className="text-sm">
         {t("reviewSummary", { count: queue.items.length, ...counts })}
       </p>

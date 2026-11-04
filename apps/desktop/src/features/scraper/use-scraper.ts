@@ -6,11 +6,11 @@ import {
 } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { DesktopError } from "../../api/desktop";
 import { defaultBrowse, libraryApi } from "../../api/library";
 import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import {
-  type MergePreview,
   type OutputPreview,
   type SearchPreview,
   scraperApi,
@@ -19,7 +19,12 @@ import {
   type VideoMetadata,
 } from "../../api/scraper";
 import { type FieldPreset, selectScraperFields } from "./field-selection";
+import {
+  buildMergePreview,
+  mergeSelectionMatches,
+} from "./merge-preview-model";
 import { scrapeKind } from "./scraper-model";
+import { useLiveMergePreview } from "./use-live-merge-preview";
 
 export function useScraper(
   mediaId?: string,
@@ -61,7 +66,7 @@ export function useScraper(
     active.current && epoch === generation.current;
   const [localSearch, setLocalSearch] = useState("");
   const [localQuery, setLocalQuery] = useState("");
-  const [preview, setPreview] = useState<MergePreview>();
+  const [onlyMissing, updateOnlyMissing] = useState(false);
   const [output, setOutput] = useState<OutputPreview>();
   const [invalid, setInvalid] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
@@ -105,6 +110,45 @@ export function useScraper(
   const validTarget = Boolean(
     targetDetail.data && targetKind && targetDetail.data.media.id === target,
   );
+  const draftProjection = metadata
+    ? buildMergePreview({
+        metadata,
+        target: validTarget ? targetDetail.data : undefined,
+        selectedFields,
+        selectedArtwork,
+        onlyMissing,
+      })
+    : undefined;
+  const liveMerge = useLiveMergePreview(
+    validTarget &&
+      metadata?.kind === targetKind &&
+      search &&
+      candidateIndex !== undefined &&
+      draftProjection &&
+      draftProjection.counts.total > 0
+      ? {
+          run_id: search.run_id,
+          candidate_index: candidateIndex,
+          media_item_id: target,
+          selected_fields: draftProjection.effectiveFields,
+          selected_artwork: draftProjection.effectiveArtwork,
+        }
+      : null,
+  );
+  const preview = liveMerge.preview;
+  const projection = metadata
+    ? buildMergePreview({
+        metadata,
+        target: validTarget ? targetDetail.data : undefined,
+        selectedFields,
+        selectedArtwork,
+        onlyMissing,
+        preview,
+      })
+    : undefined;
+  const mergeSelectionValid = Boolean(
+    preview && projection && mergeSelectionMatches(preview, projection),
+  );
   const seededTarget = useRef("");
   useEffect(() => {
     if (
@@ -128,13 +172,11 @@ export function useScraper(
     generation.current += 1;
     setMetadata(undefined);
     setCandidateIndex(undefined);
-    setPreview(undefined);
     setOutput(undefined);
     setThumbnails({});
     run.reset();
     detail.reset();
     artworkLoad.reset();
-    merge.reset();
     outputPlan.reset();
     discard.reset();
     confirm.reset();
@@ -239,31 +281,21 @@ export function useScraper(
         setThumbnails((old) => ({ ...old, [index]: result.thumbnail }));
     },
   });
-  const merge = useMutation({
-    mutationFn: (epoch: number) =>
-      guarded(
-        () =>
-          scraperApi.preview({
-            run_id: search?.run_id ?? "",
-            candidate_index: candidateIndex ?? 0,
-            media_item_id: target,
-            selected_fields: selectedFields,
-            selected_artwork: selectedArtwork,
-          }),
-        epoch,
-      ),
-    onSuccess: ({ value, epoch }) => {
-      if (current(epoch)) setPreview(value);
-    },
-    onError: (_error, epoch) => {
-      if (current(epoch)) review?.failed();
-    },
-  });
   const confirm = useMutation({
-    mutationFn: () =>
-      review
-        ? review.confirmPreview(preview?.preview_id ?? "")
-        : scraperApi.confirm(preview?.preview_id ?? ""),
+    mutationFn: () => {
+      if (
+        !mergeSelectionValid ||
+        !preview ||
+        liveMerge.pending ||
+        !projection?.counts.total ||
+        (!preview.fields.some((field) => field.selected && !field.protected) &&
+          !preview.artwork.length)
+      )
+        throw new DesktopError("request_failed");
+      return review
+        ? review.confirmPreview(preview.preview_id)
+        : scraperApi.confirm(preview.preview_id);
+    },
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["media"] });
       void client.invalidateQueries({ queryKey: ["detail"] });
@@ -302,7 +334,6 @@ export function useScraper(
     restore.isPending ||
     run.isPending ||
     detail.isPending ||
-    merge.isPending ||
     confirm.isPending ||
     outputPlan.isPending ||
     write.isPending;
@@ -312,7 +343,6 @@ export function useScraper(
     artworkLoad.error ??
     run.error ??
     detail.error ??
-    merge.error ??
     confirm.error ??
     outputPlan.error ??
     write.error;
@@ -382,13 +412,32 @@ export function useScraper(
     );
     generation.current += 1;
     setSelectedFields(fields);
-    setPreview(undefined);
     setOutput(undefined);
-    merge.reset();
     outputPlan.reset();
     discard.reset();
     confirm.reset();
     write.reset();
+  }
+  function resetMergeResult() {
+    setOutput(undefined);
+    outputPlan.reset();
+    confirm.reset();
+    write.reset();
+  }
+  function chooseFields(fields: string[]) {
+    if (busy) return;
+    resetMergeResult();
+    setSelectedFields(fields);
+  }
+  function chooseArtwork(artwork: number[]) {
+    if (busy) return;
+    resetMergeResult();
+    setSelectedArtwork(artwork);
+  }
+  function setOnlyMissing(value: boolean) {
+    if (busy) return;
+    resetMergeResult();
+    updateOnlyMissing(value);
   }
   const selectCandidate = (index: number) => {
     if (!search) return;
@@ -414,9 +463,9 @@ export function useScraper(
     metadata,
     candidateIndex,
     selectedFields,
-    setSelectedFields,
+    chooseFields,
     selectedArtwork,
-    setSelectedArtwork,
+    chooseArtwork,
     target,
     targetDetail,
     targetKind,
@@ -426,7 +475,18 @@ export function useScraper(
     setLocalSearch,
     setLocalQuery,
     preview,
-    setPreview,
+    projection,
+    onlyMissing,
+    setOnlyMissing,
+    mergePreviewPending: liveMerge.pending,
+    mergePreviewError: liveMerge.error,
+    mergeSelectionValid,
+    retryMergePreview: () => {
+      const epoch = generation.current;
+      void targetDetail.refetch().then(() => {
+        if (current(epoch)) liveMerge.retry();
+      });
+    },
     output,
     setOutput,
     invalid,
@@ -447,7 +507,6 @@ export function useScraper(
       mutate: (index: number) =>
         artworkLoad.mutate({ index, epoch: generation.current }),
     },
-    merge: { ...merge, mutate: () => merge.mutate(generation.current) },
     confirm,
     outputPlan: {
       ...outputPlan,

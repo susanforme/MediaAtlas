@@ -100,7 +100,7 @@ FIXTURE = r"""
     if (cmd==='library_tools_detail' || cmd==='library_get_media') {
       if (state.deleted.includes(input.media_id)||!state.rootEnabled) failure('not_found');
       const response=await previous('library_get_media',args);
-      return wrap({...response.data,metadata_values:[],files:response.data.files.map(file=>({...file,root_id:root.id}))});
+      return wrap({...response.data,poster_uri:state.noPoster?null:response.data.poster_uri,metadata_values:[],files:response.data.files.map(file=>({...file,root_id:root.id}))});
     }
     if (cmd==='provider_auth_save') {
       state.authConfigured=true;save();
@@ -152,6 +152,7 @@ FIXTURE = r"""
       return wrap({kind:'movie',data:{identity:run.identity,fields:run.fields,artwork:[],runtime_minutes:90}});
     }
     if (cmd==='scraper_preview') {
+      if (state.failPreview) failure('network_error');
       const run=state.runs[input.run_id];if (!run) failure('not_found');
       const preview_id=uid(++state.counter);
       state.previews[preview_id]={media_id:input.media_item_id,confirmed:false};save();
@@ -221,6 +222,11 @@ def main():
         page.on("pageerror", lambda error: errors.append(str(error)))
         filters = {"root": ROOT_ID, "q": "QA 核对", "kind": "movie", "health": "incomplete_metadata", "sort": "title_asc"}
         page.goto(URL + "/tools?" + urlencode(filters))
+        search_field = page.get_by_label("搜索本地候选", exact=True)
+        search_field.evaluate("el => { const m = document.querySelector('.app-main'); m.scrollTop = el.getBoundingClientRect().top + m.scrollTop - 20; }")
+        search_field.focus()
+        assert search_field.evaluate("el => el.getBoundingClientRect().top >= document.querySelector('.app-toolbar').getBoundingClientRect().bottom")
+        checks.append("keyboard focus scrolls the right content below the fixed toolbar")
         session = create_selected(page)
         expect(page.get_by_label("影片名称", exact=True)).to_have_value("QA 核对媒体 01")
         assert snapshot(page)["queues"][0]["context"] == filters
@@ -287,10 +293,53 @@ def main():
         no_writes(page)
         page.get_by_role("button", name="检索来源", exact=True).click()
         page.get_by_role("button", name="选择此候选", exact=True).click()
-        page.get_by_role("button", name="预览合并", exact=True).click()
-        expect(page.get_by_role("button", name="确认所选元数据", exact=True)).to_be_visible()
+        expect(page.get_by_role("heading", name="合并媒体元数据", exact=True)).to_be_visible()
+        confirm_merge = page.get_by_role("button", name="确认合并（2 处变更）", exact=True)
+        expect(confirm_merge).to_be_enabled()
+        expect(page.get_by_role("button", name="预览合并", exact=True)).to_have_count(0)
         no_writes(page)
-        page.get_by_role("button", name="确认所选元数据", exact=True).click()
+        page.locator(".app-main").evaluate("el => el.scrollTop = 0")
+        capture(page, "fixture-live-merge-1648.png", full=True)
+        sidebar_before = page.locator(".app-sidebar").bounding_box()
+        settings_before = page.locator(".app-sidebar-bottom").bounding_box()
+        page.locator(".app-main").hover()
+        page.mouse.wheel(0, 900)
+        page.wait_for_function("document.querySelector('.app-main').scrollTop > 0")
+        assert page.locator(".app-sidebar").bounding_box() == sidebar_before
+        assert page.locator(".app-sidebar-bottom").bounding_box() == settings_before
+        assert page.evaluate("window.scrollY === 0 && document.documentElement.scrollHeight <= innerHeight")
+        assert page.locator(".app-main").evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+        capture(page, "fixture-fixed-navigation-scroll-1648.png")
+        page.locator(".app-main").evaluate("el => el.scrollTop = 0")
+        checks.append("wheel scroll moves only right content; sidebar and bottom settings stay fixed while document scroll remains zero")
+        page.get_by_role("tab", name="合并后", exact=True).focus()
+        page.keyboard.press("ArrowRight")
+        expect(page.get_by_role("tab", name="对比", exact=True)).to_be_focused()
+        expect(page.get_by_role("tab", name="对比", exact=True)).to_have_attribute("aria-selected", "true")
+        capture(page, "fixture-merge-compare-1648.png", full=True)
+        page.keyboard.press("ArrowLeft")
+        page.get_by_role("checkbox", name=re.compile(r"^简介 zh-CN")).uncheck()
+        confirm_one = page.get_by_role("button", name="确认合并（1 处变更）", exact=True)
+        expect(confirm_one).to_be_disabled()
+        expect(confirm_one).to_be_enabled()
+        page.get_by_role("checkbox", name="仅合并空缺字段和图片", exact=True).check()
+        expect(page.get_by_text("当前选择没有变更。", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="确认合并（0 处变更）", exact=True)).to_be_disabled()
+        page.get_by_role("button", name="全选未保护字段", exact=True).click()
+        expect(confirm_one).to_be_enabled()
+        capture(page, "fixture-merge-missing-only-1648.png", full=True)
+        patch(page, failPreview=True)
+        page.get_by_role("checkbox", name="仅合并空缺字段和图片", exact=True).uncheck()
+        expect(page.get_by_role("alert")).to_be_visible()
+        expect(confirm_merge).to_be_disabled()
+        no_writes(page)
+        capture(page, "fixture-merge-validation-error-1648.png", full=True)
+        patch(page, failPreview=False)
+        page.get_by_role("button", name="重新检查", exact=True).click()
+        expect(confirm_merge).to_be_enabled()
+        no_writes(page)
+        checks.append("live merged view and keyboard comparison update with selection; missing-only and zero-change states; validation failure blocks confirmation until explicit retry")
+        confirm_merge.click()
         wait_state(page, 2, "confirmed")
         commands = snapshot(page)["calls"]
         proof = [call["cmd"] for call in commands if call["cmd"] in {"scraper_preview", "review_queue_checkpoint", "scraper_confirm"}
@@ -307,7 +356,7 @@ def main():
         patch(page, expired=[uid(1)])
         page.reload()
         expect(page.get_by_text("之前的预览已失效，请重新核对。", exact=True)).to_be_visible()
-        expect(page.get_by_role("button", name="确认所选元数据", exact=True)).to_have_count(0)
+        expect(page.get_by_role("button", name=re.compile(r"^确认合并"))).to_have_count(0)
         page.evaluate("__reviewFixture.clearCalls()")
         page.get_by_role("button", name="重新核对此项", exact=True).click()
         wait_state(page, 0, "pending")
@@ -348,6 +397,7 @@ def main():
 
         mobile = make_context(browser, narrow=True).new_page()
         mobile.goto(URL + "/tools")
+        patch(mobile, noPoster=True)
         create_selected(mobile, 2)
         expect(mobile.get_by_label("影片名称", exact=True)).to_have_value("QA 核对媒体 01")
         assert mobile.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
@@ -358,6 +408,24 @@ def main():
         no_writes(mobile)
         capture(mobile, "fixture-keyboard-narrow-390.png", full=True)
         checks.append("390×844 no page overflow, reduced motion and keyboard defer without writes")
+        mobile.get_by_role("button", name="检索来源", exact=True).click()
+        mobile.get_by_role("button", name="选择此候选", exact=True).click()
+        expect(mobile.get_by_role("button", name="确认合并（2 处变更）", exact=True)).to_be_enabled()
+        no_writes(mobile)
+        expect(mobile.get_by_text("暂无海报", exact=True)).to_be_visible()
+        capture(mobile, "fixture-live-merge-narrow-390.png", full=True)
+        checks.append("live merge stacks at 390×844 with no overflow, missing-poster fallback and no automatic confirmation")
+        mobile.set_viewport_size({"width": 390, "height": 360})
+        settings_before = mobile.locator(".app-sidebar-bottom").bounding_box()
+        nav = mobile.locator(".app-nav")
+        assert nav.evaluate("el => el.scrollHeight > el.clientHeight")
+        nav.evaluate("el => el.scrollTop = el.scrollHeight")
+        assert nav.evaluate("el => el.scrollTop > 0")
+        assert mobile.locator(".app-sidebar-bottom").bounding_box() == settings_before
+        assert settings_before["y"] + settings_before["height"] <= 360
+        expect(mobile.get_by_role("link", name="设置", exact=True)).to_be_visible()
+        capture(mobile, "fixture-fixed-navigation-short-390.png")
+        checks.append("short 390×360 viewport scrolls only sidebar navigation items internally and keeps bottom settings visible")
         browser.close()
 
     report = {
@@ -365,7 +433,7 @@ def main():
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "worktree_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"], cwd=ROOT)).hexdigest(),
         "queue_source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-                                for pattern in ["apps/desktop/src/components/ui/badge.tsx","apps/desktop/src/api/review-queue.ts", "apps/desktop/src/features/scraper/*queue*.ts*", "apps/desktop/src/features/scraper/page.tsx", "apps/desktop/src/features/scraper/use-scraper.ts", "apps/desktop/src/features/scraper/recovery-*.tsx", "apps/desktop/src/features/tools/ordinary-candidates.tsx", "apps/desktop/src/features/settings/page.tsx", "apps/desktop/src/features/providers/pages.tsx", "crates/infrastructure/src/review_queue*.rs", "crates/infrastructure/src/review_queue/*.rs", "crates/application/src/review_queue.rs", "scripts/desktop-review-queue-qa.py"]
+                                for pattern in ["apps/desktop/src/components/ui/badge.tsx","apps/desktop/src/components/ui/tabs.tsx", "apps/desktop/src/components/shell/app-shell.tsx", "apps/desktop/src/components/shell/shell.css", "apps/desktop/src/features/scraper/*merge*.ts*", "apps/desktop/src/api/review-queue.ts", "apps/desktop/src/features/scraper/*queue*.ts*", "apps/desktop/src/features/scraper/page.tsx", "apps/desktop/src/features/scraper/use-scraper.ts", "apps/desktop/src/features/scraper/recovery-*.tsx", "apps/desktop/src/features/tools/ordinary-candidates.tsx", "apps/desktop/src/features/settings/page.tsx", "apps/desktop/src/features/providers/pages.tsx", "crates/infrastructure/src/review_queue*.rs", "crates/infrastructure/src/review_queue/*.rs", "crates/application/src/review_queue.rs", "scripts/desktop-review-queue-qa.py"]
                                 for path in ROOT.glob(pattern) if path.is_file()},
         "checks": checks,
         "limits": ["No native Tauri, real provider, keyring or filesystem execution", "Browser fixture validates command ordering only; Rust service proof/persistence is separate"],

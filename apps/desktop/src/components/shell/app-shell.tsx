@@ -10,7 +10,7 @@ import {
   ShieldCheck,
   Wrench,
 } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -124,14 +124,20 @@ function Toolbar() {
 
 export function AppShell() {
   const { i18n } = useTranslation();
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const main = useRef<HTMLDivElement>(null);
   useTaskEvents();
+  useEffect(() => {
+    // Route changes start at the content top; in-page field edits keep position.
+    if (pathname && main.current) main.current.scrollTop = 0;
+  }, [pathname]);
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";
   }, [i18n.resolvedLanguage]);
   return (
     <div className="app-shell">
       <Sidebar />
-      <div className="app-main">
+      <div className="app-main" ref={main}>
         <Toolbar />
         <main className="app-content">
           <Outlet />

@@ -7,7 +7,7 @@
 | 流程与异常处理 | [Emby 流程基准](emby-scraper-workflow.md)、[自动媒体库](automatic-library.md) |
 | 分层、IPC 与隐私 | [架构](architecture.md)、[架构决策](adr/) |
 | 模型与存储 | [领域模型](domain-model.md)、[数据库](database-schema.md)、[存储接口](phase-1-contract.md) |
-| 浏览、扫描与任务 | [媒体库 IPC](phase-2-contract.md)、[持久化人工核对队列](review-queue.md) |
+| 浏览、扫描与任务 | [媒体库 IPC](phase-2-contract.md)、[持久化核对与实时合并](review-queue.md) |
 | 来源与访问 | [Provider 契约](provider-contract.md)、[访问与凭据](provider-access.md) |
 | 影视与文件输出 | [影视刮削](phase-4-contract.md)、[安全旁车输出](media-output.md) |
 | 成人与音乐边界 | [成人契约](phase-5-contract.md)、[音乐契约](phase-6-contract.md) |

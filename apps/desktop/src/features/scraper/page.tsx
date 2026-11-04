@@ -18,17 +18,13 @@ import {
 } from "../library/shared";
 import "./translations";
 import { validateProviderSetupSearch } from "../settings/setup-search";
+import { MetadataMergeWorkspace } from "./merge-workspace";
 import { PersistentQueueNavigation } from "./persistent-queue-navigation";
 import { ScraperQueueNavigation } from "./queue-navigation";
 import { ScraperRecovery } from "./recovery-actions";
-import {
-  providerChoices,
-  providerNames,
-  scrapeKind,
-  value,
-} from "./scraper-model";
+import { providerChoices, providerNames, scrapeKind } from "./scraper-model";
 import { validateScraperSearch } from "./search";
-import { VideoSourceDetails } from "./source-detail";
+import "./merge-translations";
 import { type ReviewSession, useReviewQueue } from "./use-review-queue";
 import { useScraper } from "./use-scraper";
 
@@ -108,6 +104,12 @@ function ScraperWorkspace({
   const navigate = useNavigate();
   const titleInput = useRef<HTMLInputElement>(null);
   const format = useFormat();
+  const workspace = useScraper(
+    mediaId,
+    review
+      ? { confirmPreview: review.confirm, failed: review.failed }
+      : undefined,
+  );
   const {
     kind,
     setKind,
@@ -124,35 +126,24 @@ function ScraperWorkspace({
     setSearch,
     metadata,
     candidateIndex,
-    selectedFields,
-    setSelectedFields,
-    selectedArtwork,
-    setSelectedArtwork,
     target,
     targetDetail,
-    targetKind,
     validTarget,
     setTarget,
     localSearch,
     setLocalSearch,
     setLocalQuery,
     preview,
-    setPreview,
     output,
-    setOutput,
     invalid,
     setInvalid,
-    thumbnails,
     snapshot,
     history,
     local,
     run,
     restore,
     detail,
-    artworkLoad,
-    merge,
     confirm,
-    outputPlan,
     discard,
     write,
     busy: workspaceBusy,
@@ -161,19 +152,14 @@ function ScraperWorkspace({
     providerState,
     selectedProviders,
     searchValid,
-    applyFieldPreset,
     selectCandidate,
     clearDetail,
-  } = useScraper(
-    mediaId,
-    review
-      ? { confirmPreview: review.confirm, failed: review.failed }
-      : undefined,
-  );
+  } = workspace;
   const busy = workspaceBusy || Boolean(review?.busy);
   const reviewNavigation = review ? (
     <PersistentQueueNavigation
       review={review}
+      compact={Boolean(metadata && validTarget)}
       busy={busy}
       onNavigate={onQueueNavigate}
     />
@@ -231,595 +217,362 @@ function ScraperWorkspace({
     );
   return (
     <>
-      <PageHeading title={t("scraper")} />
+      <PageHeading
+        title={t(metadata ? "mergeTitle" : "scraper")}
+        description={metadata ? t("mergeDescription") : undefined}
+      />
       {reviewNavigation}
-      <section className="panel mb-6 space-y-4">
-        {queue && mediaId && (
-          <ScraperQueueNavigation
-            mediaId={mediaId}
-            queue={queue}
-            busy={busy}
-            confirmed={
-              confirm.isSuccess ||
-              write.isSuccess ||
-              Boolean(preview?.confirmed)
-            }
-            onNavigate={onQueueNavigate}
-          />
-        )}
-        {mediaId ? (
-          targetDetail.isPending ? (
-            <Loading />
-          ) : targetDetail.error ? (
-            <ErrorNotice error={targetDetail.error} />
-          ) : validTarget ? (
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="font-semibold">
-                {targetDetail.data?.media.title}
-              </h2>
-              <span className="badge">{t("scraperTargetLocked")}</span>
-            </div>
-          ) : null
-        ) : (
-          <>
-            <form
-              className="flex flex-wrap items-end gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                setLocalQuery(localSearch.trim());
-              }}
-            >
-              <Label className="filter-field min-w-0 flex-1">
-                <span>{t("scraperTargetSearch")}</span>
-                <Input
-                  type="search"
-                  value={localSearch}
-                  onChange={(e) => setLocalSearch(e.target.value)}
-                />
-              </Label>
-              <Button variant="outline" type="submit">
-                {t("scraperLocalSearch")}
-              </Button>
-            </form>
-            <Label className="filter-field">
-              <span>{t("scraperTarget")}</span>
-              <Select
-                value={target}
-                disabled={local.isPending}
-                onChange={(e) => setTarget(e.target.value)}
-              >
-                <option value="">{t("scraperAnonymous")}</option>
-                {local.data?.items
-                  .filter((card) => scrapeKind(card.media.kind))
-                  .map((card) => (
-                    <option key={card.media.id} value={card.media.id}>
-                      {card.media.title} · {card.media.year ?? t("unknownYear")}
-                    </option>
-                  ))}
-              </Select>
-            </Label>
-            {local.isPending && <Loading />}
-            {local.error && <ErrorNotice error={local.error} />}
-            {targetDetail.error && <ErrorNotice error={targetDetail.error} />}
-          </>
-        )}
-        {target && targetDetail.data && !validTarget && (
-          <p role="alert" className="notice error-notice">
-            {t("scraperUnsupportedTarget")}
-          </p>
-        )}
-      </section>
-      {snapshot.isPending && <Loading />}
-      {snapshot.error && <ErrorNotice error={snapshot.error} />}
-      <form
-        className="panel scraper-search"
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          const valid = searchValid;
-          setInvalid(!valid);
-          if (valid) {
-            clearDetail();
-            restore.reset();
-            setSearch(undefined);
-            run.mutate();
+      {queue && mediaId && (
+        <ScraperQueueNavigation
+          mediaId={mediaId}
+          queue={queue}
+          busy={busy}
+          confirmed={
+            confirm.isSuccess || write.isSuccess || Boolean(preview?.confirmed)
           }
-        }}
-      >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Label className="filter-field">
-            <span>{t("type")}</span>
-            <Select
-              value={kind}
-              onChange={(e) => {
-                setKind(e.target.value as VideoKind);
-                setProviders(
-                  e.target.value === "anime" ? ["anilist"] : ["tmdb"],
-                );
-                clearDetail();
-                setSearch(undefined);
-              }}
-              disabled={busy || Boolean(target)}
-            >
-              {(["movie", "tv", "anime"] as const).map((k) => (
-                <option key={k} value={k}>
-                  {t(
-                    k === "movie"
-                      ? "scraperMovie"
-                      : k === "tv"
-                        ? "scraperTv"
-                        : "scraperAnime",
-                  )}
-                </option>
-              ))}
-            </Select>
-          </Label>
-          <Label className="filter-field">
-            <span>{t("scraperTitle")}</span>
-            <Input
-              value={title}
-              ref={titleInput}
-              aria-describedby={
-                selectedProviders.includes("wikipedia.html")
-                  ? "scraper-wikipedia-title-hint"
-                  : undefined
-              }
-              maxLength={256}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={busy}
-            />
-          </Label>
-          <Label className="filter-field">
-            <span>{t("scraperYear")}</span>
-            <Input
-              type="number"
-              min={1800}
-              max={2200}
-              value={year}
-              onChange={(e) => setYear(e.target.value)}
-              disabled={busy}
-            />
-          </Label>
-        </div>
-        {selectedProviders.includes("wikipedia.html") && (
-          <p
-            id="scraper-wikipedia-title-hint"
-            className="mt-3 text-sm text-muted-foreground"
-          >
-            {t("scraperWikipediaTitleHint")}
-          </p>
-        )}
-        <Details className="mt-4">
-          <DetailsSummary>{t("scraperAdvanced")}</DetailsSummary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <Label className="filter-field">
-              <span>{t("scraperExternalNamespace")}</span>
-              <Input
-                value={namespace}
-                maxLength={32}
-                onChange={(e) => setNamespace(e.target.value)}
-                disabled={busy}
-              />
-            </Label>
-            <Label className="filter-field">
-              <span>{t("scraperExternalId")}</span>
-              <Input
-                value={externalId}
-                maxLength={128}
-                onChange={(e) => setExternalId(e.target.value)}
-                disabled={busy}
-              />
-            </Label>
-          </div>
-        </Details>
-        <fieldset className="my-4">
-          <legend className="mb-2 font-medium">{t("scraperProviders")}</legend>
-          <div className="flex flex-wrap gap-5">
-            {providerChoices.map((id) => (
-              <Label key={id} className="flex items-center gap-2">
-                <Checkbox
-                  checked={selectedProviders.includes(id)}
-                  disabled={busy || !available(id)}
-                  onChange={(e) =>
-                    setProviders((old) =>
-                      e.target.checked
-                        ? [...old, id]
-                        : old.filter((p) => p !== id),
-                    )
-                  }
-                />
-                <span>
-                  {providerNames[id]}{" "}
-                  {providerState(id) !== "ready" &&
-                    `(${t(`scraperProviderState_${providerState(id)}`)})`}
-                </span>
+          onNavigate={onQueueNavigate}
+        />
+      )}
+      <div hidden={Boolean(metadata && validTarget)}>
+        <section className="panel mb-6 space-y-4">
+          {mediaId ? (
+            targetDetail.isPending ? (
+              <Loading />
+            ) : targetDetail.error ? (
+              <ErrorNotice error={targetDetail.error} />
+            ) : validTarget ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h2 className="font-semibold">
+                  {targetDetail.data?.media.title}
+                </h2>
+                <span className="badge">{t("scraperTargetLocked")}</span>
+              </div>
+            ) : null
+          ) : (
+            <>
+              <form
+                className="flex flex-wrap items-end gap-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setLocalQuery(localSearch.trim());
+                }}
+              >
+                <Label className="filter-field min-w-0 flex-1">
+                  <span>{t("scraperTargetSearch")}</span>
+                  <Input
+                    type="search"
+                    value={localSearch}
+                    onChange={(e) => setLocalSearch(e.target.value)}
+                  />
+                </Label>
+                <Button variant="outline" type="submit">
+                  {t("scraperLocalSearch")}
+                </Button>
+              </form>
+              <Label className="filter-field">
+                <span>{t("scraperTarget")}</span>
+                <Select
+                  value={target}
+                  disabled={local.isPending}
+                  onChange={(e) => setTarget(e.target.value)}
+                >
+                  <option value="">{t("scraperAnonymous")}</option>
+                  {local.data?.items
+                    .filter((card) => scrapeKind(card.media.kind))
+                    .map((card) => (
+                      <option key={card.media.id} value={card.media.id}>
+                        {card.media.title} ·{" "}
+                        {card.media.year ?? t("unknownYear")}
+                      </option>
+                    ))}
+                </Select>
               </Label>
-            ))}
-          </div>
-        </fieldset>
-        {providerChoices.some((id) =>
-          ["disabled", "credentials"].includes(providerState(id)),
-        ) && (
-          <div className="mb-4 flex flex-wrap gap-3">
-            <Button asChild variant="outline" size="sm">
-              <Link
-                to="/settings"
-                search={{
-                  tab: "providers",
-                  from: "scraper",
-                  media: target || undefined,
-                  queue,
-                  session: sessionId,
-                }}
-              >
-                {t("scraperConfigureProviders")}
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link
-                to="/settings"
-                search={{
-                  tab: "auth",
-                  from: "scraper",
-                  media: target || undefined,
-                  queue,
-                  session: sessionId,
-                  provider: kind === "anime" ? "anilist" : "tmdb",
-                }}
-              >
-                {t("scraperConfigureAuth")}
-              </Link>
-            </Button>
-          </div>
-        )}
-        {invalid && (
-          <p role="alert" className="notice error-notice mb-3">
-            {t("scraperInvalid")}
-          </p>
-        )}
-        <Button type="submit" disabled={busy || !snapshot.data || !searchValid}>
-          {run.isPending ? t("scraperSearching") : t("scraperSearch")}
-        </Button>
-        {(run.isPending || restore.isPending) && (
-          <Button
-            className="ml-3"
-            variant="outline"
-            onClick={() => {
+              {local.isPending && <Loading />}
+              {local.error && <ErrorNotice error={local.error} />}
+              {targetDetail.error && <ErrorNotice error={targetDetail.error} />}
+            </>
+          )}
+          {target && targetDetail.data && !validTarget && (
+            <p role="alert" className="notice error-notice">
+              {t("scraperUnsupportedTarget")}
+            </p>
+          )}
+        </section>
+        {snapshot.isPending && <Loading />}
+        {snapshot.error && <ErrorNotice error={snapshot.error} />}
+        <form
+          className="panel scraper-search"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            const valid = searchValid;
+            setInvalid(!valid);
+            if (valid) {
               clearDetail();
               restore.reset();
               setSearch(undefined);
-            }}
-          >
-            {t("scraperStopWaiting")}
-          </Button>
-        )}
-      </form>
-      {recovery}
-      {error && error !== run.error && error !== restore.error && (
-        <div className="mt-4">
-          <ErrorNotice error={error} />
-        </div>
-      )}
-      {restore.isSuccess && (
-        <p role="status" className="notice mt-4">
-          {t("scraperRestored")}
-        </p>
-      )}
-      {search && (
-        <section className="mt-7" aria-labelledby="scraper-results">
-          <h2 id="scraper-results" className="text-lg font-semibold">
-            {t("scraperResults")}
-          </h2>
-          <div className="scraper-candidates">
-            {search.candidates.map((c, index) => (
-              <article
-                className={`panel ${candidateIndex === index ? "scraper-chosen" : ""}`}
-                key={index}
-              >
-                <h3 className="font-semibold">
-                  {c.candidate.data.title} ·{" "}
-                  {c.candidate.data.year ?? t("unknownYear")}
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {c.candidate.data.provider_id} · {c.candidate.data.remote_id}
-                </p>
-                <ul className="mt-3 list-disc pl-5 text-sm">
-                  {c.reasons.map((reason, i) => (
-                    <li key={i}>
-                      {t(`scraperReason_${reason}`, {
-                        defaultValue: t("scraperReasonFallback"),
-                      })}
-                    </li>
-                  ))}
-                </ul>
-                {c.needs_review && (
-                  <p className="mt-3 badge">{t("scraperReview")}</p>
-                )}
-                {c.duplicate_of !== null && (
-                  <p className="mt-2 text-sm">
-                    {t("scraperDuplicate", { index: c.duplicate_of + 1 })}
-                  </p>
-                )}
-                <Button
-                  className="mt-4"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => selectCandidate(index)}
-                >
-                  {t("scraperSelect")}
-                </Button>
-              </article>
-            ))}
-          </div>
-        </section>
-      )}
-      {detail.isPending && <Loading />}
-      {candidateIndex !== undefined && (
-        <Button
-          className="mt-4"
-          variant="outline"
-          onClick={clearDetail}
-          disabled={confirm.isPending || write.isPending}
+              run.mutate();
+            }
+          }}
         >
-          {t("scraperCancelSelection")}
-        </Button>
-      )}
-
-      {metadata && (
-        <section className="panel mt-7" aria-labelledby="scraper-detail">
-          <h2 id="scraper-detail" className="text-lg font-semibold">
-            {t("scraperDetail")}: {metadata.data.identity.title}
-          </h2>
-          <VideoSourceDetails metadata={metadata} />
-          <fieldset className="mt-6">
-            <legend className="font-medium">{t("scraperFields")}</legend>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(["all", "none", "missing"] as const).map((preset) => (
-                <Button
-                  key={preset}
-                  variant="outline"
-                  size="sm"
-                  disabled={busy || (preset === "missing" && !validTarget)}
-                  onClick={() => applyFieldPreset(preset)}
-                >
-                  {t(`scraperFields_${preset}`)}
-                </Button>
-              ))}
-            </div>
-            {metadata.data.fields.map((field, index) => (
-              <Label className="scraper-field-choice" key={index}>
-                <Checkbox
-                  checked={selectedFields.includes(field.key)}
-                  disabled={busy}
-                  onChange={(e) => {
-                    setSelectedFields((old) =>
-                      e.target.checked
-                        ? [...old, field.key]
-                        : old.filter((k) => k !== field.key),
-                    );
-                    setPreview(undefined);
-                    setOutput(undefined);
-                    write.reset();
-                    confirm.reset();
-                  }}
-                />
-                <span>
-                  <strong>
-                    {t(`scraperField_${field.key}`, {
-                      defaultValue: field.key,
-                    })}
-                  </strong>{" "}
-                  <span className="text-muted-foreground">
-                    {field.language ?? t("none")}
-                  </span>
-                  <span className="block whitespace-pre-wrap break-words">
-                    {value(field.value)}
-                  </span>
-                </span>
-              </Label>
-            ))}
-          </fieldset>
-          <fieldset className="mt-6">
-            <legend className="font-medium">{t("scraperArtwork")}</legend>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {t("scraperArtworkHelp")}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Label className="filter-field">
+              <span>{t("type")}</span>
+              <Select
+                value={kind}
+                onChange={(e) => {
+                  setKind(e.target.value as VideoKind);
+                  setProviders(
+                    e.target.value === "anime" ? ["anilist"] : ["tmdb"],
+                  );
+                  clearDetail();
+                  setSearch(undefined);
+                }}
+                disabled={busy || Boolean(target)}
+              >
+                {(["movie", "tv", "anime"] as const).map((k) => (
+                  <option key={k} value={k}>
+                    {t(
+                      k === "movie"
+                        ? "scraperMovie"
+                        : k === "tv"
+                          ? "scraperTv"
+                          : "scraperAnime",
+                    )}
+                  </option>
+                ))}
+              </Select>
+            </Label>
+            <Label className="filter-field">
+              <span>{t("scraperTitle")}</span>
+              <Input
+                value={title}
+                ref={titleInput}
+                aria-describedby={
+                  selectedProviders.includes("wikipedia.html")
+                    ? "scraper-wikipedia-title-hint"
+                    : undefined
+                }
+                maxLength={256}
+                onChange={(e) => setTitle(e.target.value)}
+                disabled={busy}
+              />
+            </Label>
+            <Label className="filter-field">
+              <span>{t("scraperYear")}</span>
+              <Input
+                type="number"
+                min={1800}
+                max={2200}
+                value={year}
+                onChange={(e) => setYear(e.target.value)}
+                disabled={busy}
+              />
+            </Label>
+          </div>
+          {selectedProviders.includes("wikipedia.html") && (
+            <p
+              id="scraper-wikipedia-title-hint"
+              className="mt-3 text-sm text-muted-foreground"
+            >
+              {t("scraperWikipediaTitleHint")}
             </p>
-            <div className="scraper-artwork-grid">
-              {metadata.data.artwork.map((art, index) => (
-                <Label className="scraper-artwork-choice" key={index}>
+          )}
+          <Details className="mt-4">
+            <DetailsSummary>{t("scraperAdvanced")}</DetailsSummary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <Label className="filter-field">
+                <span>{t("scraperExternalNamespace")}</span>
+                <Input
+                  value={namespace}
+                  maxLength={32}
+                  onChange={(e) => setNamespace(e.target.value)}
+                  disabled={busy}
+                />
+              </Label>
+              <Label className="filter-field">
+                <span>{t("scraperExternalId")}</span>
+                <Input
+                  value={externalId}
+                  maxLength={128}
+                  onChange={(e) => setExternalId(e.target.value)}
+                  disabled={busy}
+                />
+              </Label>
+            </div>
+          </Details>
+          <fieldset className="my-4">
+            <legend className="mb-2 font-medium">
+              {t("scraperProviders")}
+            </legend>
+            <div className="flex flex-wrap gap-5">
+              {providerChoices.map((id) => (
+                <Label key={id} className="flex items-center gap-2">
                   <Checkbox
-                    checked={selectedArtwork.includes(index)}
-                    disabled={busy}
-                    onChange={(e) => {
-                      setSelectedArtwork((old) =>
+                    checked={selectedProviders.includes(id)}
+                    disabled={busy || !available(id)}
+                    onChange={(e) =>
+                      setProviders((old) =>
                         e.target.checked
-                          ? [...old, index]
-                          : old.filter((i) => i !== index),
-                      );
-                      setPreview(undefined);
-                      setOutput(undefined);
-                      write.reset();
-                      confirm.reset();
-                    }}
+                          ? [...old, id]
+                          : old.filter((p) => p !== id),
+                      )
+                    }
                   />
                   <span>
-                    <strong>
-                      {t("scraperArtworkItem", {
-                        kind: t(`scraperArtwork_${art.kind}`, {
-                          defaultValue: art.kind,
-                        }),
-                        provider: art.source_provider,
-                        index: index + 1,
-                      })}
-                    </strong>
-                    <span className="block break-all text-xs">{art.url}</span>
-                    <span>{art.language ?? t("none")}</span>
-                    {thumbnails[index] && (
-                      <img
-                        src={thumbnails[index]}
-                        alt={t("scraperArtworkAlt", { kind: art.kind })}
-                        className="scraper-thumbnail"
-                      />
-                    )}
-                    <Button
-                      type="button"
-                      className="mt-2"
-                      size="sm"
-                      variant="outline"
-                      disabled={
-                        busy ||
-                        discard.isPending ||
-                        artworkLoad.isPending ||
-                        Boolean(thumbnails[index])
-                      }
-                      onClick={(event) => {
-                        event.preventDefault();
-                        artworkLoad.mutate(index);
-                      }}
-                    >
-                      {t("scraperLoadArtwork")}
-                    </Button>
+                    {providerNames[id]}{" "}
+                    {providerState(id) !== "ready" &&
+                      `(${t(`scraperProviderState_${providerState(id)}`)})`}
                   </span>
                 </Label>
               ))}
             </div>
           </fieldset>
-          <div className="mt-6 border-t border-border pt-5">
-            {!target && (
-              <p className="notice">{t("scraperSelectBeforeMerge")}</p>
-            )}
-            {target && metadata.kind !== targetKind && (
-              <p role="alert" className="notice error-notice">
-                {t("scraperTypeMismatch")}
-              </p>
-            )}
-            <Button
-              className="mt-4"
-              disabled={
-                !validTarget ||
-                metadata.kind !== targetKind ||
-                busy ||
-                (!selectedFields.length && !selectedArtwork.length)
-              }
-              onClick={() => {
-                confirm.reset();
-                setOutput(undefined);
-                merge.mutate();
-              }}
-            >
-              {t("scraperPreview")}
-            </Button>
-          </div>
-        </section>
-      )}
-      {preview && (
-        <section className="panel mt-7" aria-labelledby="scraper-preview">
-          <h2 id="scraper-preview" className="text-lg font-semibold">
-            {t("scraperPreviewTitle")}
-          </h2>
-          <div className="mt-4 overflow-x-auto">
-            <table className="data-table scraper-diff">
-              <thead>
-                <tr>
-                  <th>{t("scraperField")}</th>
-                  <th>{t("scraperOld")}</th>
-                  <th>{t("scraperNew")}</th>
-                  <th>{t("scraperSource")}</th>
-                  <th>{t("state")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preview.fields.map((field, index) => (
-                  <tr key={index}>
-                    <td>
-                      {t(`scraperField_${field.key}`, {
-                        defaultValue: field.key,
-                      })}
-                      <span className="block text-xs">
-                        {field.language ?? t("none")}
-                      </span>
-                    </td>
-                    <td>
-                      {field.old ? value(field.old.value) : t("none")}
-                      {field.old?.is_locked && (
-                        <span className="badge">{t("locked")}</span>
-                      )}
-                      {field.old?.is_user_modified && (
-                        <span className="badge">{t("userEdited")}</span>
-                      )}
-                    </td>
-                    <td>{value(field.new.value)}</td>
-                    <td>
-                      {field.provider_id}
-                      <span className="block break-all text-xs">
-                        {field.source_url}
-                      </span>
-                    </td>
-                    <td>
-                      {field.protected
-                        ? t("scraperProtected")
-                        : field.selected
-                          ? t("scraperSelected")
-                          : t("scraperNotSelected")}
-                      {field.needs_review && !field.protected && (
-                        <span className="block text-xs">
-                          {t("scraperConflict")}
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <Button
-            className="mt-5"
-            disabled={
-              busy ||
-              confirm.isSuccess ||
-              preview.confirmed ||
-              (!preview.fields.some((f) => f.selected && !f.protected) &&
-                !preview.artwork.length)
-            }
-            onClick={() => confirm.mutate()}
-          >
-            {t("scraperConfirm")}
-          </Button>
-          {!confirm.isSuccess && !preview.confirmed && (
-            <Button
-              className="mt-5 ml-3"
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                setPreview(undefined);
-                setOutput(undefined);
-                confirm.reset();
-              }}
-            >
-              {t("scraperCancelMerge")}
-            </Button>
+          {providerChoices.some((id) =>
+            ["disabled", "credentials"].includes(providerState(id)),
+          ) && (
+            <div className="mb-4 flex flex-wrap gap-3">
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  to="/settings"
+                  search={{
+                    tab: "providers",
+                    from: "scraper",
+                    media: target || undefined,
+                    queue,
+                    session: sessionId,
+                  }}
+                >
+                  {t("scraperConfigureProviders")}
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link
+                  to="/settings"
+                  search={{
+                    tab: "auth",
+                    from: "scraper",
+                    media: target || undefined,
+                    queue,
+                    session: sessionId,
+                    provider: kind === "anime" ? "anilist" : "tmdb",
+                  }}
+                >
+                  {t("scraperConfigureAuth")}
+                </Link>
+              </Button>
+            </div>
           )}
-          {confirm.data && (
-            <p role="status" className="notice mt-4">
-              {confirm.data.already_applied
-                ? t("scraperAlready")
-                : t("scraperConfirmed", { count: confirm.data.applied_fields })}
+          {invalid && (
+            <p role="alert" className="notice error-notice mb-3">
+              {t("scraperInvalid")}
             </p>
           )}
-          {(confirm.isSuccess || preview.confirmed) && (
+          <Button
+            type="submit"
+            disabled={busy || !snapshot.data || !searchValid}
+          >
+            {run.isPending ? t("scraperSearching") : t("scraperSearch")}
+          </Button>
+          {(run.isPending || restore.isPending) && (
             <Button
-              className="mt-4 ml-3"
+              className="ml-3"
               variant="outline"
-              disabled={busy}
               onClick={() => {
-                write.reset();
-                outputPlan.mutate();
+                clearDetail();
+                restore.reset();
+                setSearch(undefined);
               }}
             >
-              {t("scraperOutputPreview")}
+              {t("scraperStopWaiting")}
             </Button>
           )}
-        </section>
+        </form>
+        {recovery}
+        {error && error !== run.error && error !== restore.error && (
+          <div className="mt-4">
+            <ErrorNotice error={error} />
+          </div>
+        )}
+        {restore.isSuccess && (
+          <p role="status" className="notice mt-4">
+            {t("scraperRestored")}
+          </p>
+        )}
+        {search && (
+          <section className="mt-7" aria-labelledby="scraper-results">
+            <h2 id="scraper-results" className="text-lg font-semibold">
+              {t("scraperResults")}
+            </h2>
+            <div className="scraper-candidates">
+              {search.candidates.map((c, index) => (
+                <article
+                  className={`panel ${candidateIndex === index ? "scraper-chosen" : ""}`}
+                  key={index}
+                >
+                  <h3 className="font-semibold">
+                    {c.candidate.data.title} ·{" "}
+                    {c.candidate.data.year ?? t("unknownYear")}
+                  </h3>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {c.candidate.data.provider_id} ·{" "}
+                    {c.candidate.data.remote_id}
+                  </p>
+                  <ul className="mt-3 list-disc pl-5 text-sm">
+                    {c.reasons.map((reason, i) => (
+                      <li key={i}>
+                        {t(`scraperReason_${reason}`, {
+                          defaultValue: t("scraperReasonFallback"),
+                        })}
+                      </li>
+                    ))}
+                  </ul>
+                  {c.needs_review && (
+                    <p className="mt-3 badge">{t("scraperReview")}</p>
+                  )}
+                  {c.duplicate_of !== null && (
+                    <p className="mt-2 text-sm">
+                      {t("scraperDuplicate", { index: c.duplicate_of + 1 })}
+                    </p>
+                  )}
+                  <Button
+                    className="mt-4"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => selectCandidate(index)}
+                  >
+                    {t("scraperSelect")}
+                  </Button>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        {detail.isPending && <Loading />}
+        {candidateIndex !== undefined && (
+          <Button
+            className="mt-4"
+            variant="outline"
+            onClick={clearDetail}
+            disabled={confirm.isPending || write.isPending}
+          >
+            {t("scraperCancelSelection")}
+          </Button>
+        )}
+      </div>
+      {metadata && (
+        <>
+          {error && (
+            <div className="mb-4">
+              <ErrorNotice error={error} />
+            </div>
+          )}
+          <MetadataMergeWorkspace
+            workspace={workspace}
+            busy={busy}
+            onCancel={clearDetail}
+          />
+        </>
       )}
       {output && (
         <section className="panel mt-7" aria-labelledby="scraper-output">
@@ -872,45 +625,49 @@ function ScraperWorkspace({
           )}
         </section>
       )}
-      <section className="panel mt-7" aria-labelledby="scraper-history">
-        <h2 id="scraper-history" className="text-lg font-semibold">
-          {t("scraperHistory")}
-        </h2>
-        {history.error && <ErrorNotice error={history.error} />}
-        <ul className="mt-3 space-y-2">
-          {history.data?.map((entry) => (
-            <li
-              key={entry.id}
-              className="flex flex-wrap justify-between gap-2 text-sm"
-            >
-              <span>
-                {entry.query.title ||
-                  entry.query.external_ids
-                    .map((id) => `${id.namespace}:${id.value}`)
-                    .join(" · ")}{" "}
-                · {format.date(entry.created_at)}
-              </span>
-              <span>
-                {t(`state_${entry.state}`, { defaultValue: t("needsReview") })}{" "}
-                · {format.number(entry.candidate_count)} {t("candidates")}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={busy || entry.candidate_count === 0}
-                onClick={() => restore.mutate(entry.id)}
+      {!metadata && (
+        <section className="panel mt-7" aria-labelledby="scraper-history">
+          <h2 id="scraper-history" className="text-lg font-semibold">
+            {t("scraperHistory")}
+          </h2>
+          {history.error && <ErrorNotice error={history.error} />}
+          <ul className="mt-3 space-y-2">
+            {history.data?.map((entry) => (
+              <li
+                key={entry.id}
+                className="flex flex-wrap justify-between gap-2 text-sm"
               >
-                {t("scraperRestore")}
-              </Button>
-            </li>
-          ))}
-        </ul>
-        {history.data?.length === 0 && (
-          <p className="mt-3 text-muted-foreground">
-            {t("scraperHistoryEmpty")}
-          </p>
-        )}
-      </section>
+                <span>
+                  {entry.query.title ||
+                    entry.query.external_ids
+                      .map((id) => `${id.namespace}:${id.value}`)
+                      .join(" · ")}{" "}
+                  · {format.date(entry.created_at)}
+                </span>
+                <span>
+                  {t(`state_${entry.state}`, {
+                    defaultValue: t("needsReview"),
+                  })}{" "}
+                  · {format.number(entry.candidate_count)} {t("candidates")}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busy || entry.candidate_count === 0}
+                  onClick={() => restore.mutate(entry.id)}
+                >
+                  {t("scraperRestore")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {history.data?.length === 0 && (
+            <p className="mt-3 text-muted-foreground">
+              {t("scraperHistoryEmpty")}
+            </p>
+          )}
+        </section>
+      )}
     </>
   );
 }
