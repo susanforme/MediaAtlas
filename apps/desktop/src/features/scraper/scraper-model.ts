@@ -1,10 +1,11 @@
 export function value(v: unknown): string {
   return typeof v === "string" ? v : (JSON.stringify(v) ?? "");
 }
-export const providerChoices = ["tmdb", "anilist", "wikipedia.html"];
+export const providerChoices = ["tmdb", "anilist", "tvmaze", "wikipedia.html"];
 export const providerNames: Record<string, string> = {
   tmdb: "TMDB",
   anilist: "AniList",
+  tvmaze: "TVmaze",
   "wikipedia.html": "Wikipedia",
 };
 

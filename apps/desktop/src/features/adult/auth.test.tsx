@@ -5,6 +5,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 import { ProviderAuthSettings } from "../settings/provider-auth";
 
 const privacy = vi.hoisted(() => ({ includeAdult: true }));
@@ -65,9 +66,7 @@ beforeEach(async () => {
 it("stores both masked DMM fields as one inbound credential and clears them on submission", async () => {
   const stored = vi.spyOn(Storage.prototype, "setItem");
   show();
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "dmm" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "dmm");
   const api = await screen.findByLabelText("DMM API ID");
   const affiliate = screen.getByLabelText("DMM affiliate ID");
   expect(api).toHaveAttribute("type", "password");
@@ -78,9 +77,7 @@ it("stores both masked DMM fields as one inbound credential and clears them on s
     screen.getByRole("button", { name: "Save authentication" }),
   ).toBeDisabled();
   fireEvent.change(affiliate, { target: { value: "synthetic-affiliate" } });
-  fireEvent.change(screen.getByLabelText("Credential storage"), {
-    target: { value: "session_only" },
-  });
+  chooseSelectOption(screen.getByLabelText("Credential storage"), "session_only");
   fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
   expect(api).toHaveValue("");
   expect(affiliate).toHaveValue("");
@@ -106,6 +103,7 @@ it("does not expose or fetch adult authentication while the workspace is locked"
   privacy.includeAdult = false;
   show();
   await screen.findByLabelText("Credential");
+  selectOptions(screen.getByLabelText("Authentication provider"));
   expect(
     screen.queryByRole("option", { name: "DMM / FANZA" }),
   ).not.toBeInTheDocument();
@@ -114,9 +112,7 @@ it("does not expose or fetch adult authentication while the workspace is locked"
 });
 it("uses public read-only status for the secondary adult source", async () => {
   show();
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "wikidata" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "wikidata");
   await screen.findByText(
     "This provider uses public read-only access and requires no credential.",
   );

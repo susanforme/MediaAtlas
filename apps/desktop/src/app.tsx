@@ -59,6 +59,11 @@ function RootLayout() {
   );
 }
 const rootRoute = createRootRoute({ component: RootLayout });
+const nfoRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/nfo",
+  component: lazyRouteComponent(() => import("./features/nfo/page"), "NfoPage"),
+});
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -326,6 +331,7 @@ const router = createRouter({
   defaultPendingMinMs: 0,
   routeTree: rootRoute.addChildren([
     indexRoute,
+    nfoRoute,
     libraryRoute,
     adultRoute,
     adultToolsRoute,

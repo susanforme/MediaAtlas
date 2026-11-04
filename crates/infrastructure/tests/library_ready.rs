@@ -36,6 +36,7 @@ async fn imported(
     let browse = BrowseService::new(repo.clone(), dir.path().join("thumbs"));
     let root = browse
         .save_root(&RootInput {
+            metadata_providers: None,
             id: None,
             name: "Fixtures".into(),
             path: media.to_str().unwrap().into(),

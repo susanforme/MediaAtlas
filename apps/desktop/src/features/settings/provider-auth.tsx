@@ -373,6 +373,7 @@ function ProviderAuthForm({
           >
             <option value="tmdb">TMDB</option>
             <option value="anilist">AniList</option>
+            <option value="tvmaze">TVmaze</option>
             <option value="wikipedia.html">Wikipedia</option>
             <option value="musicbrainz">MusicBrainz</option>
             <option value="coverartarchive">Cover Art Archive</option>
@@ -384,7 +385,7 @@ function ProviderAuthForm({
             )}
           </Select>
         </Label>
-        {["musicbrainz", "coverartarchive"].includes(selectedProvider) ? (
+        {["musicbrainz", "coverartarchive", "tvmaze"].includes(selectedProvider) ? (
           <PublicSourceEditor
             key={selectedProvider}
             providerId={selectedProvider}

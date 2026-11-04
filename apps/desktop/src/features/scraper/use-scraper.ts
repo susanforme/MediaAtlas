@@ -416,7 +416,7 @@ export function useScraper(
   const authProviders =
     snapshot.data?.providers.filter(
       (p) =>
-        ["tmdb", "anilist", "wikipedia.html"].includes(p.descriptor.id) &&
+        ["tmdb", "anilist", "tvmaze", "wikipedia.html"].includes(p.descriptor.id) &&
         (p.descriptor.requires_api_key || p.descriptor.requires_login),
     ) ?? [];
   const auth = useQueries({

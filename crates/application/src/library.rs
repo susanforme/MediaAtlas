@@ -33,6 +33,8 @@ pub struct RootInput {
     pub enabled: bool,
     #[serde(default)]
     pub exclude_patterns: Vec<String>,
+    #[serde(default)]
+    pub metadata_providers: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +43,7 @@ pub struct RootView {
     pub root: LibraryRoot,
     pub exclude_patterns: Vec<String>,
     pub last_scan_at: Option<DateTime<Utc>>,
+    pub metadata_providers: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -273,6 +276,7 @@ mod tests {
     fn root_view_and_new_response_use_the_frozen_flat_shape() {
         let now = Utc::now();
         let root = RootView {
+            metadata_providers: None,
             root: LibraryRoot {
                 id: Uuid::new_v4(),
                 name: "Fixture".into(),

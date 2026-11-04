@@ -44,6 +44,8 @@ pub struct ScanService {
 struct RootSnapshot {
     root: LibraryRoot,
     exclude_patterns: Vec<String>,
+    #[serde(default)]
+    metadata_providers: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -461,7 +463,10 @@ impl ScanService {
                 .await?;
         let exclusions: Vec<String> = serde_json::from_str(settings.as_deref().unwrap_or("[]"))
             .map_err(|_| RepositoryError::CorruptData)?;
-        if exclusions != saved.exclude_patterns {
+        let providers: Option<Vec<String>> = sqlx::query_scalar::<_, Option<String>>("SELECT metadata_providers_json FROM root_settings WHERE root_id=?")
+            .bind(saved.root.id.to_string()).fetch_optional(&mut *tx).await?.flatten()
+            .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData)).transpose()?;
+        if exclusions != saved.exclude_patterns || providers != saved.metadata_providers {
             return Err(RepositoryError::Conflict);
         }
         let current_state: String = sqlx::query_scalar("SELECT state FROM scrape_tasks WHERE id=?")
@@ -527,6 +532,7 @@ impl ScanService {
         Ok(RootSnapshot {
             root,
             exclude_patterns,
+            metadata_providers: crate::root_sources::load(self.repo.pool(), root_id).await?,
         })
     }
 
@@ -728,6 +734,7 @@ fn same_config(a: &RootSnapshot, b: &RootSnapshot) -> bool {
         && a.root.path_style == b.root.path_style
         && a.root.kind == b.root.kind
         && a.exclude_patterns == b.exclude_patterns
+        && a.metadata_providers == b.metadata_providers
 }
 
 async fn snapshot_tx(
@@ -766,6 +773,9 @@ async fn snapshot_tx(
     Ok(RootSnapshot {
         root,
         exclude_patterns,
+        metadata_providers: sqlx::query_scalar::<_, Option<String>>("SELECT metadata_providers_json FROM root_settings WHERE root_id=?")
+            .bind(root_id.to_string()).fetch_optional(&mut **tx).await?.flatten()
+            .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData)).transpose()?,
     })
 }
 

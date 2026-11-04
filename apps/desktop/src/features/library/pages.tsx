@@ -11,7 +11,7 @@ import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { RootCard } from "./root-card";
-import type { RootProviderId } from "./root-source-model";
+import { automaticRootSources, type RootProviderId } from "./root-source-model";
 import { RootSourceReadiness } from "./root-source-readiness";
 import type { ScannerSearch } from "./scanner-navigation";
 import { useRootActivity } from "./use-root-activity";
@@ -160,15 +160,16 @@ export function RootsPage({
                 <Select
                   disabled={working}
                   value={form.kind ?? "mixed"}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const kind = event.target.value === "mixed"
+                      ? null
+                      : (event.target.value as MediaKind);
                     setForm({
                       ...form,
-                      kind:
-                        event.target.value === "mixed"
-                          ? null
-                          : (event.target.value as MediaKind),
-                    })
-                  }
+                      kind,
+                      metadata_providers: automaticRootSources(kind),
+                    });
+                  }}
                 >
                   {ROOT_KINDS.filter(
                     (kind) => adultVisible || kind !== "adult_video",
@@ -185,6 +186,8 @@ export function RootsPage({
               kind={form.kind}
               adultAvailable={adultAvailable}
               disabled={working || picking}
+              value={form.metadata_providers ?? null}
+              onValueChange={(metadata_providers) => setForm({ ...form, metadata_providers })}
               onConfigure={onConfigureSource ? configureSource : undefined}
             />
             <Button

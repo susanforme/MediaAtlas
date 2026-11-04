@@ -15,6 +15,7 @@ async fn bounded_health_review_finds_missing_assets_duplicates_and_offline_files
         .unwrap();
     let root = BrowseService::new(repo.clone(), dir.path().join("cache"))
         .save_root(&RootInput {
+            metadata_providers: None,
             id: None,
             name: "Fixture".into(),
             path: media.to_str().unwrap().into(),
@@ -179,6 +180,7 @@ async fn missing_actual_local_and_approved_cached_artwork_is_reported_without_re
         .unwrap();
     let root = BrowseService::new(repo.clone(), dir.path().join("thumbnails"))
         .save_root(&RootInput {
+            metadata_providers: None,
             id: None,
             name: "Fixture".into(),
             path: media.to_str().unwrap().into(),

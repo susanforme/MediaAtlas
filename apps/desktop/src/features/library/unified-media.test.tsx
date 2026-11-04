@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -10,6 +10,7 @@ import {
   type MediaDetail,
 } from "../../api/library";
 import i18n from "../../i18n";
+import { selectOptions } from "../../test/select";
 import { LibraryPage } from "./browse";
 import { MediaDetailPage } from "./detail";
 
@@ -117,10 +118,8 @@ it("uses the same library and five category choices without lock or unlock actio
   expect(
     screen.getByRole("heading", { level: 1, name: "Media library" }),
   ).toBeInTheDocument();
-  const options = within(
-    screen.getByRole("combobox", { name: "Media type" }),
-  ).getAllByRole("option");
-  expect(options.map((option) => (option as HTMLOptionElement).value)).toEqual([
+  const options = selectOptions(screen.getByRole("combobox", { name: "Media type" }));
+  expect(options.map((option) => (option as HTMLButtonElement).value)).toEqual([
     "",
     "movie",
     "tv_series",
@@ -144,12 +143,8 @@ it("removes disabled categories from the ordinary selector", async () => {
   privacy.includeAdult = false;
   show(<LibraryPage search={{}} onSearch={vi.fn()} />);
   await screen.findByText("Your library is empty");
-  expect(
-    within(screen.getByRole("combobox", { name: "Media type" })).queryByRole(
-      "option",
-      { name: "Adult video" },
-    ),
-  ).not.toBeInTheDocument();
+  const options = selectOptions(screen.getByRole("combobox", { name: "Media type" }));
+  expect(options.map((option) => option.textContent)).not.toContain("Adult video");
   expect(adultApi.media).not.toHaveBeenCalled();
 });
 

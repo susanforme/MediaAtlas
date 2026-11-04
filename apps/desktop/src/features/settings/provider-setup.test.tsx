@@ -13,6 +13,7 @@ import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption } from "../../test/select";
 import { fixtureSnapshot } from "../providers/fixtures";
 import { ProviderAuthSettings } from "./provider-auth";
 import type { ProviderSetupSearch } from "./setup-search";
@@ -250,9 +251,7 @@ it("does not enable or navigate after a late save when the user changes the sele
   fireEvent.click(
     screen.getByRole("button", { name: "Save, enable and continue updating" }),
   );
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "anilist" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "anilist");
   await act(async () =>
     resolve({ ...auth, configured: true, status: "configured" }),
   );

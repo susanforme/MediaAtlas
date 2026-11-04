@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { expect, it, vi } from "vitest";
+import { chooseSelectOption } from "../../test/select";
 import { Anchor, Button } from "./button";
 import { Checkbox } from "./checkbox";
 import {
@@ -47,9 +48,7 @@ it("preserves native label and controlled form contracts through shared controls
     target: { value: "Atlas" },
   });
   expect(screen.getByLabelText("Title")).toHaveValue("Atlas");
-  fireEvent.change(screen.getByRole("combobox", { name: "Kind" }), {
-    target: { value: "anime" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Kind" }), "anime");
   expect(changed).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole("checkbox", { name: "Enabled" }));
   expect(screen.getByRole("checkbox", { name: "Enabled" })).toBeChecked();

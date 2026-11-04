@@ -440,6 +440,7 @@ mod race_tests {
         let child = parent.join("private");
         std::fs::create_dir_all(&child).unwrap();
         let input = |path: &std::path::Path, kind| RootInput {
+            metadata_providers: None,
             id: None,
             name: "Synthetic root".into(),
             path: path.to_string_lossy().into_owned(),
@@ -501,6 +502,7 @@ mod output_revocation_tests {
         let browse = BrowseService::new(repo.clone(), dir.path().join("thumbs"));
         let root = browse
             .save_root(&RootInput {
+                metadata_providers: None,
                 id: None,
                 name: "Synthetic adult fixture".into(),
                 path: path.to_string_lossy().into_owned(),

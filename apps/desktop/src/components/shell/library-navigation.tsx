@@ -1,5 +1,15 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Clapperboard, Film, Music2, Sparkles, Tv, Video } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Clapperboard,
+  Film,
+  Music2,
+  Sparkles,
+  Tv,
+  Video,
+} from "lucide-react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { usePrivacy } from "../../features/library/context";
 import { LIBRARY_CATEGORIES } from "../../features/library/library-model";
@@ -14,6 +24,8 @@ const icons = {
 
 export function LibraryNavigation() {
   const { t } = useTranslation();
+  const [expanded, setExpanded] = useState(true);
+  const childrenId = useId();
   const { includeAdult } = usePrivacy();
   const pathname = useLocation({ select: (location) => location.pathname });
   const inLibrary =
@@ -23,20 +35,37 @@ export function LibraryNavigation() {
     pathname.startsWith("/media/");
   return (
     <li className="app-nav-group">
-      <Button asChild variant="ghost" className="app-nav-item">
-        <Link
-          to="/library"
-          data-section-active={inLibrary || undefined}
-          search={{ kind: undefined }}
-          activeOptions={{ includeSearch: true, explicitUndefined: true }}
-          activeProps={{ className: "active" }}
-          aria-label={t("library")}
+      <div className="app-nav-heading">
+        <Button asChild variant="ghost" className="app-nav-item">
+          <Link
+            to="/library"
+            data-section-active={inLibrary || undefined}
+            search={{ kind: undefined }}
+            activeOptions={{ includeSearch: true, explicitUndefined: true }}
+            activeProps={{ className: "active" }}
+            aria-label={t("library")}
+          >
+            <Clapperboard size={20} aria-hidden="true" />
+            <span className="app-nav-label">{t("library")}</span>
+          </Link>
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="app-nav-collapse"
+          aria-label={t(expanded ? "collapseLibrary" : "expandLibrary")}
+          aria-expanded={expanded}
+          aria-controls={childrenId}
+          onClick={() => setExpanded(!expanded)}
         >
-          <Clapperboard size={20} aria-hidden="true" />
-          <span className="app-nav-label">{t("library")}</span>
-        </Link>
-      </Button>
-      <ul className="app-nav-children">
+          {expanded ? (
+            <ChevronDown size={16} aria-hidden="true" />
+          ) : (
+            <ChevronRight size={16} aria-hidden="true" />
+          )}
+        </Button>
+      </div>
+      <ul id={childrenId} className="app-nav-children" hidden={!expanded}>
         {LIBRARY_CATEGORIES.filter(
           (kind) => kind !== "adult_video" || includeAdult,
         ).map((kind) => {

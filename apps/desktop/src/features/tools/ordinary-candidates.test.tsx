@@ -20,6 +20,7 @@ import {
 import { reviewQueueApi } from "../../api/review-queue";
 import { Button } from "../../components/ui/button";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 import { MAX_SCRAPE_QUEUE } from "../scraper/search";
 import { OrdinaryCandidates } from "./ordinary-candidates";
 import { LocalCandidates } from "./page";
@@ -204,9 +205,7 @@ it("uses the same type selector and table while switching backend adapters and c
       name: `Select for scraping: ${first.media.title}`,
     }),
   );
-  fireEvent.change(screen.getByRole("combobox", { name: "Media type" }), {
-    target: { value: "adult_video" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Media type" }), "adult_video");
   expect(
     await screen.findByRole("cell", { name: privateCard.media.title }),
   ).toBeInTheDocument();
@@ -224,9 +223,7 @@ it("uses the same type selector and table while switching backend adapters and c
       limit: TOOLS_PAGE_SIZE,
     }),
   );
-  fireEvent.change(screen.getByRole("combobox", { name: "Media type" }), {
-    target: { value: "movie" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Media type" }), "movie");
   expect(
     await screen.findByRole("checkbox", {
       name: `Select for scraping: ${first.media.title}`,
@@ -241,6 +238,7 @@ it("does not fetch or render the adult type while its setting is disabled", asyn
   privacy.enabled = false;
   privacy.allowed = false;
   show({ kind: "adult_video" });
+  selectOptions(screen.getByRole("combobox", { name: "Media type" }));
   await waitFor(() =>
     expect(screen.getByRole("option", { name: "Adult video" })).toBeDisabled(),
   );
@@ -255,9 +253,11 @@ it("renders ordinary candidate metadata in a table with independent view and sel
   expect(screen.getAllByText(first.media.title)).toHaveLength(1);
   expect(screen.getAllByText("2020")).toHaveLength(4);
   expect(screen.queryByText("Synthetic private title")).not.toBeInTheDocument();
+  selectOptions(screen.getByRole("combobox", { name: "Library root" }));
   expect(
     screen.queryByRole("option", { name: "Synthetic private root" }),
   ).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("combobox", { name: "Library root" }), { key: "Escape" });
   expect(
     screen.queryByLabelText("Choose a local resource"),
   ).not.toBeInTheDocument();
@@ -511,7 +511,7 @@ it.each([
         name: `Select for scraping: ${first.media.title}`,
       }),
     );
-    fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    chooseSelectOption(screen.getByLabelText(label), value);
     await waitFor(() =>
       expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
         expect.objectContaining({ [field]: value, cursor: null }),

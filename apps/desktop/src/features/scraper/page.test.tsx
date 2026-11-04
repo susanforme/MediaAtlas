@@ -17,6 +17,7 @@ import { type ReviewQueue, reviewQueueApi } from "../../api/review-queue";
 import { scraperApi, scraperOutputApi } from "../../api/scraper";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 import { fixtureSnapshot } from "../providers/fixtures";
 import {
   syntheticMerge,
@@ -255,10 +256,9 @@ function clickFirstEnabledCommit(name: string | RegExp) {
 
 async function searchAndChoose() {
   const view = show();
-  await screen.findByText("Local film · 2024");
-  fireEvent.change(screen.getByLabelText("Local media item"), {
-    target: { value: "media-1" },
-  });
+  selectOptions(screen.getByLabelText("Local media item"));
+  await screen.findByRole("option", { name: "Local film · 2024" });
+  chooseSelectOption(screen.getByLabelText("Local media item"), "media-1");
   await waitFor(() =>
     expect(screen.getByLabelText("Title")).toHaveValue("Local film"),
   );
@@ -432,9 +432,7 @@ it("renders TV seasons with their explicit aired numbering", async () => {
   });
   show();
   await screen.findByText("TMDB");
-  fireEvent.change(screen.getByLabelText("Media type"), {
-    target: { value: "tv" },
-  });
+  chooseSelectOption(screen.getByLabelText("Media type"), "tv");
   fireEvent.change(screen.getByLabelText("Title"), {
     target: { value: "Synthetic series" },
   });
@@ -479,9 +477,7 @@ it("uses the independent Anime query and displays aliases", async () => {
   });
   show();
   await screen.findByText(/AniList/);
-  fireEvent.change(screen.getByLabelText("Media type"), {
-    target: { value: "anime" },
-  });
+  chooseSelectOption(screen.getByLabelText("Media type"), "anime");
   fireEvent.change(screen.getByLabelText("Title"), {
     target: { value: "Synthetic anime" },
   });

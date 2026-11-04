@@ -27,6 +27,7 @@ async fn setup() -> (TempDir, LibraryRepository, BrowseService) {
 }
 fn input(path: &Path, kind: Option<MediaKind>) -> RootInput {
     RootInput {
+        metadata_providers: None,
         id: None,
         name: "Fixture root".into(),
         path: path.to_str().unwrap().into(),
@@ -424,5 +425,35 @@ async fn adult_root_removal_does_not_expose_orphaned_media_in_ordinary_views() {
             .len(),
         1
     );
+    repo.pool().close().await;
+}
+
+#[tokio::test]
+async fn root_sources_are_ordered_per_directory_and_validate_before_saving() {
+    let (dir, repo, service) = setup().await;
+    let first_path = dir.path().join("first");
+    let second_path = dir.path().join("second");
+    std::fs::create_dir(&first_path).unwrap();
+    std::fs::create_dir(&second_path).unwrap();
+    let mut first = input(&first_path, Some(MediaKind::TvSeries));
+    first.metadata_providers = Some(vec!["tvmaze".into(), "tmdb".into()]);
+    let saved = service.save_root(&first).await.unwrap();
+    first.id = Some(saved.root.id);
+    let mut second = input(&second_path, Some(MediaKind::Movie));
+    second.metadata_providers = Some(vec!["tmdb".into()]);
+    let other = service.save_root(&second).await.unwrap();
+    assert_eq!(saved.metadata_providers, first.metadata_providers);
+    first.metadata_providers = None;
+    let unchanged = service.save_root(&first).await.unwrap();
+    assert_eq!(unchanged.metadata_providers, Some(vec!["tvmaze".into(), "tmdb".into()]));
+    first.metadata_providers = Some(vec!["dmm".into()]);
+    assert!(matches!(service.save_root(&first).await, Err(RepositoryError::InvalidInput)));
+    first.metadata_providers = Some(vec![]);
+    assert_eq!(service.save_root(&first).await.unwrap().metadata_providers, Some(vec![]));
+    first.metadata_providers = None;
+    first.kind = Some(MediaKind::Anime);
+    assert_eq!(service.save_root(&first).await.unwrap().metadata_providers, Some(vec!["anilist".into()]));
+    let roots = service.list_roots(false).await.unwrap();
+    assert_eq!(roots.iter().find(|root| root.root.id == other.root.id).unwrap().metadata_providers, Some(vec!["tmdb".into()]));
     repo.pool().close().await;
 }

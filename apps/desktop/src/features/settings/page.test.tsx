@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
+import { chooseSelectOption } from "../../test/select";
 import { initializeTheme, THEME_STORAGE_KEY } from "../../lib/theme";
 import { SettingsPage } from "./page";
 
@@ -43,7 +44,7 @@ it("switches appearance immediately and restores the saved theme", () => {
   const view = render(<SettingsPage />);
   const theme = screen.getByRole("combobox", { name: "Theme" });
   expect(theme).toHaveValue("dark");
-  fireEvent.change(theme, { target: { value: "light" } });
+  chooseSelectOption(theme, "light");
   expect(document.documentElement).toHaveAttribute("data-theme", "light");
   expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
   view.unmount();

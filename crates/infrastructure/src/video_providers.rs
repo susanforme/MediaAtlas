@@ -1,5 +1,6 @@
 //! Built-in ordinary video adapters. Every HTTP operation uses the P3 engine.
 //! Fixtures exercise these adapters with injected test-only loopback endpoints.
+mod tvmaze;
 use crate::{
     credentials::{CredentialMode, CredentialStore},
     network::{parse_html, CancellationToken, EngineKind, NetworkEngine, RequestSpec},
@@ -24,6 +25,7 @@ pub struct VideoProviderHub {
     tmdb_base: String,
     anilist_endpoint: String,
     wikipedia_base: String,
+    tvmaze_base: String,
 }
 impl VideoProviderHub {
     pub fn new(engine: Arc<NetworkEngine>, credentials: Arc<CredentialStore>) -> Self {
@@ -35,6 +37,7 @@ impl VideoProviderHub {
             tmdb_base: "https://api.themoviedb.org/3".into(),
             anilist_endpoint: "https://graphql.anilist.co".into(),
             wikipedia_base: "https://en.wikipedia.org/wiki".into(),
+            tvmaze_base: "https://api.tvmaze.com".into(),
         }
     }
     /// Trusted composition only. Session mode never falls back to disk or OS storage.
@@ -60,6 +63,7 @@ impl VideoProviderHub {
     }
     pub fn descriptors() -> Vec<ProviderDescriptor> {
         vec![
+            tvmaze::descriptor(),
             descriptor(
                 "tmdb",
                 "TMDB",
@@ -101,6 +105,9 @@ impl VideoProviderHub {
             return Err(ProviderFailure::IdentityMismatch);
         }
         match provider {
+            "tvmaze" if matches!(query, VideoQuery::Tv { .. }) => {
+                self.tvmaze_search(query, job, cancel).await
+            }
             "tmdb" => self.tmdb_search(query, job, cancel).await,
             "anilist" if matches!(query, VideoQuery::Anime { .. }) => {
                 self.anilist_search(query, job, cancel).await
@@ -119,6 +126,9 @@ impl VideoProviderHub {
             return Err(ProviderFailure::IdentityMismatch);
         }
         match candidate.data().provider_id.as_str() {
+            "tvmaze" if matches!(candidate, VideoCandidate::Tv(_)) => {
+                self.tvmaze_detail(candidate, job, cancel).await
+            }
             "tmdb" => self.tmdb_detail(candidate, job, cancel).await,
             "anilist" if matches!(candidate, VideoCandidate::Anime(_)) => {
                 self.anilist_detail(candidate, job, cancel).await

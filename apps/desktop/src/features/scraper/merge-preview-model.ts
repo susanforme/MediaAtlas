@@ -20,6 +20,7 @@ export interface MergePreviewRow {
   selected: boolean;
   eligible: boolean;
   protected: boolean;
+  mandatory: boolean;
   result: MergeFieldResult;
   value: unknown;
 }
@@ -96,6 +97,9 @@ export function buildMergePreview({
   const authoritative =
     preview?.media_item_id === target?.media.id ? preview : undefined;
   const rows: MergePreviewRow[] = metadata.data.fields.map((field) => {
+    const mandatory =
+      ["tvmaze", "wikipedia.html"].includes(metadata.data.identity.provider_id) &&
+      ["attribution", "source_license"].includes(field.key);
     const language = locale(field.language);
     const existing = local.filter((value) => value.field_key === field.key);
     const proof = authoritative?.fields.find(
@@ -120,12 +124,13 @@ export function buildMergePreview({
       !duplicateKey &&
       !protectedField &&
       !empty(field.value) &&
-      (!onlyMissing ||
+      (mandatory ||
+        !onlyMissing ||
         (Boolean(target) &&
           empty(canonical(target, field.key)) &&
           existing.every((value) => empty(value.value)) &&
           (!old || empty(old.value))));
-    const apply = selected.has(field.key) && eligible;
+    const apply = (mandatory || selected.has(field.key)) && eligible;
     const result: MergeFieldResult = !apply
       ? "skipped"
       : old && equal(old.value, field.value)
@@ -141,6 +146,7 @@ export function buildMergePreview({
       selected: apply,
       eligible,
       protected: protectedField,
+      mandatory,
       result,
       value: apply ? field.value : (old?.value ?? canonical(target, field.key)),
     };

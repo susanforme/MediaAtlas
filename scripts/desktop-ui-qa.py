@@ -60,6 +60,8 @@ ADAPTER = r"""(cards) => {
     invoke: async (cmd, args = {}) => {
       const input = args.input || {};
       window.__qa.calls.push({cmd, input});
+      if (cmd === 'nfo_startup_mode' || cmd === 'nfo_has_opened') return wrap(false);
+      if (cmd === 'nfo_take_opened') return wrap(null);
       if (cmd.startsWith('plugin:event|')) return 1;
       if (cmd === 'adult_settings') return wrap(window.__qa.privacy);
       if (cmd === 'adult_save_settings') {

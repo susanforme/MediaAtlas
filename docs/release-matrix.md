@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.7`，包含桌面 shadcn 共享组件统一、浅色／暗色主题切换及选择持久化。本轮按用户要求仅进行静态阅读和修改，未在本地运行测试、lint、构建或安装包；新增主题与设置测试仅写入源码。版本同步更新根与桌面 package、Cargo workspace 与锁文件、Tauri 配置；Cargo.lock 仅改变本项目 crate 版本，第三方依赖不变，许可清单仅同步锁文件摘要。推送新 tag 触发现有远程发布流程，不等待打包，既有 beta.1–beta.6 均保持原提交不动。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.7`，包含桌面 shadcn 共享组件与明暗主题；本轮追加左侧分类收起和对齐、自定义 Select、语言入口收敛到设置、移除盾牌与默认网页右键菜单、NFO 独立只读预览与系统文件关联、目录独立来源优先级及 TVmaze。按用户要求仅静态阅读和修改，相关安全、交互与来源回退测试只写入源码，未运行本地测试、lint、构建或安装包。依赖、锁文件和版本号不变。按用户授权移动现有 beta.7 tag 到新提交并推送重触发远程发布，不等待打包；beta.1–beta.6 保持原提交不动。NFO 关联与 macOS 固定文案的系统语言边界见 [NFO 预览说明](nfo-preview.md)，TVmaze 来源与归属要求见 [Provider 访问说明](provider-access.md)。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |

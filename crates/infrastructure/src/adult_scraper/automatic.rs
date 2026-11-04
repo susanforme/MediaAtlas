@@ -102,6 +102,9 @@ impl AdultScraperService {
                 run_id: None,
             });
         }
+        if context.metadata_providers.as_ref().is_some_and(Vec::is_empty) {
+            return Ok(AutomaticOutcome { state: "skipped", reason: Some("local_only"), run_id: None });
+        }
         let values = self.repo.list_metadata_values(media_id).await?;
         let ids = self.repo.list_external_ids(media_id).await?;
         let Some(query) = query_from_local(&values, &ids) else {
@@ -114,6 +117,11 @@ impl AdultScraperService {
         } else {
             return Ok(AutomaticOutcome::review("issuer_unconfigured"));
         };
+        if let Some(providers) = &context.metadata_providers {
+            if !providers.iter().any(|selected| selected == provider) {
+                return Ok(AutomaticOutcome { state: "skipped", reason: Some("local_only"), run_id: None });
+            }
+        }
         let config = self.providers.config(provider).await?;
         if !config.enabled
             || (provider == "dmm" && self.auth.is_none())

@@ -11,6 +11,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { musicApi } from "../../api/music";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption } from "../../test/select";
 
 vi.mock("../../components/ui/sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -271,13 +272,8 @@ it("shows artist aliases and Chinese controls with read-only format protection",
 it("links a real selected scanned file without writing its tags", async () => {
   show(<MusicAlbumTools releaseId="release-1" />);
   await screen.findByRole("combobox", { name: "Select a track" });
-  fireEvent.change(screen.getByRole("combobox", { name: "Select a track" }), {
-    target: { value: "track-1" },
-  });
-  fireEvent.change(
-    await screen.findByRole("combobox", { name: "Select an audio file" }),
-    { target: { value: "file-1" } },
-  );
+  chooseSelectOption(screen.getByRole("combobox", { name: "Select a track" }), "track-1");
+  chooseSelectOption(await screen.findByRole("combobox", { name: "Select an audio file" }), "file-1");
   fireEvent.click(screen.getByRole("button", { name: "Link file to track" }));
   await waitFor(() =>
     expect(musicApi.linkTrack).toHaveBeenCalledWith("track-1", "file-1"),

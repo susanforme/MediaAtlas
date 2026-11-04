@@ -14,6 +14,7 @@ import { DesktopError } from "../../api/desktop";
 import { libraryApi, type MediaCard, type RootView } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 import { LibraryPage, type LibrarySearch } from "./browse";
 
 const privacy = vi.hoisted(() => ({
@@ -199,9 +200,7 @@ it("keeps detailed filters collapsed while preserving server filtering and reset
   expect(
     screen.getByRole("region", { name: "Advanced filters" }),
   ).toBeInTheDocument();
-  fireEvent.change(screen.getByRole("combobox", { name: "Library root" }), {
-    target: { value: root.id },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Library root" }), root.id);
   expect(onSearch).toHaveBeenCalledWith(
     { root: root.id, cursor: undefined, page: 1 },
     undefined,
@@ -215,10 +214,9 @@ it("keeps detailed filters collapsed while preserving server filtering and reset
       }),
     ),
   );
+  selectOptions(screen.getByRole("combobox", { name: "All genres" }));
   await screen.findByRole("option", { name: "Drama (1)" });
-  fireEvent.change(screen.getByRole("combobox", { name: "All genres" }), {
-    target: { value: "Drama" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "All genres" }), "Drama");
   await waitFor(() =>
     expect(libraryApi.media).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -442,7 +440,7 @@ it("keeps the advanced health selector and shortcuts on one effective query", as
   fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
   const health = screen.getByRole("combobox", { name: "Health" });
   expect(health).toHaveValue("missing_nfo");
-  fireEvent.change(health, { target: { value: "missing_poster" } });
+  chooseSelectOption(health, "missing_poster");
   expect(
     within(shortcuts).getByRole("button", {
       name: "Missing poster",
@@ -497,17 +495,11 @@ it("exposes only supported adult shortcuts and clears private health when return
     ),
   );
   fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
-  expect(
-    within(screen.getByRole("combobox", { name: "Health" })).queryByRole(
-      "option",
-      { name: "Source not configured" },
-    ),
-  ).not.toBeInTheDocument();
+  const options = selectOptions(screen.getByRole("combobox", { name: "Health" }));
+  expect(options.map((option) => option.textContent)).not.toContain("Source not configured");
   for (const [query] of vi.mocked(adultApi.media).mock.calls)
     expect(query.health?.startsWith("metadata_")).not.toBe(true);
-  fireEvent.change(screen.getByRole("combobox", { name: "Media type" }), {
-    target: { value: "movie" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Media type" }), "movie");
   await waitFor(() =>
     expect(libraryApi.media).toHaveBeenLastCalledWith(
       expect.objectContaining({

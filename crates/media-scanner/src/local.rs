@@ -27,6 +27,14 @@ pub fn read_nfo(path: &Path) -> Result<LocalMetadata, ScanError> {
         return Err(ScanError::MetadataTooLarge);
     }
     let content = std::str::from_utf8(&bytes).map_err(|_| ScanError::InvalidMetadata)?;
+    parse_nfo(content)
+}
+
+/// Parse an already bounded UTF-8 snapshot without filesystem or network access.
+pub fn parse_nfo(content: &str) -> Result<LocalMetadata, ScanError> {
+    if content.len() as u64 > MAX_NFO_BYTES {
+        return Err(ScanError::MetadataTooLarge);
+    }
     let upper = content.to_ascii_uppercase();
     if upper.contains("<!DOCTYPE") || upper.contains("<!ENTITY") {
         return Err(ScanError::UnsafeXml);

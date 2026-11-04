@@ -6,6 +6,7 @@ import { DesktopError } from "../../api/desktop";
 import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption } from "../../test/select";
 import { ProviderAuthSettings } from "./provider-auth";
 
 vi.mock("../../components/ui/sonner", () => ({
@@ -101,19 +102,15 @@ it("defaults to OS storage, clears the password before saving and never enables 
 it("requires an explicit session-only selection and supports the TMDB v3 key method", async () => {
   show();
   await screen.findByLabelText("Credential");
-  fireEvent.change(screen.getByLabelText("Authentication method"), {
-    target: { value: "api_key" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication method"), "api_key");
   expect(screen.getByLabelText("Authentication method")).toHaveValue("api_key");
-  fireEvent.change(screen.getByLabelText("Credential storage"), {
-    target: { value: "session_only" },
-  });
+  chooseSelectOption(screen.getByLabelText("Credential storage"), "session_only");
   expect(screen.getByLabelText("Credential storage")).toHaveValue(
     "session_only",
   );
-  expect(
-    screen.getByRole("option", { name: "This session only (cleared on exit)" }),
-  ).toBeInTheDocument();
+  expect(screen.getByLabelText("Credential storage")).toHaveTextContent(
+    "This session only (cleared on exit)",
+  );
   fireEvent.change(screen.getByLabelText("Credential"), {
     target: { value: "synthetic-v3-key" },
   });
@@ -163,32 +160,24 @@ it("resets inputs on provider and method changes, with public providers showing 
   fireEvent.change(screen.getByLabelText("Credential"), {
     target: { value: "synthetic-unsaved-token" },
   });
-  fireEvent.change(screen.getByLabelText("Authentication method"), {
-    target: { value: "api_key" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication method"), "api_key");
   expect(screen.getByLabelText("Credential")).toHaveValue("");
   fireEvent.change(screen.getByLabelText("Credential"), {
     target: { value: "another-unsaved-key" },
   });
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "anilist" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "anilist");
   await screen.findByText(
     "This provider uses public read-only access and requires no credential.",
   );
   expect(screen.queryByLabelText("Credential")).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "wikipedia.html" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "wikipedia.html");
   await waitFor(() =>
     expect(providerAuthApi.status).toHaveBeenCalledWith("wikipedia.html"),
   );
   expect(
     screen.queryByRole("button", { name: "Save authentication" }),
   ).not.toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "tmdb" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "tmdb");
   await screen.findByLabelText("Credential");
   expect(screen.getByLabelText("Credential")).toHaveValue("");
   expect(providerAuthApi.save).not.toHaveBeenCalled();
@@ -207,9 +196,7 @@ it("ignores late save results after changing providers", async () => {
     target: { value: "synthetic-token" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
-  fireEvent.change(screen.getByLabelText("Authentication provider"), {
-    target: { value: "anilist" },
-  });
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "anilist");
   await screen.findByText(
     "This provider uses public read-only access and requires no credential.",
   );
@@ -262,9 +249,7 @@ it("supports the full save and delete interaction in Simplified Chinese", async 
   show();
   await screen.findByLabelText("凭据");
   expect(screen.getByRole("heading", { name: "来源认证" })).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("凭据存储方式"), {
-    target: { value: "session_only" },
-  });
+  chooseSelectOption(screen.getByLabelText("凭据存储方式"), "session_only");
   fireEvent.change(screen.getByLabelText("凭据"), {
     target: { value: "synthetic-zh-token" },
   });

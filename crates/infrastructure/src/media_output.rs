@@ -1569,7 +1569,17 @@ fn render_nfo(
                 })
             {
                 if !text.trim().is_empty() {
-                    fields.insert(tag, text);
+                    if matches!(tag, "sourceattribution" | "sourcelicense") {
+                        let credit = fields.entry(tag).or_default();
+                        if !credit.lines().any(|line| line == text) {
+                            if !credit.is_empty() {
+                                credit.push('\n');
+                            }
+                            credit.push_str(&text);
+                        }
+                    } else {
+                        fields.insert(tag, text);
+                    }
                 }
             }
         }
@@ -2364,12 +2374,20 @@ mod tests {
                 .unwrap();
         sqlx::query("INSERT INTO scan_candidates(id,task_id,root_id,kind,relative_path,normalized_relative_path,payload_json,status,existing_media_id) VALUES(?,?,?,'movie',?,?,'{}','imported',?)").bind(Uuid::new_v4().to_string()).bind(task_id.to_string()).bind(root.id.to_string()).bind(&source.relative_path).bind(normalized).bind(id.to_string()).execute(repo.pool()).await.unwrap();
         let context = crate::scraper::automatic::AutomaticContext {
+            metadata_providers: None,
             root: root.clone(),
             exclusions: vec![],
             task_id,
             cancel: CancellationToken::new(),
             adult_access: None,
         };
+        sqlx::query("INSERT INTO root_settings(root_id,metadata_providers_json) VALUES(?,'[\"tmdb\"]') ON CONFLICT(root_id) DO UPDATE SET metadata_providers_json='[\"tmdb\"]'")
+            .bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
+        let mut changed_source = repo.pool().begin().await.unwrap();
+        assert_eq!(context.validate_tx(&mut changed_source, id).await.unwrap_err(), RepositoryError::Conflict);
+        changed_source.rollback().await.unwrap();
+        sqlx::query("UPDATE root_settings SET metadata_providers_json=NULL WHERE root_id=?")
+            .bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
         let preview = service
             .preview_inner(id, true, Some(source.id))
             .await

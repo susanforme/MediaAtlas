@@ -19,6 +19,7 @@ async fn fixture() -> (
         .unwrap();
     let root = BrowseService::new(repo.clone(), dir.path().join("cache"))
         .save_root(&RootInput {
+            metadata_providers: None,
             id: None,
             name: "Fixture".into(),
             path: path.to_str().unwrap().into(),

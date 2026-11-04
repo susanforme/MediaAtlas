@@ -6,6 +6,7 @@ import { searchRecoveries } from "./recovery-model";
 import "./recovery-translations";
 
 const providerNames: Record<string, string> = {
+  tvmaze: "TVmaze",
   tmdb: "TMDB",
   anilist: "AniList",
   bangumi: "Bangumi",

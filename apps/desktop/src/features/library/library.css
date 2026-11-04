@@ -85,7 +85,7 @@
   width: 164px;
   min-width: 0;
 }
-.library-compact-select select {
+.library-compact-select [data-slot="select"] {
   height: 36px;
   padding-block: 6px;
   background-color: var(--color-muted);
@@ -137,7 +137,7 @@
   border-radius: 10px;
   background: var(--color-muted);
 }
-.library-advanced-filters select {
+.library-advanced-filters [data-slot="select"] {
   height: 38px;
 }
 .library-poster-grid {

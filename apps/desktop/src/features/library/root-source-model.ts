@@ -2,7 +2,29 @@ import type { MediaKind } from "../../api/library";
 import type { AuthStatus } from "../../api/provider-auth";
 import type { ProviderView } from "../../api/providers";
 
-export type RootProviderId = "tmdb" | "anilist" | "dmm" | "wikidata";
+export type RootProviderId = "tmdb" | "anilist" | "tvmaze" | "dmm" | "wikidata";
+const rootProviderIds: RootProviderId[] = ["tmdb", "anilist", "tvmaze", "dmm", "wikidata"];
+
+export function directorySourceChoices(providers: ProviderView[], kind: MediaKind | null) {
+  return providers.filter(({ descriptor }) =>
+    !descriptor.fixture &&
+    rootProviderIds.includes(descriptor.id as RootProviderId) &&
+    (kind === "adult_video"
+      ? descriptor.media_kinds.includes("adult_video")
+      : !descriptor.media_kinds.includes("adult_video") &&
+        (kind === null
+          ? descriptor.media_kinds.some((value) => ["movie", "tv_series", "anime"].includes(value))
+          : descriptor.media_kinds.includes(kind))),
+  );
+}
+
+export function moveRootSource(sources: string[], index: number, direction: -1 | 1): string[] {
+  const target = index + direction;
+  if (index < 0 || index >= sources.length || target < 0 || target >= sources.length) return sources;
+  const ordered = [...sources];
+  [ordered[index], ordered[target]] = [ordered[target], ordered[index]];
+  return ordered;
+}
 export type RootSourceState =
   | "checking"
   | "configured"

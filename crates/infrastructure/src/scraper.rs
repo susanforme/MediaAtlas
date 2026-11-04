@@ -364,8 +364,14 @@ impl ScraperService {
                         && normalize_locale(v.locale.as_deref()).ok() == Some(language.clone())
                 })
                 .cloned();
-            let protected = previous.as_ref().is_some_and(MetadataValue::is_protected);
+            let mandatory = required_source_field(&detail.identity().provider_id, &field.key);
+            let protected = previous.as_ref().is_some_and(MetadataValue::is_protected)
+                || (mandatory && old.iter().any(|value| value.field_key == field.key && value.is_protected()));
             let empty = empty_value(&field.value);
+            if mandatory && (empty || (protected && previous.as_ref().is_none_or(|old| old.value != field.value))
+                || old.iter().any(|value| value.field_key == field.key && value.is_protected() && value.value != field.value)) {
+                return Err(RepositoryError::ProtectedMetadata);
+            }
             fields.push(FieldDiff {
                 key: field.key.clone(),
                 language,
@@ -375,7 +381,7 @@ impl ScraperService {
                 source_url: detail.identity().source_url.clone(),
                 protected,
                 needs_review: previous.as_ref().is_some_and(|v| v.value != field.value),
-                selected: keys.contains(&field.key) && !protected && !empty,
+                selected: (mandatory || keys.contains(&field.key)) && !protected && !empty,
             });
         }
         let mut artwork = vec![];
@@ -432,6 +438,13 @@ impl ScraperService {
                 )
                 .await;
             return Ok(result);
+        }
+        if preview.fields.iter().any(|field| {
+            required_source_field(&detail.identity().provider_id, &field.key)
+                && !field.selected
+                && !(field.protected && field.old.as_ref().is_some_and(|old| old.value == field.new.value))
+        }) {
+            return Err(RepositoryError::Conflict);
         }
         let media = self
             .ordinary_media(preview.media_item_id, metadata_kind(&detail))
@@ -495,11 +508,17 @@ impl ScraperService {
         let mut title = None;
         let mut original = None;
         let mut year = None;
-        for diff in preview.fields.iter().filter(|f| {
-            f.selected
-                || (detail.identity().provider_id == "wikipedia.html"
-                    && ["attribution", "source_license"].contains(&f.key.as_str()))
+        for diff in preview.fields.iter().filter(|diff| {
+            !diff.selected && required_source_field(&detail.identity().provider_id, &diff.key)
         }) {
+            let current: Option<String> = sqlx::query_scalar("SELECT value_json FROM metadata_values WHERE media_item_id=? AND field_key=? AND locale=?")
+                .bind(media.id.to_string()).bind(&diff.key).bind(diff.language.as_deref().unwrap_or(""))
+                .fetch_optional(&mut *tx).await?;
+            if current != Some(json(&diff.new.value)?) {
+                return Err(RepositoryError::Conflict);
+            }
+        }
+        for diff in preview.fields.iter().filter(|field| field.selected) {
             let locale = diff.language.as_deref().unwrap_or("");
             let previous=sqlx::query("SELECT id,value_json,is_locked,is_user_modified FROM metadata_values WHERE media_item_id=? AND field_key=? AND locale=?").bind(media.id.to_string()).bind(&diff.key).bind(locale).fetch_optional(&mut *tx).await?;
             if let Some(ref prev) = previous {
@@ -722,6 +741,11 @@ fn validate_query(q: &VideoQuery) -> Result<(), RepositoryError> {
     }
     Ok(())
 }
+fn required_source_field(provider: &str, key: &str) -> bool {
+    matches!(provider, "wikipedia.html" | "tvmaze")
+        && matches!(key, "attribution" | "source_license")
+}
+
 fn validate_fields(fields: &[RemoteField]) -> Result<(), RepositoryError> {
     let mut seen = HashSet::new();
     for f in fields {
@@ -871,7 +895,9 @@ mod tests {
                     let count = stream.read(&mut request).await.unwrap();
                     let request = String::from_utf8_lossy(&request[..count]);
                     let path = request.lines().next().unwrap_or("").to_owned();
-                    let body = if path.contains("/search/tv") {
+                    let body = if path.contains(" /Example ") {
+                        r#"<html><h1 id="firstHeading">Example</h1><div class="mw-parser-output"><p>Fixture article summary.</p></div></html>"#
+                    } else if path.contains("/search/tv") {
                         r#"{"results":[{"id":52,"name":"Example Show","original_name":"Example Show","first_air_date":"2020-01-01","adult":false}]}"#
                     } else if path.contains("/tv/52") {
                         r#"{"id":52,"name":"Confirmed show","original_name":"Example Show","first_air_date":"2020-01-01","adult":false,"overview":"Provider TV overview","genres":[{"name":"Drama"}],"production_companies":[],"credits":{"cast":[]},"images":{"posters":[],"backdrops":[]},"external_ids":{"tvdb_id":52},"seasons":[]}"#
@@ -1234,6 +1260,24 @@ mod tests {
         assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
         assert_eq!(s.repo.list_files(s.media.id).await.unwrap().len(), 1);
         assert!(s.dir.path().join("Example.nfo").is_file());
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn explicit_empty_directory_sources_keep_indexed_files_without_remote_requests() {
+        let s = setup().await;
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        sqlx::query("INSERT INTO root_settings(root_id,metadata_providers_json) VALUES(?,'[]') ON CONFLICT(root_id) DO UPDATE SET metadata_providers_json='[]'")
+            .bind(root.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        let scans = crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let task = scans.start_automatic(root.id).await.unwrap();
+        let complete = settle_automatic(&scans, task.id).await;
+        assert_eq!(complete.state, TaskState::Succeeded);
+        assert_eq!(complete.matched_count, 0);
+        assert!(s.service.history().await.unwrap().is_empty());
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_none());
+        assert!(!s.repo.list_files(s.media.id).await.unwrap().is_empty());
         s.server.abort();
         s.repo.pool().close().await;
     }
@@ -1629,7 +1673,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn automatic_refresh_identifies_a_yearless_series_once_for_multiple_episodes() {
+    async fn automatic_refresh_uses_directory_order_skips_disabled_sources_and_identifies_series_once() {
         let s = setup().await;
         let path = s.dir.path().join("shows");
         std::fs::create_dir(&path).unwrap();
@@ -1638,6 +1682,7 @@ mod tests {
         }
         let root = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("cache"))
             .save_root(&mediaatlas_application::library::RootInput {
+                metadata_providers: Some(vec!["tvmaze".into(), "tmdb".into()]),
                 id: None,
                 name: "Shows".into(),
                 path: path.to_string_lossy().into_owned(),
@@ -2443,6 +2488,85 @@ mod tests {
         s.server.abort();
     }
     #[tokio::test]
+    async fn licensed_source_preview_and_confirm_agree_and_preserve_protected_credits() {
+        let s = setup().await;
+        let mut config = s.providers.config("wikipedia.html").await.unwrap();
+        config.enabled = true;
+        config.timeout_ms = 10000;
+        s.providers.update_config("wikipedia.html", &config).await.unwrap();
+        let mut article_request = request();
+        article_request.providers = vec!["wikipedia.html".into()];
+        let search = s.service.search(article_request).await.unwrap();
+        let selection = MergeRequest {
+            run_id: search.run_id,
+            candidate_index: 0,
+            media_item_id: s.media.id,
+            selected_fields: vec![],
+            selected_artwork: vec![],
+        };
+        let preview = s.service.preview(selection.clone()).await.unwrap();
+        assert_eq!(preview.fields.iter().filter(|field| field.selected).map(|field| field.key.as_str()).collect::<Vec<_>>(), vec!["attribution", "source_license"]);
+        let protected = local_value(s.media.id, "attribution", None, serde_json::json!("Protected local credit"));
+        s.repo.save_metadata_value(&protected, MetadataWriteMode::User).await.unwrap();
+        assert!(matches!(s.service.preview(selection.clone()).await, Err(RepositoryError::ProtectedMetadata)));
+        assert!(matches!(s.service.confirm(preview.preview_id).await, Err(RepositoryError::ProtectedMetadata)));
+        assert!(!s.dir.path().join("Example.nfo").exists());
+        sqlx::query("DELETE FROM metadata_values WHERE id=?").bind(protected.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        let preview = s.service.preview(selection.clone()).await.unwrap();
+        assert_eq!(s.service.confirm(preview.preview_id).await.unwrap().applied_fields, 2);
+        let nfo = std::fs::read_to_string(s.dir.path().join("Example.nfo")).unwrap();
+        assert!(nfo.contains("<sourceattribution>Wikipedia contributors; https://en.wikipedia.org/wiki/Example"));
+        assert!(nfo.contains("<sourcelicense>CC BY-SA 4.0"));
+        let mut credit = s.repo.list_metadata_values(s.media.id).await.unwrap().into_iter().find(|value| value.field_key == "attribution").unwrap();
+        credit.is_locked = true;
+        s.repo.save_metadata_value(&credit, MetadataWriteMode::User).await.unwrap();
+        let mut followup = request();
+        followup.providers = vec!["wikipedia.html".into()];
+        let next_search = s.service.search(followup).await.unwrap();
+        let selection = MergeRequest { run_id: next_search.run_id, ..selection };
+        let protected_preview = s.service.preview(selection).await.unwrap();
+        let retained = protected_preview.fields.iter().find(|field| field.key == "attribution").unwrap();
+        assert!(retained.protected && !retained.selected);
+        sqlx::query("UPDATE metadata_values SET value_json=? WHERE id=?")
+            .bind(serde_json::json!("Changed protected credit").to_string())
+            .bind(credit.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        assert!(matches!(s.service.confirm(protected_preview.preview_id).await, Err(RepositoryError::Conflict)));
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn tvmaze_source_credit_and_license_are_present_in_nfo_output() {
+        let s = setup().await;
+        for (key, text) in [
+            ("attribution", "TVmaze; https://www.tvmaze.com/shows/1; CC BY-SA 4.0"),
+            ("source_license", "CC BY-SA 4.0; https://creativecommons.org/licenses/by-sa/4.0/"),
+        ] {
+            let mut value = local_value(s.media.id, key, None, serde_json::json!(text));
+            value.is_locked = false;
+            value.is_user_modified = false;
+            value.provider_id = Some("tvmaze".into());
+            s.repo.save_metadata_value(&value, MetadataWriteMode::Provider).await.unwrap();
+        }
+        for (key, text) in [("attribution", "Synthetic previous source"), ("source_license", "Synthetic previous license")] {
+            let mut value = local_value(s.media.id, key, Some("en-US"), serde_json::json!(text));
+            value.is_locked = false;
+            value.is_user_modified = false;
+            value.provider_id = Some("synthetic.previous".into());
+            s.repo.save_metadata_value(&value, MetadataWriteMode::Provider).await.unwrap();
+        }
+        let output = crate::media_output::MediaOutputService::new(s.repo.clone(), s.dir.path().join("cache"));
+        let preview = output.preview(s.media.id).await.unwrap();
+        let text = preview.files[0].new_text.as_ref().unwrap();
+        assert!(text.contains("<sourceattribution>TVmaze; https://www.tvmaze.com/shows/1; CC BY-SA 4.0"));
+        assert!(text.contains("<sourcelicense>CC BY-SA 4.0; https://creativecommons.org/licenses/by-sa/4.0/"));
+        assert!(text.contains("Synthetic previous source"));
+        assert!(text.contains("Synthetic previous license"));
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
     async fn settings_auth_revision_is_captured_by_scraper_jobs_and_never_serializes_credentials() {
         use crate::provider_auth::{AuthSaveInput, ProviderAuthService};
         let mut s = setup().await;
@@ -2525,6 +2649,7 @@ mod tests {
         let browse = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("thumbs"));
         let root = browse
             .save_root(&RootInput {
+                metadata_providers: None,
                 id: None,
                 name: "TV".into(),
                 path: media_path.to_str().unwrap().into(),

@@ -14,6 +14,7 @@ import { adultApi } from "../../api/adult";
 import { DesktopError } from "../../api/desktop";
 import { libraryApi, type RootView, type ScanTask } from "../../api/library";
 import i18n from "../../i18n";
+import { selectOptions } from "../../test/select";
 import { PrivacyProvider } from "./context";
 import { ScannerPage, TasksPage } from "./scanner";
 import type { ScannerSearch } from "./scanner-navigation";
@@ -390,6 +391,7 @@ describe("Fixture scan review", () => {
       task: privateTask.id,
       kind: "adult_video",
     });
+    selectOptions(await screen.findByLabelText("Choose an enabled root"));
     expect(
       await screen.findByRole("option", { name: "Private directory" }),
     ).toBeInTheDocument();

@@ -4,7 +4,9 @@ const values = {
   "zh-CN": {
     rootSourceCheck: "资料来源配置",
     rootSourcesChecking: "正在检查资料来源…",
-    rootSourcesConfigured: "资料来源已配置",
+    rootSourcePriorityHelp: "仅用于此目录，按顺序尝试来源；未选来源时仅读取本地资料。",
+    rootSourceMoveUp: "提高 {{source}} 优先级",
+    rootSourceMoveDown: "降低 {{source}} 优先级",
     rootSourcesLocalFirst: "可先添加本地媒体",
     rootSourcesMissingHelp:
       "可先收录本地文件，待配置来源后再补全资料。配置前会保存当前目录。",
@@ -80,7 +82,9 @@ const values = {
   "en-US": {
     rootSourceCheck: "Metadata source configuration",
     rootSourcesChecking: "Checking metadata sources…",
-    rootSourcesConfigured: "Metadata sources configured",
+    rootSourcePriorityHelp: "Applies only to this directory. Sources are tried in order; select none to use local metadata only.",
+    rootSourceMoveUp: "Move {{source}} up",
+    rootSourceMoveDown: "Move {{source}} down",
     rootSourcesLocalFirst: "Local media can be added now",
     rootSourcesMissingHelp:
       "You can add local files now and fetch metadata after source setup. Your directory will be saved before opening settings.",

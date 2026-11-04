@@ -11,9 +11,6 @@
   border-radius: 12px;
   background: var(--color-muted);
 }
-.root-source-check {
-  padding: 16px;
-}
 .root-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));

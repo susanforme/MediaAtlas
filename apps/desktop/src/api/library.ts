@@ -35,6 +35,7 @@ export interface RootView {
   updated_at: string;
   exclude_patterns: string[];
   last_scan_at: string | null;
+  metadata_providers?: string[] | null;
 }
 export interface RootInput {
   id: string | null;
@@ -43,6 +44,7 @@ export interface RootInput {
   kind: MediaKind | null;
   enabled: boolean;
   exclude_patterns: string[];
+  metadata_providers?: string[] | null;
 }
 export interface BrowseQuery {
   root_id: string | null;
@@ -237,6 +239,9 @@ function root(v: unknown): v is RootView {
     (v.kind === null || kind(v.kind)) &&
     typeof v.enabled === "boolean" &&
     arrayOf(text)(v.exclude_patterns) &&
+    (v.metadata_providers === undefined ||
+      v.metadata_providers === null ||
+      arrayOf(text)(v.metadata_providers)) &&
     text(v.created_at) &&
     text(v.updated_at) &&
     optionalText(v.last_scan_at)

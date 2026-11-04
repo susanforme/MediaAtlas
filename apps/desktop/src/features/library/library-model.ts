@@ -60,6 +60,7 @@ export function newRootInput(adult: boolean): RootInput {
     kind: adult ? "adult_video" : "movie",
     enabled: true,
     exclude_patterns: [],
+    metadata_providers: null,
   };
 }
 export function rootInputFromView(root: RootView): RootInput {
@@ -70,6 +71,7 @@ export function rootInputFromView(root: RootView): RootInput {
     kind: root.kind,
     enabled: root.enabled,
     exclude_patterns: root.exclude_patterns,
+    metadata_providers: root.metadata_providers ?? null,
   };
 }
 export function normalizeRootInput(

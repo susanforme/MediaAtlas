@@ -10,6 +10,7 @@ import re
 import runpy
 
 from playwright.sync_api import expect, sync_playwright
+from select_support import select_option
 
 ROOT = Path(__file__).resolve().parents[1]
 support = runpy.run_path(str(ROOT / "scripts/desktop-ui-qa.py"))
@@ -81,7 +82,7 @@ def main():
         page.get_by_role("link", name="媒体工具", exact=True).last.click()
         expect(page).to_have_url(re.compile(r"/tools\?.*adult_video"))
         expect(page.get_by_role("heading", name="媒体工具", exact=True)).to_be_visible()
-        expect(page.locator("main").get_by_role("combobox", name="媒体类型")).to_have_value("adult_video")
+        expect(page.locator("main").get_by_role("combobox", name="媒体类型")).to_have_attribute("value", "adult_video")
         expect(page.get_by_text("成人工作台", exact=True)).to_have_count(0)
         expect(page.get_by_role("button", name=re.compile("锁定|解锁"))).to_have_count(0)
         expect(page.locator("main").get_by_role("alert")).to_have_count(0)
@@ -89,8 +90,8 @@ def main():
         page.get_by_role("link", name="媒体目录", exact=True).click()
         expect(page).to_have_url(re.compile(r"/roots$"))
         page.get_by_role("button", name="添加目录", exact=True).click()
-        page.get_by_role("combobox", name="目录媒体类型", exact=True).select_option("adult_video")
-        expect(page.get_by_role("combobox", name="目录媒体类型", exact=True)).to_have_value("adult_video")
+        select_option(page, page.get_by_role("combobox", name="目录媒体类型", exact=True), "adult_video")
+        expect(page.get_by_role("combobox", name="目录媒体类型", exact=True)).to_have_attribute("value", "adult_video")
         capture(page, "automatic-fixture-adult-roots-1648.png")
         page.get_by_role("link", name="设置", exact=True).click()
         toggle = page.get_by_role("checkbox", name="启用成人资源类型", exact=True)
@@ -100,7 +101,9 @@ def main():
         expect(toggle).not_to_be_checked()
         page.get_by_role("button", name="保存", exact=True).last.click()
         page.get_by_role("link", name="媒体库", exact=True).first.click()
-        expect(page.locator("option[value='adult_video']")).to_have_count(0)
+        page.get_by_role("combobox", name="媒体类型", exact=True).click()
+        expect(page.get_by_role("option", name="成人视频", exact=True)).to_have_count(0)
+        page.keyboard.press("Escape")
         expect(page.get_by_text("QA 成人资源类型 · 合成资料", exact=True)).to_have_count(0)
         assert not page.evaluate("__qa.calls.some(c => (c.cmd==='library_list_media' || c.cmd==='library_facets') && c.input.include_adult)")
         legacy = context(browser).new_page()

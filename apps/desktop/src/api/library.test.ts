@@ -36,6 +36,20 @@ describe("library IPC contracts", () => {
     });
     expect(invoke).not.toHaveBeenCalled();
   });
+  it("preserves directory source order and rejects malformed source arrays", async () => {
+    const root = {
+      id: "root", name: "TV", path: "/media", path_style: "posix",
+      kind: "tv_series", enabled: true, exclude_patterns: [],
+      created_at: "2026-11-04", updated_at: "2026-11-04", last_scan_at: null,
+      metadata_providers: ["tvmaze", "tmdb"],
+    };
+    vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data: [root] });
+    await expect(libraryApi.roots(false)).resolves.toEqual([root]);
+    vi.mocked(invoke).mockResolvedValue({
+      schema_version: 1, data: [{ ...root, metadata_providers: ["tmdb", 1] }],
+    });
+    await expect(libraryApi.roots(false)).rejects.toMatchObject({ code: "invalid_response" });
+  });
   it("starts background library updates and validates their actual progress", async () => {
     const task = {
       id: "task",

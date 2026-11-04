@@ -12,6 +12,7 @@ import runpy
 from urllib.parse import urlencode
 
 from playwright.sync_api import expect, sync_playwright
+from select_support import select_option
 
 ROOT = Path(__file__).resolve().parents[1]
 ui = runpy.run_path(str(ROOT / "scripts/desktop-ui-qa.py"))
@@ -106,13 +107,13 @@ with sync_playwright() as p:
     page.goto(URL + "/tools?cursor=qa-page-3&page=2")
     expect(page.get_by_role("cell", name="QA 媒体 03", exact=True)).to_be_visible()
     page.get_by_role("checkbox", name="选择刮削：QA 媒体 03", exact=True).check()
-    page.get_by_role("combobox", name="健康状态", exact=True).select_option("missing_poster")
+    select_option(page, page.get_by_role("combobox", name="健康状态", exact=True), "missing_poster")
     expect(page.get_by_role("cell", name="QA 媒体 03", exact=True)).to_be_visible()
     expect(page.get_by_role("button", name="已选择 0 项", exact=True)).to_be_visible()
     assert "cursor=" not in page.url and "page=" not in page.url
     latest = [c["input"] for c in page.evaluate("__qa.calls") if c["cmd"] == "library_tools_media"][-1]
     assert latest["health"] == "missing_poster" and latest["cursor"] is None and latest["include_adult"] is False
-    page.get_by_role("combobox", name="排序", exact=True).select_option("title_asc")
+    select_option(page, page.get_by_role("combobox", name="排序", exact=True), "title_asc")
     expect(page).to_have_url(re.compile(r"sort=title_asc"))
     capture(page, "community-fixture-server-filters-1648.png")
     assert errors == [], errors

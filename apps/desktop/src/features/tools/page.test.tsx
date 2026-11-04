@@ -12,6 +12,7 @@ import { libraryApi, type RootView } from "../../api/library";
 import { maintenanceApi, type OrganizationPlan } from "../../api/organization";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 import { MediaToolsPage, OrganizationPanel } from "./page";
 
 const api = vi.hoisted(() => ({
@@ -150,11 +151,10 @@ beforeEach(async () => {
 });
 it("defaults to Preserve, shows every attachment and requires explicit plan confirmation", async () => {
   show(<OrganizationPanel mediaId="media" />);
+  selectOptions(screen.getByLabelText("Destination root"));
   await screen.findByRole("option", { name: "Target" });
   expect(screen.getByLabelText("Strategy")).toHaveValue("preserve");
-  fireEvent.change(screen.getByLabelText("Destination root"), {
-    target: { value: "root" },
-  });
+  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await screen.findByText("source/Part1.en.srt → target/Part1.en.srt");
   expect(api.execute).not.toHaveBeenCalled();
@@ -179,10 +179,9 @@ it("blocks conflicts and discards a preview when naming inputs change", async ()
     files: [{ ...plan.files[0], conflict: "destination_exists" }],
   });
   show(<OrganizationPanel mediaId="media" />);
+  selectOptions(screen.getByLabelText("Destination root"));
   await screen.findByRole("option", { name: "Target" });
-  fireEvent.change(screen.getByLabelText("Destination root"), {
-    target: { value: "root" },
-  });
+  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await screen.findByText("Conflict: destination_exists");
   expect(
@@ -253,10 +252,9 @@ it("freezes target and other planning actions while Preview or rollback Preview 
     }),
   );
   show(<OrganizationPanel mediaId="media" />);
+  selectOptions(screen.getByLabelText("Destination root"));
   await screen.findByRole("option", { name: "Target" });
-  fireEvent.change(screen.getByLabelText("Destination root"), {
-    target: { value: "root" },
-  });
+  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await waitFor(() => expect(api.preview).toHaveBeenCalled());
   expect(screen.getByLabelText("Destination root")).toBeDisabled();
@@ -298,10 +296,9 @@ it("discards a late Preview response after the tools view closes", async () => {
     }),
   );
   const view = show(<OrganizationPanel mediaId="media" />);
+  selectOptions(screen.getByLabelText("Destination root"));
   await screen.findByRole("option", { name: "Target" });
-  fireEvent.change(screen.getByLabelText("Destination root"), {
-    target: { value: "root" },
-  });
+  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await waitFor(() => expect(api.preview).toHaveBeenCalled());
   view.unmount();

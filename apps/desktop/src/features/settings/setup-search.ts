@@ -14,6 +14,7 @@ export type SetupKind = (typeof SETUP_KINDS)[number];
 export const SETUP_PROVIDERS = [
   "tmdb",
   "anilist",
+  "tvmaze",
   "wikipedia.html",
   "dmm",
   "wikidata",

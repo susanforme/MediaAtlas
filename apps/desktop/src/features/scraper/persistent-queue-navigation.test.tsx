@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ReviewQueue } from "../../api/review-queue";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 import { PersistentQueueNavigation } from "./persistent-queue-navigation";
 import type { ReviewSession } from "./use-review-queue";
 
@@ -54,7 +55,7 @@ it("uses a fixed set of controls for a full queue instead of 32 pending buttons"
   expect(
     screen.queryByRole("button", { name: /Pending review/ }),
   ).not.toBeInTheDocument();
-  expect(screen.getAllByRole("option")).toHaveLength(32);
+  expect(selectOptions(screen.getByRole("combobox", { name: "Current item" }))).toHaveLength(32);
   const status = screen.getByRole("status");
   expect(status).toHaveAttribute("data-slot", "badge");
   expect(status).toHaveTextContent("Pending review");
@@ -90,9 +91,7 @@ it("jumps to a deferred item without retrying or confirming it", async () => {
       onNavigate={navigate}
     />,
   );
-  fireEvent.change(screen.getByRole("combobox", { name: "Current item" }), {
-    target: { value: "media-2" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Current item" }), "media-2");
   await waitFor(() => expect(navigate).toHaveBeenCalledWith("media-2"));
   expect(transition).not.toHaveBeenCalled();
 });

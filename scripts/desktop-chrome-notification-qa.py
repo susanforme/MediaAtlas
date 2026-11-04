@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
+from select_support import select_option
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "screenshots/chrome-navigation-2026-11-04"
@@ -87,7 +88,7 @@ def main():
         movie.click()
         expect(page).to_have_url(re.compile(r'kind=movie'))
         page.get_by_role('searchbox',name='搜索标题',exact=True).fill('QA')
-        page.get_by_role('combobox',name='排序',exact=True).select_option('year_desc')
+        select_option(page, page.get_by_role('combobox', name='排序', exact=True), 'year_desc')
         page.get_by_role('button',name='缺海报',exact=True).click()
         expect(page).to_have_url(re.compile(r'health=missing_poster'))
         expect(parent).to_have_class(re.compile(r'\bactive\b'))
@@ -105,7 +106,7 @@ def main():
         expect(parent).to_have_class(re.compile(r'\bactive\b'))
         parent.click()
         expect(page).to_have_url(URL+'/library')
-        expect(page.get_by_role('combobox',name='媒体类型',exact=True)).to_have_value('')
+        expect(page.get_by_role('combobox',name='媒体类型',exact=True)).to_have_attribute("value", '')
         expect(movie).not_to_have_class(re.compile(r'\bactive\b'))
         sidebar = page.locator('.app-sidebar')
         before = sidebar.bounding_box()

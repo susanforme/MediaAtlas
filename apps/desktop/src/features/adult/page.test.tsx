@@ -15,6 +15,7 @@ import { nativeOpenApi } from "../../api/organization";
 import { providerApi } from "../../api/providers";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption } from "../../test/select";
 import { fixtureSnapshot } from "../providers/fixtures";
 import {
   syntheticAdultDetail,
@@ -297,9 +298,7 @@ it("uses catalog-specific metadata and requires separate merge and output confir
   expect(screen.getByText(/Synthetic Alias/)).toBeInTheDocument();
   expect(screen.queryByText(/privacy settings/)).not.toBeInTheDocument();
   expect(adultApi.artworkPreview).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByLabelText("Local media"), {
-    target: { value: "synthetic-media" },
-  });
+  chooseSelectOption(screen.getByLabelText("Local media"), "synthetic-media");
   fireEvent.click(
     screen.getByRole("button", { name: "Preview metadata changes" }),
   );
@@ -485,7 +484,7 @@ it("presents adult content as a type in the shared library and clears private fi
   ).not.toBeInTheDocument();
   const type = screen.getByRole("combobox", { name: "Media type" });
   expect(type).toHaveValue("adult_video");
-  fireEvent.change(type, { target: { value: "movie" } });
+  chooseSelectOption(type, "movie");
   expect(onSearch).toHaveBeenCalledWith(
     expect.objectContaining({
       kind: "movie",

@@ -447,3 +447,62 @@ describe("server proof and visible merge selection", () => {
     ).toBe(false);
   });
 });
+
+describe("required source credits", () => {
+  const credits: RemoteField[] = [
+    { key: "attribution", value: "TVmaze; https://www.tvmaze.com/shows/1", language: null },
+    { key: "source_license", value: "CC BY-SA 4.0", language: null },
+  ];
+
+  it.each(["tvmaze", "wikipedia.html"])("retains %s credits after deselection and onlyMissing filtering", (provider) => {
+    const remote = metadata([...fields, ...credits]);
+    remote.data.identity = { ...remote.data.identity, provider_id: provider };
+    const projection = project({
+      metadata: remote,
+      target: {
+        ...target,
+        metadata_values: [
+          local("attribution", "Previous source", { locale: null }),
+          local("source_license", "Previous license", { locale: null }),
+        ],
+      },
+      selectedFields: [],
+      onlyMissing: true,
+    });
+    expect(projection.effectiveFields).toEqual(["attribution", "source_license"]);
+    expect(projection.rows.filter((row) => row.mandatory)).toHaveLength(2);
+    expect(projection.rows.filter((row) => row.mandatory).every((row) => row.selected && row.eligible)).toBe(true);
+    expect(projection.counts.overwritten).toBe(2);
+    const proof = serverProof({
+      fields: remote.data.fields.map((field) => ({
+        key: field.key, language: field.language, old: null, new: field,
+        provider_id: provider, source_url: remote.data.identity.source_url,
+        protected: false, needs_review: false,
+        selected: ["attribution", "source_license"].includes(field.key),
+      })),
+    });
+    expect(mergeSelectionMatches(proof, projection)).toBe(true);
+    const withoutLicense = { ...proof, fields: proof.fields.map((field) => field.key === "source_license" ? { ...field, selected: false } : field) };
+    expect(mergeSelectionMatches(withoutLicense, projection)).toBe(false);
+  });
+
+  it("keeps locked and manually edited credits authoritative across languages", () => {
+    const remote = metadata(credits);
+    remote.data.identity = { ...remote.data.identity, provider_id: "tvmaze" };
+    const protectedCredit = local("attribution", "Protected credit", { locale: null, is_locked: true });
+    const editedLicense = local("source_license", "Edited license", { locale: "en-US", is_user_modified: true });
+    const projection = project({ metadata: remote, target: { ...target, metadata_values: [protectedCredit, editedLicense] }, selectedFields: [], onlyMissing: true });
+    expect(projection.effectiveFields).toEqual([]);
+    expect(projection.rows.every((row) => row.mandatory && row.protected && !row.eligible && !row.selected)).toBe(true);
+    expect(projection.fields).toEqual([
+      { key: "attribution", language: null, value: "Protected credit" },
+      { key: "source_license", language: "en-US", value: "Edited license" },
+    ]);
+  });
+
+  it("does not force unrelated providers to apply unselected fields", () => {
+    const projection = project({ metadata: metadata(credits), selectedFields: [], onlyMissing: true });
+    expect(projection.rows.every((row) => !row.mandatory)).toBe(true);
+    expect(projection.effectiveFields).toEqual([]);
+  });
+});

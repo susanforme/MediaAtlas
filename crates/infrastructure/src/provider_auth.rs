@@ -345,7 +345,7 @@ pub(crate) fn parse_affiliate_credential(
 fn validate_provider(provider: &str) -> Result<(), RepositoryError> {
     if matches!(
         provider,
-        "tmdb" | "anilist" | "wikipedia.html" | "dmm" | "wikidata"
+        "tmdb" | "anilist" | "tvmaze" | "wikipedia.html" | "dmm" | "wikidata"
     ) {
         Ok(())
     } else {

@@ -6,6 +6,7 @@ use sqlx::{Sqlite, Transaction};
 pub(crate) struct AutomaticContext {
     pub root: LibraryRoot,
     pub exclusions: Vec<String>,
+    pub metadata_providers: Option<Vec<String>>,
     pub task_id: Uuid,
     pub cancel: CancellationToken,
     pub adult_access: Option<crate::media_output::AdultOutputAccess>,
@@ -29,7 +30,7 @@ impl AutomaticContext {
             .bind(self.root.id.to_string())
             .execute(&mut **tx)
             .await?;
-        let root = sqlx::query("SELECT r.*,s.exclude_patterns_json FROM library_roots r LEFT JOIN root_settings s ON s.root_id=r.id WHERE r.id=?")
+        let root = sqlx::query("SELECT r.*,s.exclude_patterns_json,s.metadata_providers_json FROM library_roots r LEFT JOIN root_settings s ON s.root_id=r.id WHERE r.id=?")
             .bind(self.root.id.to_string()).fetch_optional(&mut **tx).await?.ok_or(RepositoryError::NotFound)?;
         let exclusions: Vec<String> = serde_json::from_str(
             root.try_get::<Option<String>, _>("exclude_patterns_json")?
@@ -37,6 +38,8 @@ impl AutomaticContext {
                 .unwrap_or("[]"),
         )
         .map_err(|_| RepositoryError::CorruptData)?;
+        let providers: Option<Vec<String>> = root.try_get::<Option<String>, _>("metadata_providers_json")?
+            .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData)).transpose()?;
         if !root.try_get::<bool, _>("enabled")?
             || root.try_get::<String, _>("path")? != self.root.path
             || root.try_get::<String, _>("path_style")? != self.root.path_style.as_str()
@@ -44,6 +47,7 @@ impl AutomaticContext {
                 != self.root.kind.map(|k| k.as_str().to_owned())
             || (self.root.kind == Some(MediaKind::AdultVideo)) != self.adult_access.is_some()
             || exclusions != self.exclusions
+            || providers != self.metadata_providers
         {
             return Err(RepositoryError::Conflict);
         }
@@ -174,20 +178,20 @@ impl ScraperService {
                 run_id: None,
             });
         }
-        let provider = match media.kind {
-            MediaKind::Movie | MediaKind::TvSeries => "tmdb",
-            MediaKind::Anime => "anilist",
-            _ => return Ok(AutomaticOutcome::review("unsupported_kind")),
-        };
-        let config = self.providers.config(provider).await?;
-        if !config.enabled
-            || if let Some(auth) = &self.auth {
-                !auth.status(provider).await?.configured
-            } else {
-                false
-            }
-        {
-            return Ok(AutomaticOutcome::review("provider_unconfigured"));
+        if !matches!(
+            media.kind,
+            MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime
+        ) {
+            return Ok(AutomaticOutcome::review("unsupported_kind"));
+        }
+        let providers = context.metadata_providers.clone()
+            .unwrap_or_else(|| crate::root_sources::default_providers(media.kind));
+        if providers.is_empty() {
+            return Ok(AutomaticOutcome {
+                state: "skipped",
+                reason: Some("local_only"),
+                run_id: None,
+            });
         }
         let ids = self
             .repo
@@ -221,45 +225,71 @@ impl ScraperService {
             },
             _ => unreachable!(),
         };
-        let search = self
-            .search_cancellable(
-                ScraperSearchRequest {
-                    query: query.clone(),
-                    providers: vec![provider.into()],
-                },
-                context.cancel.clone(),
-            )
-            .await?;
-        if context.cancel.is_cancelled() {
-            let _ = self.providers.cancel(search.run_id).await;
-            return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
-        }
-        if let Some(failure) = search.failures.first() {
-            let outcome = match failure.failure {
-                ProviderFailure::CredentialsUnavailable | ProviderFailure::Disabled => {
-                    AutomaticOutcome::review("provider_unconfigured")
+        let mut selected = None;
+        let mut unavailable = AutomaticOutcome::review("provider_unconfigured");
+        for provider in providers {
+            if !VideoProviderHub::descriptors().iter().any(|descriptor| {
+                descriptor.id == provider && descriptor.media_kinds.contains(&media.kind)
+            }) {
+                continue;
+            }
+            let config = self.providers.config(&provider).await?;
+            if !config.enabled
+                || if let Some(auth) = &self.auth {
+                    !auth.status(&provider).await?.configured
+                } else {
+                    false
                 }
-                other => AutomaticOutcome::failed(other.code()),
+            {
+                continue;
+            }
+            let search = self.search_cancellable(
+                ScraperSearchRequest { query: query.clone(), providers: vec![provider] },
+                context.cancel.clone(),
+            ).await?;
+            if context.cancel.is_cancelled() {
+                let _ = self.providers.cancel(search.run_id).await;
+                return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+            }
+            if let Some(failure) = search.failures.first() {
+                unavailable = match failure.failure {
+                    ProviderFailure::CredentialsUnavailable | ProviderFailure::Disabled => {
+                        AutomaticOutcome::review("provider_unconfigured")
+                    }
+                    other => AutomaticOutcome::failed(other.code()),
+                }.with_run(search.run_id);
+                continue;
+            }
+            let Some(index) = automatic_candidate(&query, &search.candidates) else {
+                if !search.candidates.is_empty() {
+                    return Ok(AutomaticOutcome::review("ambiguous_match").with_run(search.run_id));
+                }
+                unavailable = AutomaticOutcome::review("no_match").with_run(search.run_id);
+                continue;
             };
-            return Ok(outcome.with_run(search.run_id));
+            if existing.as_ref().is_some_and(|saved| {
+                saved.identity().provider_id != search.candidates[index].candidate.data().provider_id
+                    || saved.identity().remote_id != search.candidates[index].candidate.data().remote_id
+            }) {
+                return Ok(AutomaticOutcome::review("identity_changed").with_run(search.run_id));
+            }
+            match self.detail_cancellable(search.run_id, index, context.cancel.clone()).await {
+                Ok(detail) => {
+                    selected = Some((search, index, detail));
+                    break;
+                }
+                Err(RepositoryError::Provider(ProviderFailure::Cancelled)) => {
+                    return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+                }
+                Err(RepositoryError::Provider(failure)) => {
+                    unavailable = AutomaticOutcome::failed(failure.code()).with_run(search.run_id);
+                }
+                Err(error) => return Err(error),
+            }
         }
-        let Some(index) = automatic_candidate(&query, &search.candidates) else {
-            return Ok(AutomaticOutcome::review(if search.candidates.is_empty() {
-                "no_match"
-            } else {
-                "ambiguous_match"
-            })
-            .with_run(search.run_id));
+        let Some((search, index, detail)) = selected else {
+            return Ok(unavailable);
         };
-        if existing.as_ref().is_some_and(|saved| {
-            saved.identity().provider_id != search.candidates[index].candidate.data().provider_id
-                || saved.identity().remote_id != search.candidates[index].candidate.data().remote_id
-        }) {
-            return Ok(AutomaticOutcome::review("identity_changed").with_run(search.run_id));
-        }
-        let detail = self
-            .detail_cancellable(search.run_id, index, context.cancel.clone())
-            .await?;
         if self.repo.get_media(media_id).await?.as_ref() != Some(&media) {
             return Err(RepositoryError::Conflict);
         }

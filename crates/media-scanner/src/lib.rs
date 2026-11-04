@@ -5,7 +5,7 @@ mod models;
 mod parser;
 mod scanner;
 
-pub use local::{read_audio_tags, read_nfo};
+pub use local::{parse_nfo, read_audio_tags, read_nfo};
 pub use models::*;
 pub use parser::parse_filename;
 pub use scanner::{run_scan, sidecar_fingerprint};

@@ -10,6 +10,14 @@ pub fn handle_args(args: impl IntoIterator<Item = OsString>) -> io::Result<bool>
         return Ok(false);
     };
     let target = args.next();
+    if target.is_none()
+        && Path::new(&command)
+            .extension()
+            .and_then(|value| value.to_str())
+            .is_some_and(|value| value.eq_ignore_ascii_case("nfo"))
+    {
+        return Ok(false);
+    }
     if command != "--export-licenses" || target.is_none() || args.next().is_some() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -65,6 +73,12 @@ mod tests {
     #[test]
     fn no_arguments_request_normal_startup_without_export() {
         assert!(!handle_args(Vec::<OsString>::new()).unwrap());
+    }
+
+    #[test]
+    fn associated_nfo_requests_gui_preview_without_license_export() {
+        assert!(!handle_args([OsString::from("selected.NFO")]).unwrap());
+        assert!(handle_args([OsString::from("unselected.xml")]).is_err());
     }
 
     #[test]

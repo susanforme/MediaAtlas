@@ -27,6 +27,16 @@
   },
   "bundle": {
     "active": false,
+    "fileAssociations": [
+      {
+        "ext": ["nfo"],
+        "name": "NFO",
+        "description": "NFO metadata preview",
+        "mimeType": "application/x-nfo",
+        "role": "Viewer",
+        "rank": "Alternate"
+      }
+    ],
     "icon": ["icons/icon.ico", "icons/icon.png"]
   }
 }

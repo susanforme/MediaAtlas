@@ -75,6 +75,19 @@ function link(name: string) {
   return screen.getByRole("link", { name });
 }
 
+it("collapses only the category links while retaining the all-library entry and URL", async () => {
+  const { router } = await renderNavigation("/library?kind=movie&q=Arrival");
+  const location = router.state.location.href;
+  fireEvent.click(screen.getByRole("button", { name: "Collapse media categories" }));
+  expect(screen.queryByRole("link", { name: "Movie" })).not.toBeInTheDocument();
+  expect(link("Media library")).toBeInTheDocument();
+  expect(router.state.location.href).toBe(location);
+  const expand = screen.getByRole("button", { name: "Expand media categories" });
+  expect(expand).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(expand);
+  expect(link("Movie")).toHaveAttribute("aria-current", "page");
+});
+
 it("keeps the parent as a real all-library link that clears the selected category", async () => {
   const { router } = await renderNavigation("/library?kind=movie&q=Arrival");
   expect(link("Media library")).toHaveAttribute("href", "/library");

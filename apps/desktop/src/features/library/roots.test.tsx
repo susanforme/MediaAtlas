@@ -22,6 +22,7 @@ import { providerAuthApi } from "../../api/provider-auth";
 import { type ProviderView, providerApi } from "../../api/providers";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+import { chooseSelectOption, selectOptions } from "../../test/select";
 
 vi.mock("../../components/ui/sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
@@ -173,6 +174,7 @@ it("submits an explicit root type and normalized exclusion lines", async () => {
       kind: "movie",
       enabled: true,
       exclude_patterns: ["**/sample/**", "**/*.tmp"],
+      metadata_providers: null,
     }),
   );
 });
@@ -415,9 +417,7 @@ it("adds an adult directory through the same form and starts the grant-bound aut
   show({ onNavigateScan });
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
   await screen.findByText("/media/Private");
-  fireEvent.change(screen.getByRole("combobox", { name: "Root media type" }), {
-    target: { value: "adult_video" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Root media type" }), "adult_video");
   await waitFor(() =>
     expect(
       screen.getByRole("button", { name: "Add to library" }),
@@ -482,8 +482,9 @@ it("offers adult alongside ordinary types in one add form, without a separate sc
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
   const types = screen.getByRole("combobox", { name: "Root media type" });
-  expect(types.querySelector('option[value="movie"]')).not.toBeNull();
-  expect(types.querySelector('option[value="adult_video"]')).not.toBeNull();
+  const choices = selectOptions(types).map((option) => (option as HTMLButtonElement).value);
+  expect(choices).toContain("movie");
+  expect(choices).toContain("adult_video");
   expect(
     screen.queryByRole("combobox", { name: "Content type" }),
   ).not.toBeInTheDocument();
@@ -492,11 +493,8 @@ it("offers adult alongside ordinary types in one add form, without a separate sc
 it("does not offer adult directories or fetch them when the entry is disabled", () => {
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  expect(
-    screen
-      .getByRole("combobox", { name: "Root media type" })
-      .querySelector('option[value="adult_video"]'),
-  ).toBeNull();
+  const choices = selectOptions(screen.getByRole("combobox", { name: "Root media type" }));
+  expect(choices.map((option) => (option as HTMLButtonElement).value)).not.toContain("adult_video");
   expect(adultApi.roots).not.toHaveBeenCalled();
 });
 
@@ -507,9 +505,7 @@ it("does not save or synchronize an adult directory before the backend grant is 
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
   await screen.findByText("/media/Private");
-  fireEvent.change(screen.getByRole("combobox", { name: "Root media type" }), {
-    target: { value: "adult_video" },
-  });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Root media type" }), "adult_video");
   expect(screen.getByRole("button", { name: "Add to library" })).toBeDisabled();
   expect(adultApi.roots).not.toHaveBeenCalled();
   expect(libraryApi.saveRoot).not.toHaveBeenCalled();
@@ -533,9 +529,9 @@ function source(id: string, requiresKey = false): ProviderView {
       rate_limit_policy: "",
       attribution: "",
       data_usage_notes: "",
-      media_kinds: [],
+      media_kinds: id === "anilist" ? ["anime"] : ["dmm", "wikidata"].includes(id) ? ["adult_video"] : ["movie", "tv_series"],
       languages: [],
-      capabilities: [],
+      capabilities: ["dmm", "wikidata"].includes(id) ? ["adult_search", "adult_detail"] : ["search", "details"],
       fixture: false,
     },
     config: {
@@ -568,17 +564,19 @@ it("opens the system chooser once from the add route, preserving the requested m
     "anime",
   );
   expect(
-    await screen.findByText("Metadata sources configured"),
-  ).toBeInTheDocument();
+    await screen.findByRole("checkbox", { name: "AniList" }),
+  ).toBeChecked();
   expect(providerAuthApi.status).not.toHaveBeenCalled();
 });
 
 it("saves the chosen directory before source setup and does not claim metadata has been fetched", async () => {
   vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
+  const provider = source("tmdb");
+  provider.config.enabled = false;
+  vi.mocked(providerApi.snapshot).mockResolvedValue({ schema_version: 1, providers: [provider], tasks: [], requests: [] });
   const onConfigureSource = vi.fn();
   show({ initialAdd: true, onConfigureSource });
   await screen.findByText("/media/Movies");
-  await screen.findByText("Local media can be added now");
   fireEvent.click(
     await screen.findByRole("button", { name: "Save and configure TMDB" }),
   );
@@ -602,7 +600,7 @@ it("allows local indexing with an unconfigured source and labels only the backgr
   vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
   show({ initialAdd: true });
   await screen.findByText("/media/Movies");
-  await screen.findByText("Local media can be added now");
+  await screen.findByRole("checkbox", { name: "tmdb" });
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
   await waitFor(() =>
     expect(toast.success).toHaveBeenCalledExactlyOnceWith(
@@ -626,8 +624,8 @@ it("accepts one configured catalog source and keeps the other optional", async (
   });
   show({ initialAdd: true, initialKind: "adult_video" });
   expect(
-    await screen.findByText("Metadata sources configured"),
-  ).toBeInTheDocument();
+    await screen.findByRole("checkbox", { name: "WIKIDATA" }),
+  ).toBeChecked();
   expect(providerAuthApi.status).not.toHaveBeenCalled();
   expect(providerApi.snapshot).not.toHaveBeenCalled();
 });

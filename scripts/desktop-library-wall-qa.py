@@ -325,7 +325,7 @@ def main():
         assert query.get("provider", ["tmdb"]) == ["tmdb"] and query.get("kind", ["movie"]) == ["movie"], query
         credential = setup.get_by_label("凭据", exact=True)
         expect(credential).to_be_visible()
-        expect(setup.get_by_role("combobox", name="认证来源", exact=True)).to_have_value("tmdb")
+        expect(setup.get_by_role("combobox", name="认证来源", exact=True)).to_have_attribute("value", "tmdb")
         assert setup.get_by_text("kind", exact=True).count() == 0
         assert "provider_auth_save" not in commands(setup)
         credential.fill("synthetic-qa-manual-token")

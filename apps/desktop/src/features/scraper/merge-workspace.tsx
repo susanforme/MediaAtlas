@@ -67,7 +67,7 @@ function FieldChoice({
       <Checkbox
         className="mt-1"
         checked={row.selected}
-        disabled={busy || !row.eligible}
+        disabled={busy || row.mandatory || !row.eligible}
         onChange={(event) =>
           workspace.chooseFields(
             event.target.checked
@@ -87,6 +87,9 @@ function FieldChoice({
             </span>
           )}
           {row.protected && <Badge variant="secondary">{t("locked")}</Badge>}
+          {row.mandatory && !row.protected && (
+            <Badge variant="outline">{t("mergeRequiredSource")}</Badge>
+          )}
         </span>
         <span className="mt-1 line-clamp-2 block break-words text-xs text-muted-foreground">
           {value(row.new.value) || t("none")}
@@ -110,8 +113,8 @@ export function MetadataMergeWorkspace({
   const { metadata, projection, targetDetail, preview, confirm } = workspace;
   if (!metadata || !projection) return null;
   const current = targetDetail.data;
-  const primary = projection.rows.filter((row) =>
-    ["title", "overview", "plot"].includes(row.key),
+  const primary = projection.rows.filter(
+    (row) => row.mandatory || ["title", "overview", "plot"].includes(row.key),
   );
   const more = projection.rows.filter((row) => !primary.includes(row));
   const done = confirm.isSuccess || Boolean(preview?.confirmed);
@@ -323,7 +326,11 @@ export function MetadataMergeWorkspace({
                   workspace.setOnlyMissing(event.target.checked)
                 }
               />
-              {t("mergeOnlyMissing")}
+              {t(
+                projection.rows.some((row) => row.mandatory)
+                  ? "mergeOnlyMissingLicensed"
+                  : "mergeOnlyMissing",
+              )}
             </Label>
           </section>
         </div>

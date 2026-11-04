@@ -1,21 +1,21 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
+  FileText,
   FolderOpen,
   Layers3,
   ListTodo,
   Moon,
   Search,
   Settings2,
-  ShieldCheck,
   Sun,
   Wrench,
 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { NfoOpenListener } from "../../features/nfo/page";
 import { setTheme, useTheme } from "../../lib/theme";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Select } from "../ui/select";
 import { Toaster } from "../ui/sonner";
 import { LibraryNavigation } from "./library-navigation";
 import { useTaskEvents } from "./use-task-events";
@@ -66,6 +66,16 @@ function Sidebar({ chrome }: { chrome: WindowChrome }) {
       <div className="app-sidebar-bottom">
         <Button asChild variant="ghost" className="app-nav-item">
           <Link
+            to="/nfo"
+            activeProps={{ className: "active" }}
+            aria-label={t("openNfo")}
+          >
+            <FileText size={20} aria-hidden="true" />
+            <span className="app-nav-label">{t("openNfo")}</span>
+          </Link>
+        </Button>
+        <Button asChild variant="ghost" className="app-nav-item">
+          <Link
             to="/settings"
             activeOptions={{ includeSearch: false }}
             activeProps={{ className: "active" }}
@@ -81,7 +91,7 @@ function Sidebar({ chrome }: { chrome: WindowChrome }) {
 }
 
 function Toolbar({ chrome }: { chrome: WindowChrome }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const theme = useTheme();
   const pathname = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
@@ -125,7 +135,6 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
         </form>
       )}
       <div className="app-toolbar-actions" data-tauri-drag-region="false">
-        <ShieldCheck className="app-local-icon" size={19} aria-hidden="true" />
         <Button
           variant="ghost"
           size="icon"
@@ -138,15 +147,6 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
             <Moon size={19} aria-hidden="true" />
           )}
         </Button>
-        <Select
-          className="app-language"
-          aria-label={t("language")}
-          value={i18n.resolvedLanguage ?? "zh-CN"}
-          onChange={(event) => void i18n.changeLanguage(event.target.value)}
-        >
-          <option value="zh-CN">简体中文</option>
-          <option value="en-US">English</option>
-        </Select>
       </div>
       <WindowControls chrome={chrome} />
     </header>
@@ -172,6 +172,7 @@ export function AppShell() {
       data-window-platform={chrome.platform ?? undefined}
     >
       <Sidebar chrome={chrome} />
+      <NfoOpenListener />
       <div className="app-main" ref={main}>
         <Toolbar chrome={chrome} />
         <main className="app-content">

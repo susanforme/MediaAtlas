@@ -17,6 +17,7 @@ fn root_mutation_gate() -> &'static tokio::sync::Mutex<()> {
 use uuid::Uuid;
 
 use crate::library::{LibraryRepository, RepositoryError};
+use crate::root_sources::validate_providers as validate_root_providers;
 
 type Result<T> = std::result::Result<T, RepositoryError>;
 
@@ -119,30 +120,48 @@ impl BrowseService {
 
     async fn root_view(&self, root: LibraryRoot) -> Result<RootView> {
         let settings = sqlx::query(
-            "SELECT exclude_patterns_json,last_scan_at FROM root_settings WHERE root_id=?",
+            "SELECT exclude_patterns_json,last_scan_at,metadata_providers_json FROM root_settings WHERE root_id=?",
         )
         .bind(root.id.to_string())
         .fetch_optional(self.repo.pool())
         .await?;
-        let (exclude_patterns, last_scan_at) = match settings {
+        let (exclude_patterns, last_scan_at, metadata_providers) = match settings {
             Some(row) => (
                 serde_json::from_str(&get::<String>(&row, "exclude_patterns_json")?)
                     .map_err(|_| RepositoryError::CorruptData)?,
                 get::<Option<i64>>(&row, "last_scan_at")?
                     .map(time)
                     .transpose()?,
+                get::<Option<String>>(&row, "metadata_providers_json")?
+                    .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData))
+                    .transpose()?,
             ),
-            None => (Vec::new(), None),
+            None => (Vec::new(), None, None),
         };
         Ok(RootView {
             root,
             exclude_patterns,
             last_scan_at,
+            metadata_providers,
         })
     }
 
     pub async fn save_root(&self, input: &RootInput) -> Result<RootView> {
         let _root_mutation = root_mutation_gate().lock().await;
+        let mut metadata_providers = input.metadata_providers.clone();
+        if metadata_providers.is_none() {
+            if let Some(id) = input.id {
+                if self.repo.get_root(id).await?.is_some_and(|root| root.kind != input.kind) {
+                    metadata_providers = Some(input.kind.map(crate::root_sources::default_providers)
+                        .unwrap_or_else(|| vec!["tmdb".into(), "anilist".into()]));
+                } else if let Some(providers) = crate::root_sources::load(self.repo.pool(), id).await? {
+                    validate_root_providers(input.kind, &providers)?;
+                }
+            }
+        }
+        if let Some(providers) = &metadata_providers {
+            validate_root_providers(input.kind, providers)?;
+        }
         if input.name.trim().is_empty()
             || input.name.len() > 256
             || input.name.contains('\0')
@@ -240,8 +259,9 @@ impl BrowseService {
         sqlx::query("INSERT INTO library_roots(id,name,path,normalized_path,path_style,kind,enabled,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,path=excluded.path,normalized_path=excluded.normalized_path,path_style=excluded.path_style,kind=excluded.kind,enabled=excluded.enabled,updated_at=excluded.updated_at")
             .bind(id.to_string()).bind(input.name.trim()).bind(&path).bind(normalized).bind(path_style.as_str()).bind(kind).bind(input.enabled).bind(created).bind(now.timestamp_millis())
             .execute(&mut *tx).await?;
-        sqlx::query("INSERT INTO root_settings(root_id,exclude_patterns_json) VALUES (?,?) ON CONFLICT(root_id) DO UPDATE SET exclude_patterns_json=excluded.exclude_patterns_json")
+        sqlx::query("INSERT INTO root_settings(root_id,exclude_patterns_json,metadata_providers_json) VALUES (?,?,?) ON CONFLICT(root_id) DO UPDATE SET exclude_patterns_json=excluded.exclude_patterns_json,metadata_providers_json=COALESCE(excluded.metadata_providers_json,root_settings.metadata_providers_json)")
             .bind(id.to_string()).bind(serde_json::to_string(&input.exclude_patterns).map_err(|_|RepositoryError::InvalidInput)?)
+            .bind(metadata_providers.as_ref().map(serde_json::to_string).transpose().map_err(|_| RepositoryError::InvalidInput)?)
             .execute(&mut *tx).await?;
         tx.commit().await?;
         self.root_view(

@@ -1,4 +1,4 @@
-"""Shared native-select visual and keyboard QA, with explicitly synthetic IPC."""
+"""Shared custom-select visual and keyboard QA, with explicitly synthetic IPC."""
 import hashlib
 import json
 import os
@@ -7,6 +7,7 @@ from pathlib import Path
 import runpy
 import subprocess
 from playwright.sync_api import expect, sync_playwright
+from select_support import select_option
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "screenshots/shared-select-2026-11-04"
@@ -44,24 +45,22 @@ def main():
         page.goto(URL + "/library")
         kind = page.get_by_role("combobox", name="媒体类型", exact=True)
         sort = page.get_by_role("combobox", name="排序", exact=True)
-        language = page.locator("select.app-language")
         expect(kind).to_be_visible()
         expect(page.get_by_role("link", name="QA 媒体 01", exact=False).first).to_be_visible()
-        for name, control in [("kind", kind), ("sort", sort), ("language", language)]:
+        for name, control in [("kind", kind), ("sort", sort)]:
             value = styles(control)
-            assert value["appearance"] == "none" and value["webkitAppearance"] == "none", value
-            assert value["backgroundImage"].count("linear-gradient") == 2, value
-            assert all(size.strip() == "6px 6px" for size in value["backgroundSize"].split(",")), value
+            assert control.evaluate("el => el.tagName") == "BUTTON"
+            expect(control.locator("svg")).to_have_count(1)
+            assert value["backgroundImage"] == "none", value
             observations[name] = value
         assert observations["kind"]["fontSize"] == "14px", observations["kind"]
-        assert observations["language"]["fontSize"] == "12px", observations["language"]
         capture(page, "fixture-shared-select-library-1648.png")
 
         kind.focus()
         kind.press("ArrowDown")
         kind.press("Enter")
         kind.press("Escape")
-        expect(kind).to_have_value("movie")
+        expect(kind).to_have_attribute("value", "movie")
         expect(page).to_have_url(re.compile(r"[?&]kind=movie"))
         kind.press("Tab")
         page.keyboard.press("Shift+Tab")
@@ -85,14 +84,22 @@ def main():
         page.goto(URL + "/library")
         expect(page.locator(".library-poster-card")).to_have_count(0)
         capture(page, "fixture-shared-select-empty-1648.png")
-        language.select_option("en-US")
+        expect(page.locator(".app-toolbar").get_by_role("combobox")).to_have_count(0)
+        page.goto(URL + "/settings")
+        select_option(page, page.get_by_role("combobox", name="语言", exact=True), "en-US")
+        expect(page.get_by_role("heading", name="Settings", exact=True)).to_be_visible()
+        page.goto(URL + "/library")
         expect(page.get_by_role("heading", name="Media library", exact=True)).to_be_visible()
-        assert styles(language)["backgroundImage"].count("linear-gradient") == 2
-        language.select_option("zh-CN")
+        page.goto(URL + "/settings")
+        select_option(page, page.get_by_role("combobox", name="Language", exact=True), "zh-CN")
         page.set_viewport_size({"width": 390, "height": 844})
+        language = page.get_by_role("combobox", name="语言", exact=True)
         expect(language).to_be_visible()
-        assert float(styles(language)["paddingRight"].removesuffix("px")) >= 30
-        assert language.bounding_box()["width"] >= 90
+        language.click()
+        expect(page.get_by_role("option", name="English (US)", exact=True)).to_be_visible()
+        capture(page, "fixture-shared-select-settings-narrow-390.png")
+        page.keyboard.press("Escape")
+        page.goto(URL + "/library")
         assert page.evaluate("matchMedia('(prefers-reduced-motion: reduce)').matches")
         capture(page, "fixture-shared-select-narrow-390.png")
         assert not errors, errors
@@ -101,8 +108,8 @@ def main():
     source = ["apps/desktop/src/components/ui/select.tsx", "apps/desktop/src/components/ui/select.css", "apps/desktop/src/styles.css", "apps/desktop/src/components/shell/shell.css", "apps/desktop/src/features/library/library.css"]
     report = {"date":"2026-11-04", "mode":"real Chromium + synthetic IPC; disabled/invalid are explicit DOM style fixtures", "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),
               "source_sha256":{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in source}, "observations":observations,
-              "checks":["appearance and WebKit appearance reset on library and language controls", "single theme chevron and consistent typography", "keyboard selection updates real library URL", "keyboard focus visible", "disabled cursor/opacity and invalid border", "empty/content, language switching, 390px and reduced motion, no page or right-content overflow"],
-              "limits":["Chromium browser QA; native macOS WKWebView and OS popup appearance are not verified here", "Native selection semantics and change events retained; popup menu remains platform-managed"],
+              "checks":["custom button triggers and theme-aware listbox options", "single SVG chevron and consistent typography", "keyboard selection updates real library URL", "keyboard focus visible", "disabled cursor/opacity and invalid border", "empty/content, language switching, 390px and reduced motion, no page or right-content overflow"],
+              "limits":["Chromium fixture QA does not establish macOS WKWebView or native OS behavior", "The option menu is rendered by shared UI components; native form controls are hidden bridges only"],
               "screenshots":{p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(OUT.glob('*.png'))}}
     (OUT/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2)+'\n')
     print('Shared Select browser QA passed')
