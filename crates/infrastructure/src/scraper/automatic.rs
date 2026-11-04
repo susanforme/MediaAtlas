@@ -1,5 +1,5 @@
 //! Automatic metadata enrichment is a separate policy from manual review. It
-//! accepts only one strong identity match, and never acquires sidecar write plans.
+//! accepts only one strong identity match, then exports absent NFO sidecars.
 use super::*;
 use sqlx::{Sqlite, Transaction};
 
@@ -138,10 +138,11 @@ impl ScraperService {
             .get_media(media_id)
             .await?
             .ok_or(RepositoryError::NotFound)?;
-        let local_metadata: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM local_metadata_provenance WHERE media_item_id=?)",
-        )
-        .bind(media_id.to_string())
+        let typed = crate::library_ready::typed_descendant("parent", "m");
+        let local_metadata: bool = sqlx::query_scalar(&format!(
+            "SELECT EXISTS(SELECT 1 FROM local_metadata_provenance WHERE media_item_id=?) OR EXISTS(SELECT 1 FROM media_items m JOIN media_items parent ON ({typed}) JOIN local_metadata_provenance p ON p.media_item_id=parent.id WHERE m.id=? AND p.source_kind='nfo')",
+        ))
+        .bind(media_id.to_string()).bind(media_id.to_string())
         .fetch_one(self.repo.pool())
         .await?;
         let saved: Option<String> = sqlx::query_scalar(
@@ -159,6 +160,14 @@ impl ScraperService {
             })
         });
         if local_metadata || (existing.is_some() && !repair_artwork) {
+            let mut tx = self.repo.pool().begin().await?;
+            context.validate_tx(&mut tx, media_id).await?;
+            tx.commit().await?;
+            let output =
+                crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone());
+            let _ = output
+                .automatic_nfo(media_id, Some(&context.cancel), Some(context))
+                .await;
             return Ok(AutomaticOutcome {
                 state: "skipped",
                 reason: Some("existing_metadata"),
@@ -269,7 +278,7 @@ impl ScraperService {
             .map(|f| f.key.clone())
             .collect();
         // At most one poster and one backdrop are copied into the app cache.
-        // Existing local art remains preferred and source directories stay read-only.
+        // Existing local art remains preferred; only absent NFOs are exported later.
         let mut selected_artwork = vec![];
         for kind in ["poster", "backdrop"] {
             if !existing_art.iter().any(|art| art.kind.as_str() == kind) {

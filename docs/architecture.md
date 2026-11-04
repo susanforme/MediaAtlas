@@ -87,7 +87,7 @@ P0 UI 仅通过 `get_app_info` 完成握手。宿主启动时可发送应用就�
 - Movie/TV、Anime、JAV、Music 使用独立扩展模型和类型专属匹配策略；统一公共身份、文件、图片、外部 ID 和字段来源。详见 [ADR-003](adr/ADR-003-media-model.md)。
 - 全部采集在 Rust 后端，经 API + HTTP/HTML 双引擎执行；不使用浏览器自动化抓取。详见 [ADR-002](adr/ADR-002-dual-engine.md)。
 - SQLite Repository 隔离持久化，迁移和模型先设计后实施。详见 [ADR-004](adr/ADR-004-database.md)。
-- 文件写入、标签修改、移动或重命名均先生成 Preview/Diff，再由用户确认执行；默认 Preserve。首次 NFO/图片输出前就实现这一机制，不能等到 P7。
+- 资料获取以有效本地 NFO 为首选，不限生成工具；缺失时刮削并自动生成 NFO，数据库承担索引与检索。自动 NFO 使用受限的 Preserve 输出路径，已有目标不覆盖；图片写入、标签修改、移动或重命名继续生成 Preview/Diff 并明确确认。
 - 成人入口默认关闭，独立 Root、搜索和缩略图缓存；普通媒体墙、统计和最近访问默认不泄漏成人内容。
 
 ## 实施与验收边界

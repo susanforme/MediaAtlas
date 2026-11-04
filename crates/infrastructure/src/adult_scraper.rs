@@ -500,6 +500,14 @@ impl AdultScraperService {
         if row.try_get::<String, _>("state")? == "succeeded" {
             let mut result: MergeResult = decode(&row.try_get::<String, _>("result_json")?)?;
             result.already_applied = true;
+            let _ = self
+                .artwork_service()
+                .automatic_nfo(
+                    media.id,
+                    automatic.map(|context| &context.cancel),
+                    automatic,
+                )
+                .await;
             return Ok(result);
         }
         let expected: MediaItem = decode(&row.try_get::<String, _>("expected_media_json")?)?;
@@ -666,6 +674,11 @@ impl AdultScraperService {
         }
         self.ensure_access()?;
         tx.commit().await?;
+        self.ensure_access()?;
+        let _ = self
+            .artwork_service()
+            .automatic_nfo(expected.id, Some(cancel), automatic)
+            .await;
         self.ensure_access()?;
         Ok(result)
     }
@@ -1308,7 +1321,7 @@ mod tests {
         tx.rollback().await.unwrap();
     }
     #[tokio::test]
-    async fn automatic_adult_catalog_enrichment_preserves_fields_and_never_writes_sidecars() {
+    async fn automatic_adult_catalog_enrichment_preserves_fields_and_exports_only_nfo() {
         let mut s = setup().await;
         let (server, _, _) = automatic_mock(&mut s, false).await;
         let access = crate::media_output::AdultOutputAccess::new();
@@ -1343,7 +1356,7 @@ mod tests {
             std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap(),
             original
         );
-        assert!(!s._dir.path().join("SYN-001-CD1.nfo").exists());
+        assert!(s._dir.path().join("SYN-001-CD1.nfo").is_file());
         let ordinary_sources: i64 =
             sqlx::query_scalar("SELECT count(*) FROM video_metadata_sources")
                 .fetch_one(s.repo.pool())
@@ -1463,7 +1476,7 @@ mod tests {
             std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap(),
             original
         );
-        assert!(!s._dir.path().join("SYN-001-CD1.nfo").exists());
+        assert!(s._dir.path().join("SYN-001-CD1.nfo").is_file());
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM video_metadata_sources")
                 .fetch_one(s.repo.pool())

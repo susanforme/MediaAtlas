@@ -90,8 +90,20 @@ pub fn read_nfo(path: &Path) -> Result<LocalMetadata, ScanError> {
                     .unwrap()
                     .push(json!(value));
             }
+            "imdbid" | "tmdbid" | "tvdbid" => {
+                let provider = child.tag_name().name().trim_end_matches("id");
+                metadata.external_ids.push(LocalExternalId {
+                    provider_id: provider.to_owned(),
+                    namespace: provider.to_owned(),
+                    value: value.to_owned(),
+                });
+            }
             "uniqueid" => {
-                if let Some(provider) = child.attribute("type").filter(|value| !value.is_empty()) {
+                if let Some(provider) = child
+                    .attribute("type")
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                {
                     metadata.external_ids.push(LocalExternalId {
                         provider_id: provider.to_ascii_lowercase(),
                         namespace: provider.to_ascii_lowercase(),
@@ -116,6 +128,10 @@ pub fn read_nfo(path: &Path) -> Result<LocalMetadata, ScanError> {
     if !studios.is_empty() {
         metadata.fields.insert("studios".into(), json!(studios));
     }
+    metadata.external_ids.sort_by(|a, b| {
+        (&a.provider_id, &a.namespace, &a.value).cmp(&(&b.provider_id, &b.namespace, &b.value))
+    });
+    metadata.external_ids.dedup();
     Ok(metadata)
 }
 

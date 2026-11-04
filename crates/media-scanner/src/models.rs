@@ -38,6 +38,11 @@ pub struct ScannedFile {
     pub modified_at: Option<DateTime<Utc>>,
     pub parsed: ParsedMedia,
     pub local_metadata: LocalMetadata,
+    /// Series sidecars are kept separate from episode metadata and identity.
+    #[serde(default)]
+    pub series_metadata: Option<LocalMetadata>,
+    #[serde(default)]
+    pub series_nfo: Option<String>,
     pub artworks: Vec<LocalArtwork>,
     pub associated_files: Vec<String>,
     #[serde(default)]

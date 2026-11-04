@@ -1,4 +1,4 @@
-//! Automatic library refresh changes application data only. Every remote target
+//! Automatic library refresh indexes local files, enriches metadata and exports absent NFOs. Every remote target
 //! is derived from this scan's actual local files, never from a client-supplied ID.
 use super::*;
 use crate::scraper::automatic::{AutomaticContext, AutomaticOutcome};
@@ -129,7 +129,21 @@ impl ScanService {
                     Err(_) => AutomaticOutcome::failed("metadata_failed"),
                 }
             } else {
-                AutomaticOutcome::review("provider_unconfigured")
+                let local: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM local_metadata_provenance WHERE media_item_id=?)",
+                )
+                .bind(media_id.to_string())
+                .fetch_one(self.repo.pool())
+                .await?;
+                if local {
+                    AutomaticOutcome {
+                        state: "skipped",
+                        reason: Some("existing_metadata"),
+                        run_id: None,
+                    }
+                } else {
+                    AutomaticOutcome::review("provider_unconfigured")
+                }
             };
             // A manual identification can finish while this request is in
             // flight. Its newer result owns the row; only our own successful

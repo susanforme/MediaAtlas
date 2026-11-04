@@ -101,7 +101,7 @@ flowchart TD
 - [RootInput / RootView](../crates/application/src/library.rs) 只有名称、路径、类型、启用及排除规则，没有目录级来源顺序、资料语言或图片策略。全局 ProviderConfig 的启用/认证引用/限流配置不能冒充目录策略。
 - [普通自动匹配](../crates/infrastructure/src/scraper/automatic.rs) 对电影/剧集固定 TMDB、动画固定 AniList；每种类型只有一个自动来源，当前添加“来源排序”界面没有实际意义。[成人自动匹配](../crates/infrastructure/src/adult_scraper/automatic.rs) 按真实命名空间选择 `dmm.product → dmm` 或 `wikidata.catalog:* → wikidata`，二者不是可互换的模糊兜底来源，不能跨发行/身份范围回退。
 - 普通和成人自动查询目前请求 `zh-CN`，不等于来源返回中文。AniList 中文请求实际可能返回 `ja-Latn`（见 [适配与回归](../crates/infrastructure/src/video_providers.rs)）；Wikidata 当前 SPARQL 使用 `ja,en`，DMM 保留来源原文。描述符中的 languages 不是翻译或所有字段语言支持承诺。
-- 普通自动流程保护本地 NFO 和已有资料，对当前允许修复的已确认来源只补缺失 poster/backdrop；成人已有资料时直接跳过，封面仍受当前可见权限和已有图片保护。音乐自动流程读取本地标签，不代表已有在线自动音乐刮削。
+- 按用户最新授权，本地有效 NFO 不限生成工具并优先读取；缺失时自动刮削并生成 NFO，已确认资料可以在更新时补生成缺失 NFO。已有 NFO 和手改/锁定字段保留；NFO 写入失败与资料获取分开显示，源媒体仍只读。封面仍受当前可见权限和已有图片保护。音乐自动流程读取本地标签，不代表已有在线自动音乐刮削。
 
 后续顺序应为：目录策略的后端持久化与 revision → 任务不可变快照 → 适配器实际生效 → requested/effective language 与回退可观测 → 权限、保护、迁移回归 → 最后接入 UI。`provider_order`、`metadata_language`、`artwork_mode: missing|none` 仅是待审查的 P1 字段提案，本轮没有添加这些目录字段或声称 P1 已完成。
 

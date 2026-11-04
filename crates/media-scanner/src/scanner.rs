@@ -260,6 +260,61 @@ impl DirectorySidecars {
     }
 }
 
+fn series_media(kind: MediaKind) -> bool {
+    matches!(kind, MediaKind::TvEpisode | MediaKind::Anime)
+}
+fn include_series_sidecar(
+    root: &Path,
+    media: &Path,
+    kind: MediaKind,
+    excludes: &GlobSet,
+    cancel: &AtomicBool,
+    sidecars: &mut Sidecars,
+) -> Result<(), ScanError> {
+    if !series_media(kind)
+        || sidecars.nfo.iter().any(|path| {
+            path.file_name()
+                .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case("tvshow.nfo"))
+        })
+    {
+        return Ok(());
+    }
+    let parent = media.parent().ok_or(ScanError::Io)?;
+    let Some(series_dir) = parent.parent().filter(|path| path.starts_with(root)) else {
+        return Ok(());
+    };
+    // Only the conventional one-level season folder can inherit a show NFO.
+    let name = parent
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("")
+        .to_ascii_lowercase();
+    let season = name
+        .strip_prefix("season")
+        .or_else(|| name.strip_prefix('s'));
+    if !season.is_some_and(|suffix| {
+        !suffix.trim().is_empty() && suffix.trim().chars().all(|c| c.is_ascii_digit())
+    }) {
+        return Ok(());
+    }
+    let index = DirectorySidecars::read(root, series_dir, excludes, cancel)?;
+    if let Some(file) = index
+        .files
+        .iter()
+        .find(|file| file.filename == "tvshow.nfo")
+    {
+        sidecars.nfo.push(file.path.clone());
+        sidecars.associated.push(file.relative_path.clone());
+        sidecars
+            .fingerprint
+            .push((file.relative_path.clone(), file.size, file.modified_at));
+        sidecars.nfo.sort();
+        sidecars.associated.sort();
+        sidecars.fingerprint.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+    Ok(())
+}
+
 /// Re-discover companions for confirm-time TOCTOU checks, including additions/deletions.
 pub fn sidecar_fingerprint(root: &Path, entry: &ScannedFile) -> Result<String, ScanError> {
     let rel = Path::new(&entry.relative_path);
@@ -287,13 +342,21 @@ pub fn sidecar_fingerprint(root: &Path, entry: &ScannedFile) -> Result<String, S
         return Err(ScanError::Io);
     }
     let excludes = exclude_set(&entry.exclude_patterns_snapshot)?;
-    let sidecars = DirectorySidecars::read(
+    let mut sidecars = DirectorySidecars::read(
         root,
         path.parent().ok_or(ScanError::Io)?,
         &excludes,
         &AtomicBool::new(false),
     )?
     .for_media(&path)?;
+    include_series_sidecar(
+        root,
+        &path,
+        entry.parsed.kind,
+        &excludes,
+        &AtomicBool::new(false),
+        &mut sidecars,
+    )?;
     serde_json::to_string(&sidecars.fingerprint).map_err(|_| ScanError::InvalidMetadata)
 }
 
@@ -443,7 +506,7 @@ pub fn run_scan(
             stats.cancelled = true;
             break;
         }
-        let companions = match companions {
+        let mut companions = match companions {
             Ok(value) => value,
             Err(error) => {
                 stats.warnings += 1;
@@ -452,7 +515,17 @@ pub fn run_scan(
                 Sidecars::default()
             }
         };
-        // Exact file sidecars override directory-wide movie/tvshow metadata.
+        if let Err(error) =
+            include_series_sidecar(root, path, parsed.kind, &excludes, cancel, &mut companions)
+        {
+            stats.warnings += 1;
+            parsed.warnings.push(error.code().into());
+            parsed.needs_review = true;
+        }
+        let mut series_metadata = None;
+        let mut series_nfo = None;
+        // Exact file sidecars override directory-wide movie metadata. A show
+        // sidecar is applied only to the series graph, never an episode identity.
         let mut nfo_paths = companions.nfo.clone();
         nfo_paths.sort_by_key(|p| p.file_stem() == path.file_stem());
         for nfo in nfo_paths {
@@ -467,8 +540,18 @@ pub fn run_scan(
             }
             match read_nfo(&nfo) {
                 Ok(metadata) => {
-                    local.fields.extend(metadata.fields);
-                    local.external_ids.extend(metadata.external_ids);
+                    if series_media(parsed.kind)
+                        && parsed.series_title.is_some()
+                        && nfo.file_name().is_some_and(|name| {
+                            name.to_string_lossy().eq_ignore_ascii_case("tvshow.nfo")
+                        })
+                    {
+                        series_nfo = Some(relative(root, &nfo)?);
+                        series_metadata = Some(metadata);
+                    } else {
+                        local.fields.extend(metadata.fields);
+                        local.external_ids.extend(metadata.external_ids);
+                    }
                 }
                 Err(error) => {
                     parsed.warnings.push(error.code().into());
@@ -531,6 +614,8 @@ pub fn run_scan(
             modified_at,
             parsed,
             local_metadata: local,
+            series_metadata,
+            series_nfo,
             artworks: companions.artworks,
             associated_files: companions.associated,
             sidecar_fingerprint,

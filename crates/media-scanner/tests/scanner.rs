@@ -351,3 +351,62 @@ fn audio_info_tags_are_read_without_rewriting_the_fixture() {
     assert_eq!(tags.fields["artist"], "Fixture artist");
     assert_eq!(fs::read(path).unwrap(), bytes);
 }
+
+#[test]
+fn third_party_nfo_identifier_spellings_are_normalized_without_producer_checks() {
+    let dir = tempdir().unwrap();
+    let path = dir.path().join("external.nfo");
+    let xml = r#"<?xml version="1.0"?><movie><title>External producer</title><tmdbid>42</tmdbid><imdbid>tt0042</imdbid><tvdbid>99</tvdbid><uniqueid type="tmdb">42</uniqueid><generator>Some other tool</generator></movie>"#;
+    fs::write(&path, xml).unwrap();
+    let parsed = read_nfo(&path).unwrap();
+    assert_eq!(parsed.fields["title"], "External producer");
+    assert_eq!(parsed.external_ids.len(), 3);
+    for (namespace, value) in [("tmdb", "42"), ("imdb", "tt0042"), ("tvdb", "99")] {
+        assert!(parsed
+            .external_ids
+            .iter()
+            .any(|id| id.namespace == namespace && id.value == value));
+    }
+    assert_eq!(fs::read_to_string(path).unwrap(), xml);
+}
+
+#[test]
+fn show_sidecar_is_separate_from_episode_metadata_and_part_of_the_source_fingerprint() {
+    let dir = tempdir().unwrap();
+    fs::create_dir_all(dir.path().join("Show/Season 10")).unwrap();
+    fs::write(
+        dir.path().join("Show/Season 10/Filename.Show.S10E01.mkv"),
+        b"video",
+    )
+    .unwrap();
+    let show_nfo = dir.path().join("Show/tvshow.nfo");
+    fs::write(&show_nfo, "<tvshow><title>External Show</title><year>2023</year><uniqueid type=\"tmdb\">show-id</uniqueid></tvshow>").unwrap();
+    fs::write(dir.path().join("Show/Season 10/Filename.Show.S10E01.nfo"), "<episodedetails><title>Episode One</title><uniqueid type=\"tmdb\">episode-id</uniqueid></episodedetails>").unwrap();
+    let entries = collect(dir.path(), &options(Some(MediaKind::TvSeries)));
+    assert_eq!(entries.len(), 1);
+    let entry = &entries[0];
+    assert_eq!(entry.parsed.title, "Episode One");
+    assert_eq!(entry.parsed.series_title.as_deref(), Some("Filename Show"));
+    assert_eq!(entry.local_metadata.external_ids[0].value, "episode-id");
+    assert_eq!(
+        entry.series_metadata.as_ref().unwrap().external_ids[0].value,
+        "show-id"
+    );
+    assert_eq!(entry.series_nfo.as_deref(), Some("Show/tvshow.nfo"));
+    assert_eq!(
+        sidecar_fingerprint(dir.path(), entry).unwrap(),
+        entry.sidecar_fingerprint
+    );
+    fs::write(
+        &show_nfo,
+        "<tvshow><title>Changed external Show title</title></tvshow>",
+    )
+    .unwrap();
+    assert_ne!(
+        sidecar_fingerprint(dir.path(), entry).unwrap(),
+        entry.sidecar_fingerprint
+    );
+    let mut excluded = options(Some(MediaKind::TvSeries));
+    excluded.exclude_patterns = vec!["**/tvshow.nfo".into()];
+    assert!(collect(dir.path(), &excluded)[0].series_metadata.is_none());
+}

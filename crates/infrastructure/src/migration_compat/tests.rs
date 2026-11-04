@@ -114,7 +114,7 @@ async fn old_crlf_prefix_is_normalized_then_standard_migrations_reach_current_sc
         .fetch_one(repository.pool())
         .await
         .unwrap();
-    assert_eq!(version, 19);
+    assert_eq!(version, 20);
 }
 #[tokio::test]
 async fn unknown_checksum_after_known_alias_causes_zero_rewrites_and_no_snapshot() {

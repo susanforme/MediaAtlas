@@ -31,7 +31,7 @@ async fn vacuum_snapshot_includes_committed_wal_and_immutable_manifest() {
     let manifest = validate_backup(&service.directory, summary.id, &CancellationToken::new())
         .await
         .unwrap();
-    assert_eq!(manifest.summary.schema_version, 19);
+    assert_eq!(manifest.summary.schema_version, 20);
     let mut snapshot = open_connection(
         &backup_path(&service.directory, summary.id).join("library.sqlite"),
         true,
@@ -205,7 +205,7 @@ async fn diagnostics_allowlist_excludes_raw_private_user_network_and_auth_values
     assert!(!text.contains("host"));
     let value: serde_json::Value = serde_json::from_str(&text).unwrap();
     assert!(value["database_pages"].as_i64().unwrap() > 0);
-    assert_eq!(value["applied_migrations"], 19);
+    assert_eq!(value["applied_migrations"], 20);
     assert_eq!(value["includes_credentials"], false);
 }
 #[tokio::test]

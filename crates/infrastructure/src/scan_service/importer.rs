@@ -163,6 +163,9 @@ pub(super) async fn import_file(
     )
     .await?;
     for associated in &file.associated_files {
+        if file.series_nfo.as_ref() == Some(associated) {
+            continue;
+        }
         let path = Path::new(&root.path).join(associated);
         let info = tokio::task::spawn_blocking(move || {
             fs::metadata(path).map(|metadata| {
@@ -462,7 +465,13 @@ async fn add_hierarchy(
         .and_then(|value| value.to_str())
         .unwrap_or("")
         .to_ascii_lowercase();
-    let context = if last.starts_with("season") || last.starts_with("s0") {
+    let season_folder = last
+        .strip_prefix("season")
+        .or_else(|| last.strip_prefix('s'))
+        .is_some_and(|suffix| {
+            !suffix.trim().is_empty() && suffix.trim().chars().all(|c| c.is_ascii_digit())
+        });
+    let context = if season_folder {
         parent.parent().unwrap_or_else(|| Path::new(""))
     } else {
         parent
@@ -478,6 +487,9 @@ async fn add_hierarchy(
         now,
     )
     .await?;
+    if let (Some(metadata), Some(relative)) = (&file.series_metadata, &file.series_nfo) {
+        import_series_nfo(tx, root, series_id, metadata, relative, now).await?;
+    }
     let parent_id = if let Some(season) = file.parsed.season_number {
         let season_id = ensure_group(
             tx,
@@ -494,6 +506,63 @@ async fn add_hierarchy(
         series_id
     };
     sqlx::query("INSERT OR IGNORE INTO media_relations(parent_id,child_id,relation_type) VALUES(?,?,'episode')").bind(parent_id.to_string()).bind(child_id.to_string()).execute(&mut **tx).await?;
+    Ok(())
+}
+
+async fn import_series_nfo(
+    tx: &mut Transaction<'_, Sqlite>,
+    root: &LibraryRoot,
+    media_id: Uuid,
+    metadata: &mediaatlas_media_scanner::LocalMetadata,
+    relative: &str,
+    now: i64,
+) -> Result<(), RepositoryError> {
+    let source = format!("library://{}/{}", root.id, relative);
+    for (key, value) in &metadata.fields {
+        sqlx::query("INSERT INTO metadata_values(id,media_item_id,field_key,locale,value_json,provider_id,source_url,fetched_at,is_user_modified,is_locked) VALUES(?,?,?,'',?,'local',?,?,0,0) ON CONFLICT(media_item_id,field_key,locale) DO UPDATE SET value_json=excluded.value_json,provider_id='local',source_url=excluded.source_url,fetched_at=excluded.fetched_at WHERE metadata_values.is_locked=0 AND metadata_values.is_user_modified=0")
+            .bind(Uuid::new_v4().to_string()).bind(media_id.to_string()).bind(key).bind(value.to_string()).bind(&source).bind(now).execute(&mut **tx).await?;
+    }
+    for external in &metadata.external_ids {
+        sqlx::query("INSERT OR IGNORE INTO external_ids(id,media_item_id,provider_id,namespace,external_id,is_primary,created_at) VALUES(?,?,?,?,?,0,?)")
+            .bind(Uuid::new_v4().to_string()).bind(media_id.to_string()).bind(&external.provider_id).bind(&external.namespace).bind(&external.value).bind(now).execute(&mut **tx).await?;
+    }
+    if let Some(title) = metadata
+        .fields
+        .get("title")
+        .and_then(Value::as_str)
+        .filter(|title| !title.trim().is_empty())
+    {
+        sqlx::query("UPDATE media_items SET title=?,updated_at=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM metadata_values WHERE media_item_id=? AND field_key='title' AND (is_locked=1 OR is_user_modified=1))")
+            .bind(title).bind(now).bind(media_id.to_string()).bind(media_id.to_string()).execute(&mut **tx).await?;
+        crate::library_ready::record_local(tx, media_id, "nfo", &source).await?;
+    }
+    if let Some(year) = metadata
+        .fields
+        .get("year")
+        .and_then(Value::as_i64)
+        .and_then(|year| i32::try_from(year).ok())
+    {
+        sqlx::query("UPDATE media_items SET year=? WHERE id=? AND NOT EXISTS(SELECT 1 FROM metadata_values WHERE media_item_id=? AND field_key='year' AND (is_locked=1 OR is_user_modified=1))")
+            .bind(year).bind(media_id.to_string()).bind(media_id.to_string()).execute(&mut **tx).await?;
+    }
+    let path = Path::new(&root.path).join(relative);
+    let info = tokio::task::spawn_blocking(move || fs::metadata(path))
+        .await
+        .map_err(|_| RepositoryError::Database)?
+        .map_err(|_| RepositoryError::Conflict)?;
+    save_file(
+        tx,
+        root,
+        media_id,
+        FileIndexInput {
+            relative,
+            size: info.len(),
+            modified: info.modified().ok().map(DateTime::<Utc>::from),
+            part: None,
+            shared_companion: true,
+        },
+    )
+    .await?;
     Ok(())
 }
 

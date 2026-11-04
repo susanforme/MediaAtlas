@@ -23,7 +23,7 @@ type Result<T> = std::result::Result<T, RepositoryError>;
 const POSTER: &str = "EXISTS(SELECT 1 FROM artworks a WHERE a.media_item_id=m.id AND a.kind IN ('poster','cover','album_cover'))";
 const BACKDROP: &str =
     "EXISTS(SELECT 1 FROM artworks a WHERE a.media_item_id=m.id AND a.kind='backdrop')";
-const NFO: &str = "EXISTS(SELECT 1 FROM media_files f WHERE f.media_item_id=m.id AND lower(f.relative_path) LIKE '%.nfo')";
+const NFO: &str = "(EXISTS(SELECT 1 FROM media_files f WHERE f.media_item_id=m.id AND lower(f.relative_path) LIKE '%.nfo') OR EXISTS(SELECT 1 FROM automatic_nfo_exports n WHERE n.media_item_id=m.id AND n.state IN ('written','preserved')))";
 // Identity collision is a review signal, never an instruction to merge works.
 const DUPLICATE: &str = "EXISTS(SELECT 1 FROM external_ids x JOIN external_ids y ON x.provider_id=y.provider_id AND x.namespace=y.namespace AND x.external_id=y.external_id WHERE x.media_item_id=m.id AND y.media_item_id<>m.id)";
 
@@ -539,7 +539,7 @@ fn strip_extended_windows_prefix(path: String) -> String {
 fn select_media() -> String {
     let metadata = crate::library_ready::metadata_complete_predicate("m");
     let refresh = refresh_status_predicate();
-    format!("SELECT m.*,{POSTER} has_poster,{BACKDROP} has_backdrop,{NFO} has_nfo,{metadata} has_metadata,{DUPLICATE} duplicate,{refresh} refresh_status FROM media_items m WHERE 1=1")
+    format!("SELECT m.*,{POSTER} has_poster,{BACKDROP} has_backdrop,{NFO} has_nfo,{metadata} has_metadata,{DUPLICATE} duplicate,{refresh} refresh_status,EXISTS(SELECT 1 FROM automatic_nfo_exports n WHERE n.media_item_id=m.id AND n.state='failed') nfo_output_failed FROM media_items m WHERE 1=1")
 }
 
 fn refresh_status_predicate() -> String {
@@ -718,6 +718,9 @@ fn health(row: &SqliteRow) -> Result<Vec<String>> {
         if !get::<bool>(row, key)? {
             out.push(name.into());
         }
+    }
+    if get::<bool>(row, "nfo_output_failed")? {
+        out.push("nfo_output_failed".into());
     }
     if get::<bool>(row, "duplicate")? {
         out.push("duplicate".into());

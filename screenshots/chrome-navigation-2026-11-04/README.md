@@ -2,7 +2,7 @@
 
 2026-11-04 在真实 Chromium 中运行桌面前端，以明确标记的测试 IPC 和窗口 API 替身验收。所有海报均为 `QA FIXTURE / TEST ARTWORK`，不是用户媒体、真实影片或在线刮削结果。
 
-执行：先运行 `pnpm dev:web -- --port 1432`，再从仓库根运行 `python scripts/desktop-chrome-notification-qa.py`。本轮结果：通过；源码及截图 SHA-256、SDK 命令记录见 [report.json](report.json)。
+执行：先运行 `pnpm --filter @mediaatlas/desktop dev --port 1432`，再从仓库根运行 `python scripts/desktop-chrome-notification-qa.py`。本轮结果：通过；源码及截图 SHA-256、SDK 命令记录见 [report.json](report.json)。
 
 | 场景 | 真实运行截图 |
 | --- | --- |

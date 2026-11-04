@@ -72,6 +72,10 @@ struct OutputPlan {
     source_file_id: Uuid,
     source_relative: String,
     source_fingerprint: SourceFingerprint,
+    #[serde(default)]
+    series_target: bool,
+    #[serde(default)]
+    nfo_only: bool,
     relative_parent: PathBuf,
     payloads: Vec<Vec<u8>>,
 }
@@ -215,10 +219,46 @@ async fn check_windows_lease(id: Uuid) -> Result<Arc<WindowsSourceLease>, Reposi
     }
     Ok(lease)
 }
+fn existing_nfo_name(
+    dir: &Dir,
+    desired: &str,
+    generic: bool,
+) -> Result<Option<String>, RepositoryError> {
+    let mut matching = None;
+    let mut movie = None;
+    for (index, entry) in dir.entries().map_err(io_error)?.enumerate() {
+        if index >= 10000 {
+            return Err(RepositoryError::InvalidInput);
+        }
+        let name = entry.map_err(io_error)?.file_name();
+        let Some(name) = name.to_str() else {
+            continue;
+        };
+        if generic && name.eq_ignore_ascii_case("movie.nfo") {
+            if movie.replace(name.to_owned()).is_some() {
+                return Err(RepositoryError::Conflict);
+            }
+        } else if name.eq_ignore_ascii_case(desired) && matching.replace(name.to_owned()).is_some()
+        {
+            return Err(RepositoryError::Conflict);
+        }
+    }
+    Ok(movie.or(matching))
+}
+fn is_video_source(relative: &str) -> bool {
+    Path::new(relative)
+        .extension()
+        .and_then(|value| value.to_str())
+        .is_some_and(|value| {
+            crate::library_ready::VIDEO_EXTENSIONS.contains(&value.to_ascii_lowercase().as_str())
+        })
+}
 fn verify_source(plan: &OutputPlan) -> Result<(), RepositoryError> {
     let dir = descend(
         open_absolute_dir(&plan.root, false).map_err(io_error)?,
-        &plan.relative_parent,
+        checked_relative(&plan.source_relative)?
+            .parent()
+            .unwrap_or_else(|| Path::new("")),
         false,
     )
     .map_err(io_error)?;
@@ -320,6 +360,14 @@ impl MediaOutputService {
             .bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?.rows_affected())
     }
     pub async fn preview(&self, media_id: Uuid) -> Result<OutputPreview, RepositoryError> {
+        self.preview_inner(media_id, false, None).await
+    }
+    async fn preview_inner(
+        &self,
+        media_id: Uuid,
+        nfo_only: bool,
+        source_id: Option<Uuid>,
+    ) -> Result<OutputPreview, RepositoryError> {
         let _gate = self.gate.lock().await;
         self.ensure_access()?;
         let item = self
@@ -327,8 +375,13 @@ impl MediaOutputService {
             .get_media(media_id)
             .await?
             .ok_or(RepositoryError::NotFound)?;
-        let files = self.repo.list_files(media_id).await?;
-        let source = files.first().ok_or(RepositoryError::NotFound)?;
+        let files = self.output_files(media_id).await?;
+        let source = files
+            .iter()
+            .find(|file| {
+                source_id.is_none_or(|id| file.id == id) && is_video_source(&file.relative_path)
+            })
+            .ok_or(RepositoryError::NotFound)?;
         let root = self
             .repo
             .get_root(source.root_id)
@@ -339,29 +392,88 @@ impl MediaOutputService {
             return Err(RepositoryError::InvalidInput);
         }
         let relative = checked_relative(&source.relative_path)?;
-        let parent = relative
+        let source_parent = relative
             .parent()
             .unwrap_or_else(|| Path::new(""))
             .to_path_buf();
+        let parent = if matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason) {
+            let mut parent = source_parent.clone();
+            for file in files.iter().filter(|file| {
+                file.root_id == source.root_id && is_video_source(&file.relative_path)
+            }) {
+                let path = checked_relative(&file.relative_path)?;
+                while !path
+                    .parent()
+                    .unwrap_or_else(|| Path::new(""))
+                    .starts_with(&parent)
+                {
+                    parent.pop();
+                }
+            }
+            // The only safe automatic series target is its actual common local
+            // directory, never a provider-derived path or title.
+            if item.kind == MediaKind::TvSeries
+                && parent
+                    .file_name()
+                    .and_then(|v| v.to_str())
+                    .is_some_and(|name| {
+                        let name = name.to_ascii_lowercase().replace([' ', '.', '_', '-'], "");
+                        name.strip_prefix("season")
+                            .or_else(|| name.strip_prefix('s'))
+                            .is_some_and(|number| {
+                                !number.is_empty() && number.chars().all(|c| c.is_ascii_digit())
+                            })
+                    })
+            {
+                parent.pop();
+            }
+            parent
+        } else {
+            source_parent.clone()
+        };
+        if nfo_only && matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason) {
+            let mut connection = self.repo.pool().acquire().await?;
+            self.ensure_series_directory(media_id, root.id, &parent, &mut connection)
+                .await?;
+        }
+        let source_dir = open_absolute_dir(Path::new(&root.path), false)
+            .and_then(|d| descend(d, &source_parent, false))
+            .map_err(io_error)?;
         let dir = open_absolute_dir(Path::new(&root.path), false)
             .and_then(|d| descend(d, &parent, false))
             .map_err(io_error)?;
         let source_name = relative.file_name().ok_or(RepositoryError::InvalidInput)?;
-        let meta = dir.symlink_metadata(source_name).map_err(io_error)?;
+        let meta = source_dir.symlink_metadata(source_name).map_err(io_error)?;
         if !meta.is_file() || meta.file_type().is_symlink() {
             return Err(RepositoryError::InvalidInput);
         }
         #[cfg(windows)]
         let windows_lease =
             windows_source_lease(Path::new(&root.path), &relative, self.adult_access.clone())?;
-        let source_fingerprint = source_fingerprint(&dir, source_name)?;
+        let source_fingerprint = source_fingerprint(&source_dir, source_name)?;
         let metadata = self.repo.list_metadata_values(media_id).await?;
         let ids = self.repo.list_external_ids(media_id).await?;
         let name = relative
             .file_stem()
             .and_then(|v| v.to_str())
             .ok_or(RepositoryError::InvalidInput)?;
-        let nfo_name = format!("{name}.nfo");
+        let desired_nfo = if matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason) {
+            "tvshow.nfo".to_owned()
+        } else {
+            format!("{name}.nfo")
+        };
+        let nfo_name = if nfo_only {
+            // Producer and filename casing do not authorize duplicate sidecars.
+            // A generic movie.nfo represents all versions in this directory.
+            existing_nfo_name(
+                &dir,
+                &desired_nfo,
+                !matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason),
+            )?
+            .unwrap_or(desired_nfo)
+        } else {
+            desired_nfo
+        };
         let old = read_optional(&dir, &nfo_name, MAX_NFO)?;
         let old_text = old
             .as_ref()
@@ -376,6 +488,18 @@ impl MediaOutputService {
         // through a lossy serializer and do not silently add provider fields.
         let nfo = if let Some(old) = &old_text {
             validate_nfo(old)?;
+            if nfo_only {
+                let document =
+                    roxmltree::Document::parse(old).map_err(|_| RepositoryError::InvalidInput)?;
+                if !document.root_element().children().any(|node| {
+                    node.has_tag_name("title")
+                        && node.text().is_some_and(|title| !title.trim().is_empty())
+                }) {
+                    // Preserve unusable external XML, but do not claim that an
+                    // empty sidecar is a successful automatic metadata export.
+                    return Err(RepositoryError::InvalidInput);
+                }
+            }
             old.clone()
         } else {
             render_nfo(&item, &metadata, &ids)?
@@ -390,7 +514,7 @@ impl MediaOutputService {
             protected: old.is_some(),
         }];
         let mut payloads = vec![nfo.into_bytes()];
-        if let Some(existing) = &old {
+        if let Some(existing) = old.as_ref().filter(|_| !nfo_only) {
             let existing =
                 std::str::from_utf8(existing).map_err(|_| RepositoryError::InvalidInput)?;
             let generated = render_nfo(&item, &metadata, &ids)?;
@@ -440,7 +564,13 @@ impl MediaOutputService {
         // Selected artwork is persisted by the merge workflow. Only validated
         // content-addressed image bytes inside this service's cache are eligible.
         let mut artwork_counts = BTreeMap::<String, usize>::new();
-        for art in self.repo.list_artworks(media_id).await? {
+        for art in self
+            .repo
+            .list_artworks(media_id)
+            .await?
+            .into_iter()
+            .filter(|_| !nfo_only)
+        {
             if !self.artwork_allowed(art.kind) {
                 continue;
             }
@@ -524,6 +654,9 @@ impl MediaOutputService {
             source_file_id: source.id,
             source_relative: source.relative_path.clone(),
             source_fingerprint,
+            nfo_only,
+            series_target: nfo_only
+                && matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason),
             relative_parent: parent,
             payloads,
         };
@@ -565,6 +698,101 @@ impl MediaOutputService {
         }
         Ok(preview)
     }
+    /// User-authorized default export: create only absent NFO sidecars. Never
+    /// outputs artwork or alternate revisions, replaces an existing file, or
+    /// converts a failed file export into a failed metadata merge.
+    pub(crate) async fn automatic_nfo(
+        &self,
+        media_id: Uuid,
+        cancel: Option<&CancellationToken>,
+        context: Option<&crate::scraper::automatic::AutomaticContext>,
+    ) -> Result<(), RepositoryError> {
+        self.ensure_access()?;
+        let result = self.automatic_nfo_inner(media_id, cancel, context).await;
+        self.ensure_access()?;
+        if cancel.is_some_and(CancellationToken::is_cancelled) {
+            return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+        }
+        let (state, code) = match &result {
+            Ok(written) => (if *written > 0 { "written" } else { "preserved" }, None),
+            Err(RepositoryError::Provider(ProviderFailure::Cancelled)) => {
+                return result.map(|_| ())
+            }
+            Err(_) => ("failed", Some("nfo_output_failed")),
+        };
+        sqlx::query("INSERT INTO automatic_nfo_exports(media_item_id,state,error_code,updated_at) VALUES (?,?,?,?) ON CONFLICT(media_item_id) DO UPDATE SET state=excluded.state,error_code=excluded.error_code,updated_at=excluded.updated_at")
+            .bind(media_id.to_string()).bind(state).bind(code).bind(Utc::now().timestamp_millis())
+            .execute(self.repo.pool()).await?;
+        // File failures are represented separately and retried by the next
+        // refresh or the existing explicit output workflow.
+        Ok(())
+    }
+    async fn automatic_nfo_inner(
+        &self,
+        media_id: Uuid,
+        cancel: Option<&CancellationToken>,
+        context: Option<&crate::scraper::automatic::AutomaticContext>,
+    ) -> Result<usize, RepositoryError> {
+        self.ensure_channel_media(media_id).await?;
+        let files = self.output_files(media_id).await?;
+        let sources = files
+            .into_iter()
+            .filter(|file| {
+                Path::new(&file.relative_path)
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .is_some_and(|ext| {
+                        crate::library_ready::VIDEO_EXTENSIONS
+                            .contains(&ext.to_ascii_lowercase().as_str())
+                    })
+            })
+            .collect::<Vec<_>>();
+        if sources.is_empty() {
+            return Err(RepositoryError::NotFound);
+        }
+        let mut written = 0;
+        let mut failure = None;
+        for source in sources {
+            match self
+                .automatic_nfo_source(media_id, source, cancel, context)
+                .await
+            {
+                Ok(count) => written += count,
+                Err(error @ RepositoryError::Provider(ProviderFailure::Cancelled)) => {
+                    return Err(error)
+                }
+                Err(error) => failure = Some(error),
+            }
+        }
+        failure.map_or(Ok(written), Err)
+    }
+    async fn automatic_nfo_source(
+        &self,
+        media_id: Uuid,
+        source: mediaatlas_domain::MediaFile,
+        cancel: Option<&CancellationToken>,
+        context: Option<&crate::scraper::automatic::AutomaticContext>,
+    ) -> Result<usize, RepositoryError> {
+        if cancel.is_some_and(CancellationToken::is_cancelled) {
+            return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+        }
+        let preview = self.preview_inner(media_id, true, Some(source.id)).await?;
+        let execution = self
+            .execute_inner(preview.preview_id, cancel, context)
+            .await;
+        #[cfg(windows)]
+        if execution.is_ok() {
+            windows_leases().lock().await.remove(&preview.preview_id);
+        }
+        if execution.is_err() {
+            let _ = self.discard(preview.preview_id).await;
+        }
+        let result = execution?;
+        // Sidecar output has its own index. Do not mutate the source-file
+        // inventory here: queue confirmations bind its exact immutable scope,
+        // and NFO must not appear as a newly selectable native video target.
+        Ok(result.written)
+    }
     /// Release platform source leases when a user dismisses an output preview.
     /// The persisted immutable plan remains as history and cannot regain a lease.
     pub async fn discard(&self, preview_id: Uuid) -> Result<(), RepositoryError> {
@@ -603,6 +831,75 @@ impl MediaOutputService {
             ),
         }
     }
+    async fn ensure_series_directory(
+        &self,
+        media_id: Uuid,
+        root_id: Uuid,
+        parent: &Path,
+        connection: &mut sqlx::SqliteConnection,
+    ) -> Result<(), RepositoryError> {
+        let typed = crate::library_ready::typed_descendant("parent", "m");
+        let owned: Vec<String> = sqlx::query_scalar(&format!("SELECT f.id FROM media_files f WHERE f.media_item_id=? OR EXISTS(SELECT 1 FROM media_items m JOIN media_items parent ON parent.id=? WHERE m.id=f.media_item_id AND ({typed}))"))
+            .bind(media_id.to_string()).bind(media_id.to_string()).fetch_all(&mut *connection).await?;
+        let owned = owned.into_iter().collect::<std::collections::HashSet<_>>();
+        let prefix = parent
+            .to_string_lossy()
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let pattern = if prefix.is_empty() {
+            "%".to_owned()
+        } else {
+            format!("{prefix}/%")
+        };
+        let rows = sqlx::query("SELECT id,relative_path FROM media_files WHERE root_id=? AND relative_path LIKE ? ESCAPE '\\' LIMIT 10001")
+            .bind(root_id.to_string()).bind(pattern).fetch_all(&mut *connection).await?;
+        if rows.len() > 10000 {
+            return Err(RepositoryError::InvalidInput);
+        }
+        for row in rows {
+            if is_video_source(&row.try_get::<String, _>("relative_path")?)
+                && !owned.contains(&row.try_get::<String, _>("id")?)
+            {
+                // Flat mixed-show roots cannot own a single tvshow.nfo. Do not
+                // let the first series silently identify all the other shows.
+                return Err(RepositoryError::Conflict);
+            }
+        }
+        Ok(())
+    }
+    async fn output_files(
+        &self,
+        media_id: Uuid,
+    ) -> Result<Vec<mediaatlas_domain::MediaFile>, RepositoryError> {
+        let item = self
+            .repo
+            .get_media(media_id)
+            .await?
+            .ok_or(RepositoryError::NotFound)?;
+        let mut files = self.repo.list_files(media_id).await?;
+        if matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason)
+            && self.channel == OutputChannel::Ordinary
+        {
+            let typed = crate::library_ready::typed_descendant("parent", "m");
+            let ancestor = crate::library_ready::ancestor_isolation("m");
+            let children: Vec<String> = sqlx::query_scalar(&format!("SELECT m.id FROM media_items m JOIN media_items parent ON parent.id=? WHERE ({typed}) AND m.adult_isolated=0 AND m.kind<>'adult_video' AND ({ancestor})"))
+                .bind(media_id.to_string()).fetch_all(self.repo.pool()).await?;
+            for child in children {
+                let id = Uuid::parse_str(&child).map_err(|_| RepositoryError::CorruptData)?;
+                files.extend(self.repo.list_files(id).await?);
+            }
+        }
+        files.sort_by(|left, right| {
+            (&left.part, &left.relative_path, &left.id).cmp(&(
+                &right.part,
+                &right.relative_path,
+                &right.id,
+            ))
+        });
+        files.dedup_by_key(|file| file.id);
+        Ok(files)
+    }
     async fn ensure_channel_media(&self, media_id: Uuid) -> Result<(), RepositoryError> {
         self.ensure_access()?;
         let isolated: bool =
@@ -632,7 +929,19 @@ impl MediaOutputService {
         if !valid {
             return Err(RepositoryError::InvalidInput);
         }
-        for file in self.repo.list_files(media_id).await? {
+        let ancestor = crate::library_ready::ancestor_isolation("m");
+        if self.channel == OutputChannel::Ordinary {
+            let ordinary: bool = sqlx::query_scalar(&format!(
+                "SELECT ({ancestor}) FROM media_items m WHERE m.id=?"
+            ))
+            .bind(media_id.to_string())
+            .fetch_one(self.repo.pool())
+            .await?;
+            if !ordinary {
+                return Err(RepositoryError::InvalidInput);
+            }
+        }
+        for file in self.output_files(media_id).await? {
             let root = self
                 .repo
                 .get_root(file.root_id)
@@ -655,7 +964,7 @@ impl MediaOutputService {
         preview_id: Uuid,
         cancel: Option<&CancellationToken>,
     ) -> Result<OutputResult, RepositoryError> {
-        let result = self.execute_inner(preview_id, cancel).await;
+        let result = self.execute_inner(preview_id, cancel, None).await;
         #[cfg(windows)]
         if result.is_ok() {
             // A rejected channel/root check or an external sidecar collision
@@ -663,7 +972,13 @@ impl MediaOutputService {
             // Discard, privacy lock and the bounded TTL release unused leases.
             windows_leases().lock().await.remove(&preview_id);
         }
-        if result.is_ok() {
+        if let Ok(output) = &result {
+            self.ensure_access()?;
+            // Explicit recovery/export also resolves a previous automatic file
+            // failure, without waiting for a scan or altering its source proof.
+            sqlx::query("INSERT INTO automatic_nfo_exports(media_item_id,state,error_code,updated_at) SELECT media_item_id,?,NULL,? FROM output_previews WHERE id=? ON CONFLICT(media_item_id) DO UPDATE SET state=excluded.state,error_code=NULL,updated_at=excluded.updated_at")
+                .bind(if output.written > 0 { "written" } else { "preserved" })
+                .bind(Utc::now().timestamp_millis()).bind(preview_id.to_string()).execute(self.repo.pool()).await?;
             self.ensure_access()?;
         }
         result
@@ -672,6 +987,7 @@ impl MediaOutputService {
         &self,
         preview_id: Uuid,
         cancel: Option<&CancellationToken>,
+        context: Option<&crate::scraper::automatic::AutomaticContext>,
     ) -> Result<OutputResult, RepositoryError> {
         let _gate = self.gate.lock().await;
         let row = sqlx::query("SELECT o.state,p.snapshot FROM file_operations o JOIN output_previews p ON p.id=o.id WHERE o.id=?").bind(preview_id.to_string()).fetch_optional(self.repo.pool()).await?.ok_or(RepositoryError::NotFound)?;
@@ -708,8 +1024,7 @@ impl MediaOutputService {
             return Err(RepositoryError::Conflict);
         }
         if !self
-            .repo
-            .list_files(plan.preview.media_item_id)
+            .output_files(plan.preview.media_item_id)
             .await?
             .iter()
             .any(|file| {
@@ -749,7 +1064,56 @@ impl MediaOutputService {
         if acquired.rows_affected() != 1 {
             return Err(RepositoryError::Conflict);
         }
-        let result = execute_plan(&plan, self.adult_access.as_ref(), cancel);
+        let result = async {
+            // Keep the writer reservation until synchronous publication ends:
+            // root edits, reclassification and task cancellation cannot slip
+            // between the automatic workflow guard and atomic create-new.
+            let mut tx = self.repo.pool().begin().await?;
+            sqlx::query("UPDATE library_roots SET updated_at=updated_at WHERE id=?")
+                .bind(plan.root_id.to_string())
+                .execute(&mut *tx)
+                .await?;
+            let current = sqlx::query("SELECT path,kind,enabled FROM library_roots WHERE id=?")
+                .bind(plan.root_id.to_string())
+                .fetch_optional(&mut *tx)
+                .await?
+                .ok_or(RepositoryError::NotFound)?;
+            let kind = current.try_get::<Option<String>, _>("kind")?;
+            if !current.try_get::<bool, _>("enabled")?
+                || Path::new(&current.try_get::<String, _>("path")?) != plan.root
+                || (kind.as_deref() == Some("adult_video"))
+                    != (self.channel == OutputChannel::Adult)
+            {
+                return Err(RepositoryError::Conflict);
+            }
+            let ancestor = crate::library_ready::ancestor_isolation("m");
+            let lane = if self.channel == OutputChannel::Adult {
+                "m.adult_isolated=1 AND m.kind='adult_video'".to_owned()
+            } else {
+                format!("m.adult_isolated=0 AND m.kind IN ('movie','tv_series','tv_season','tv_episode','anime') AND ({ancestor})")
+            };
+            let safe: bool = sqlx::query_scalar(&format!("SELECT EXISTS(SELECT 1 FROM media_items m WHERE m.id=? AND ({lane}))"))
+                .bind(plan.preview.media_item_id.to_string()).fetch_one(&mut *tx).await?;
+            if !safe { return Err(RepositoryError::InvalidInput); }
+            if let Some(context) = context {
+                context
+                    .validate_tx(&mut tx, plan.preview.media_item_id)
+                    .await?;
+            }
+            if plan.series_target {
+                self.ensure_series_directory(
+                    plan.preview.media_item_id,
+                    plan.root_id,
+                    &plan.relative_parent,
+                    &mut tx,
+                )
+                .await?;
+            }
+            let result = execute_plan(&plan, self.adult_access.as_ref(), cancel);
+            tx.commit().await?;
+            result
+        }
+        .await;
         let state = if result.is_ok() {
             "succeeded"
         } else {
@@ -846,6 +1210,14 @@ fn execute_plan(
             }
             if cancel.is_some_and(CancellationToken::is_cancelled) {
                 return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+            }
+            if plan.nfo_only {
+                let desired = name.to_str().ok_or(RepositoryError::CorruptData)?;
+                if existing_nfo_name(&dir, desired, !plan.series_target)?
+                    .is_some_and(|existing| existing != desired)
+                {
+                    return Err(RepositoryError::Conflict);
+                }
             }
             Ok(())
         }) {
@@ -1821,6 +2193,343 @@ mod tests {
             RepositoryError::Provider(ProviderFailure::Cancelled)
         );
         assert!(!temp.path().join("media/Example.nfo").exists());
+    }
+    #[tokio::test]
+    async fn automatic_nfo_creates_only_nfo_records_it_and_preserves_existing_bytes() {
+        let (temp, repo, service, id) = library().await;
+        repo.save_artwork(&mediaatlas_domain::Artwork {
+            id: Uuid::new_v4(),
+            media_item_id: id,
+            kind: ArtworkKind::Poster,
+            cache_path: Some("untrusted/missing.jpg".into()),
+            source_url: None,
+            provider_id: None,
+            width: None,
+            height: None,
+            content_hash: Some("not-read-for-nfo-export".into()),
+            created_at: Utc::now(),
+        })
+        .await
+        .unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        let path = temp.path().join("media/Example.nfo");
+        let first = std::fs::read(&path).unwrap();
+        assert!(String::from_utf8_lossy(&first).contains("A &amp; B &lt;fixture&gt;"));
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.mkv")).unwrap(),
+            b"untouched video bytes"
+        );
+        assert_eq!(
+            std::fs::read_dir(temp.path().join("media"))
+                .unwrap()
+                .count(),
+            2
+        );
+        assert_eq!(
+            repo.list_files(id).await.unwrap().len(),
+            1,
+            "sidecar output does not alter source-file proof"
+        );
+        let mut item = repo.get_media(id).await.unwrap().unwrap();
+        item.title = "New database title".into();
+        repo.save_media(&item).await.unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), first);
+        assert_eq!(
+            std::fs::read_dir(temp.path().join("media"))
+                .unwrap()
+                .count(),
+            2
+        );
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "preserved");
+    }
+    #[tokio::test]
+    async fn automatic_nfo_failure_is_separate_from_metadata_and_cancel_never_writes() {
+        let (temp, repo, service, id) = library().await;
+        std::fs::write(
+            temp.path().join("media/Example.nfo"),
+            b"invalid external XML",
+        )
+        .unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "failed");
+        assert_eq!(
+            repo.get_media(id).await.unwrap().unwrap().title,
+            "A & B <fixture>"
+        );
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.nfo")).unwrap(),
+            b"invalid external XML"
+        );
+        std::fs::remove_file(temp.path().join("media/Example.nfo")).unwrap();
+        let recovery = service.preview(id).await.unwrap();
+        service.execute(recovery.preview_id).await.unwrap();
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            state, "written",
+            "explicit output clears stale automatic failure"
+        );
+        std::fs::remove_file(temp.path().join("media/Example.nfo")).unwrap();
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        assert_eq!(
+            service
+                .automatic_nfo(id, Some(&cancel), None)
+                .await
+                .unwrap_err(),
+            RepositoryError::Provider(ProviderFailure::Cancelled)
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+    }
+    #[tokio::test]
+    async fn automatic_nfo_does_not_let_a_stale_version_block_an_available_version() {
+        let (temp, repo, service, id) = library().await;
+        let original = repo.list_files(id).await.unwrap().remove(0);
+        repo.save_file(&mediaatlas_domain::MediaFile {
+            id: Uuid::new_v4(),
+            relative_path: "A-missing.mkv".into(),
+            ..original
+        })
+        .await
+        .unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert!(temp.path().join("media/Example.nfo").is_file());
+        assert!(!temp.path().join("media/A-missing.nfo").exists());
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "failed");
+    }
+    #[tokio::test]
+    async fn automatic_nfo_preserves_but_reports_empty_external_xml() {
+        let (temp, repo, service, id) = library().await;
+        std::fs::write(temp.path().join("media/Example.nfo"), b"<movie/>").unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert_eq!(
+            std::fs::read(temp.path().join("media/Example.nfo")).unwrap(),
+            b"<movie/>"
+        );
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "failed");
+    }
+    #[tokio::test]
+    async fn automatic_adult_nfo_requires_current_grant() {
+        let (temp, _, service, access, id) = adult_library().await;
+        access.revoke();
+        assert_eq!(
+            service.automatic_nfo(id, None, None).await.unwrap_err(),
+            RepositoryError::Provider(ProviderFailure::Cancelled)
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+    }
+    #[tokio::test]
+    async fn automatic_nfo_rechecks_full_scan_context_at_file_publication() {
+        let (temp, repo, service, id) = library().await;
+        let source = repo.list_files(id).await.unwrap().remove(0);
+        let root = repo.get_root(source.root_id).await.unwrap().unwrap();
+        let task_id = Uuid::new_v4();
+        let now = Utc::now().timestamp_millis();
+        sqlx::query("INSERT INTO scrape_tasks(id,kind,state,input_snapshot,created_at,updated_at) VALUES(?,'scan_library','running','{}',?,?)").bind(task_id.to_string()).bind(now).bind(now).execute(repo.pool()).await.unwrap();
+        sqlx::query("INSERT INTO scan_sessions(task_id,root_id,root_snapshot_json,mode,phase) VALUES(?,?,'{}','automatic','metadata')").bind(task_id.to_string()).bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
+        let normalized: String =
+            sqlx::query_scalar("SELECT normalized_relative_path FROM media_files WHERE id=?")
+                .bind(source.id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        sqlx::query("INSERT INTO scan_candidates(id,task_id,root_id,kind,relative_path,normalized_relative_path,payload_json,status,existing_media_id) VALUES(?,?,?,'movie',?,?,'{}','imported',?)").bind(Uuid::new_v4().to_string()).bind(task_id.to_string()).bind(root.id.to_string()).bind(&source.relative_path).bind(normalized).bind(id.to_string()).execute(repo.pool()).await.unwrap();
+        let context = crate::scraper::automatic::AutomaticContext {
+            root: root.clone(),
+            exclusions: vec![],
+            task_id,
+            cancel: CancellationToken::new(),
+            adult_access: None,
+        };
+        let preview = service
+            .preview_inner(id, true, Some(source.id))
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO root_settings(root_id,exclude_patterns_json) VALUES(?, '[\"**/*.mkv\"]') ON CONFLICT(root_id) DO UPDATE SET exclude_patterns_json=excluded.exclude_patterns_json").bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
+        assert_eq!(
+            service
+                .execute_inner(preview.preview_id, Some(&context.cancel), Some(&context))
+                .await
+                .unwrap_err(),
+            RepositoryError::Conflict
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+    }
+    #[tokio::test]
+    async fn automatic_series_nfo_maps_to_common_show_directory_and_keeps_episode_nfo() {
+        let (temp, repo, service, id) = library().await;
+        let mut show = repo.get_media(id).await.unwrap().unwrap();
+        show.kind = MediaKind::TvSeries;
+        repo.save_media(&show).await.unwrap();
+        let original = repo.list_files(id).await.unwrap().remove(0);
+        let season = MediaItem {
+            id: Uuid::new_v4(),
+            kind: MediaKind::TvSeason,
+            title: "Season 1".into(),
+            ..show.clone()
+        };
+        let episode = MediaItem {
+            id: Uuid::new_v4(),
+            kind: MediaKind::TvEpisode,
+            title: "Episode 1".into(),
+            ..show.clone()
+        };
+        repo.save_media(&season).await.unwrap();
+        repo.save_media(&episode).await.unwrap();
+        sqlx::query("INSERT INTO media_relations(parent_id,child_id,relation_type) VALUES(?,?,'season'),(?,?,'episode')").bind(id.to_string()).bind(season.id.to_string()).bind(season.id.to_string()).bind(episode.id.to_string()).execute(repo.pool()).await.unwrap();
+        std::fs::create_dir_all(temp.path().join("media/Show/Season 01")).unwrap();
+        std::fs::rename(
+            temp.path().join("media/Example.mkv"),
+            temp.path().join("media/Show/Season 01/Show.S01E01.mkv"),
+        )
+        .unwrap();
+        sqlx::query("DELETE FROM media_files WHERE id=?")
+            .bind(original.id.to_string())
+            .execute(repo.pool())
+            .await
+            .unwrap();
+        repo.save_file(&mediaatlas_domain::MediaFile {
+            media_item_id: episode.id,
+            relative_path: "Show/Season 01/Show.S01E01.mkv".into(),
+            ..original
+        })
+        .await
+        .unwrap();
+        let episode_nfo = "<episodedetails><title>External episode title</title></episodedetails>";
+        std::fs::write(
+            temp.path().join("media/Show/Season 01/Show.S01E01.nfo"),
+            episode_nfo,
+        )
+        .unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        let output = std::fs::read_to_string(temp.path().join("media/Show/tvshow.nfo")).unwrap();
+        assert!(output.contains("<tvshow>"));
+        assert!(output.contains("A &amp; B"));
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("media/Show/Season 01/Show.S01E01.nfo"))
+                .unwrap(),
+            episode_nfo
+        );
+        assert!(!temp.path().join("media/Show/Season 01/tvshow.nfo").exists());
+    }
+    #[tokio::test]
+    async fn automatic_series_nfo_rejects_mixed_show_directory() {
+        let (temp, repo, service, id) = library().await;
+        let mut show = repo.get_media(id).await.unwrap().unwrap();
+        show.kind = MediaKind::TvSeries;
+        repo.save_media(&show).await.unwrap();
+        let other = MediaItem {
+            id: Uuid::new_v4(),
+            kind: MediaKind::TvEpisode,
+            title: "Other show".into(),
+            ..show.clone()
+        };
+        repo.save_media(&other).await.unwrap();
+        let source = repo.list_files(id).await.unwrap().remove(0);
+        std::fs::write(
+            temp.path().join("media/OtherShow.S01E01.mkv"),
+            b"other series",
+        )
+        .unwrap();
+        repo.save_file(&mediaatlas_domain::MediaFile {
+            id: Uuid::new_v4(),
+            media_item_id: other.id,
+            relative_path: "OtherShow.S01E01.mkv".into(),
+            ..source
+        })
+        .await
+        .unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert!(!temp.path().join("media/tvshow.nfo").exists());
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "failed");
+    }
+    #[tokio::test]
+    async fn automatic_nfo_preserves_a_late_external_sidecar_with_different_casing() {
+        let (temp, _, service, id) = library().await;
+        let preview = service.preview_inner(id, true, None).await.unwrap();
+        let local = "<movie><title>Late external sidecar</title></movie>";
+        std::fs::write(temp.path().join("media/MOVIE.NFO"), local).unwrap();
+        assert_eq!(
+            service
+                .execute_inner(preview.preview_id, None, None)
+                .await
+                .unwrap_err(),
+            RepositoryError::Conflict
+        );
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("media/MOVIE.NFO")).unwrap(),
+            local
+        );
+    }
+    #[tokio::test]
+    async fn automatic_versions_preserve_each_target_and_generic_directory_sidecars() {
+        let (temp, repo, service, id) = library().await;
+        let original = repo.list_files(id).await.unwrap().remove(0);
+        std::fs::write(temp.path().join("media/Other.mkv"), b"second version").unwrap();
+        repo.save_file(&mediaatlas_domain::MediaFile {
+            id: Uuid::new_v4(),
+            relative_path: "Other.mkv".into(),
+            ..original
+        })
+        .await
+        .unwrap();
+        let local = "<movie><title>Other tool</title></movie>";
+        std::fs::write(temp.path().join("media/Example.NFO"), local).unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("media/Example.NFO")).unwrap(),
+            local
+        );
+        if !cfg!(windows) {
+            assert!(!temp.path().join("media/Example.nfo").exists());
+        }
+        assert!(temp.path().join("media/Other.nfo").exists());
+        std::fs::remove_file(temp.path().join("media/Example.NFO")).unwrap();
+        std::fs::remove_file(temp.path().join("media/Other.nfo")).unwrap();
+        std::fs::write(temp.path().join("media/MOVIE.NFO"), local).unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        assert!(!temp.path().join("media/Other.nfo").exists());
+        assert_eq!(
+            std::fs::read_to_string(temp.path().join("media/MOVIE.NFO")).unwrap(),
+            local
+        );
     }
     #[tokio::test]
     async fn explicit_preview_execute_records_idempotency_and_preserves_source() {

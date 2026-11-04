@@ -89,6 +89,13 @@ impl AdultScraperService {
         let established: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM local_metadata_provenance WHERE media_item_id=?) OR EXISTS(SELECT 1 FROM adult_metadata_sources WHERE media_item_id=?)")
             .bind(media_id.to_string()).bind(media_id.to_string()).fetch_one(self.repo.pool()).await?;
         if established {
+            let mut tx = self.repo.pool().begin().await?;
+            context.validate_tx(&mut tx, media_id).await?;
+            tx.commit().await?;
+            let _ = self
+                .artwork_service()
+                .automatic_nfo(media_id, Some(&context.cancel), Some(context))
+                .await;
             return Ok(AutomaticOutcome {
                 state: "skipped",
                 reason: Some("existing_metadata"),

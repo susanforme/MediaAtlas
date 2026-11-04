@@ -422,6 +422,15 @@ impl ScraperService {
         if row.try_get::<String, _>("state")? == "succeeded" {
             let mut result: MergeResult = decode(&row.try_get::<String, _>("result_json")?)?;
             result.already_applied = true;
+            let output =
+                crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone());
+            let _ = output
+                .automatic_nfo(
+                    preview.media_item_id,
+                    automatic.map(|context| &context.cancel),
+                    automatic,
+                )
+                .await;
             return Ok(result);
         }
         let media = self
@@ -578,6 +587,11 @@ impl ScraperService {
             .await?;
         sqlx::query("UPDATE scrape_tasks SET state='succeeded',updated_at=MAX(updated_at,?) WHERE id=? AND state='waiting_for_user'").bind(Utc::now().timestamp_millis()).bind(run_id.to_string()).execute(&mut *tx).await?;
         tx.commit().await?;
+        let output =
+            crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone());
+        let _ = output
+            .automatic_nfo(media.id, Some(&cancel), automatic)
+            .await;
         Ok(result)
     }
     async fn ordinary_media(
@@ -1038,7 +1052,8 @@ mod tests {
         .unwrap()
     }
     #[tokio::test]
-    async fn automatic_library_refresh_searches_and_merges_unique_match_without_sidecar_writes() {
+    async fn automatic_library_refresh_searches_unique_match_and_exports_nfo_without_media_writes()
+    {
         let s = setup().await;
         let protected = local_value(
             s.media.id,
@@ -1078,7 +1093,7 @@ mod tests {
             std::fs::read(s.dir.path().join("Example.mkv")).unwrap(),
             original
         );
-        assert!(!s.dir.path().join("Example.nfo").exists());
+        assert!(s.dir.path().join("Example.nfo").is_file());
         let searches = s.service.history().await.unwrap().len();
         let second = scans.start_automatic(root.id).await.unwrap();
         assert_eq!(
@@ -1140,6 +1155,48 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn existing_identification_recreates_deleted_nfo_and_surfaces_invalid_nfo_without_rescraping(
+    ) {
+        let s = setup().await;
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let first = scans.start_automatic(root.id).await.unwrap();
+        assert_eq!(
+            settle_automatic(&scans, first.id).await.state,
+            TaskState::Succeeded
+        );
+        let searches = s.service.history().await.unwrap().len();
+        let path = s.dir.path().join("Example.nfo");
+        assert!(path.is_file());
+        std::fs::remove_file(&path).unwrap();
+        let mut config = s.providers.config("tmdb").await.unwrap();
+        config.enabled = false;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        let second = scans.start_automatic(root.id).await.unwrap();
+        assert_eq!(
+            settle_automatic(&scans, second.id).await.state,
+            TaskState::Succeeded
+        );
+        assert!(std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("Provider title"));
+        let browse = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("cache"));
+        let detail = browse.tools_media_detail(s.media.id, false).await.unwrap();
+        assert!(!detail.health.contains(&"missing_nfo".into()));
+        assert!(!detail.health.contains(&"nfo_output_failed".into()));
+        std::fs::write(&path, b"invalid external NFO").unwrap();
+        let third = scans.start_automatic(root.id).await.unwrap();
+        settle_automatic(&scans, third.id).await;
+        let detail = browse.tools_media_detail(s.media.id, false).await.unwrap();
+        assert!(detail.health.contains(&"nfo_output_failed".into()));
+        assert!(!detail.health.contains(&"incomplete_metadata".into()));
+        assert_eq!(std::fs::read(&path).unwrap(), b"invalid external NFO");
+        assert_eq!(s.service.history().await.unwrap().len(), searches);
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+    #[tokio::test]
     async fn automatic_refresh_without_enabled_source_remains_unconfigured_until_real_retry() {
         let s = setup().await;
         let mut config = s.providers.config("tmdb").await.unwrap();
@@ -1176,7 +1233,7 @@ mod tests {
         assert_eq!(completed.matched_count, 1);
         assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
         assert_eq!(s.repo.list_files(s.media.id).await.unwrap().len(), 1);
-        assert!(!s.dir.path().join("Example.nfo").exists());
+        assert!(s.dir.path().join("Example.nfo").is_file());
         s.server.abort();
         s.repo.pool().close().await;
     }
@@ -1242,12 +1299,40 @@ mod tests {
         );
         let finished = reopened.update(update).await.unwrap();
         assert_eq!(finished.items[0].state, ReviewState::Confirmed);
+        let searches = s.service.history().await.unwrap().len();
+        let merges: i64 =
+            sqlx::query_scalar("SELECT count(*) FROM video_merge_previews WHERE state='succeeded'")
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let refresh = scans.start_automatic(root.id).await.unwrap();
+        settle_automatic(&scans, refresh.id).await;
+        let after_refresh = reopened.get(queue.id).await.unwrap();
+        assert_eq!(after_refresh.items[0].state, ReviewState::Confirmed);
+        assert!(
+            after_refresh.items[0].needs_recheck,
+            "a real scan added local NFO evidence; it does not erase the proven merge"
+        );
+        assert_eq!(s.service.history().await.unwrap().len(), searches);
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT count(*) FROM video_merge_previews WHERE state='succeeded'"
+            )
+            .fetch_one(s.repo.pool())
+            .await
+            .unwrap(),
+            merges,
+            "queue recovery never replays a confirmed merge"
+        );
         assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
         assert_eq!(
             std::fs::read(s.dir.path().join("Example.mkv")).unwrap(),
             b"synthetic source media must stay intact"
         );
-        assert!(!s.dir.path().join("Example.nfo").exists());
+        assert!(s.dir.path().join("Example.nfo").is_file());
         s.server.abort();
         s.repo.pool().close().await;
     }
@@ -1774,7 +1859,7 @@ mod tests {
             s.dir.path().join("cache"),
         );
         let output_preview = output.preview(s.media.id).await.unwrap();
-        assert!(!s.dir.path().join("Example.nfo").exists());
+        assert!(s.dir.path().join("Example.nfo").is_file());
         output.execute(output_preview.preview_id).await.unwrap();
         assert!(std::fs::read_to_string(s.dir.path().join("Example.nfo"))
             .unwrap()
@@ -2072,7 +2157,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn automatic_refresh_retries_failed_artwork_without_replacing_saved_metadata() {
+    async fn automatic_refresh_uses_generated_local_nfo_without_repeating_remote_scraping() {
         let s = setup().await;
         let (manual_run, image_server, _) = gallery_fixture(&s).await;
         let gallery = s.service.detail(manual_run, 0).await.unwrap();
@@ -2113,17 +2198,22 @@ mod tests {
         );
         assert!(s.repo.list_artworks(s.media.id).await.unwrap().is_empty());
         let before = s.repo.get_media(s.media.id).await.unwrap().unwrap().title;
+        let searches = s.service.history().await.unwrap().len();
         let second = scans.start_automatic(root.id).await.unwrap();
-        inject_next_gallery(&s, 2, &gallery).await;
         let repaired = settle_automatic(&scans, second.id).await;
         assert_eq!(repaired.state, TaskState::Succeeded);
         assert_eq!(repaired.metadata_failed_count, 0);
-        assert_eq!(s.repo.list_artworks(s.media.id).await.unwrap().len(), 2);
+        assert!(s.repo.list_artworks(s.media.id).await.unwrap().is_empty());
+        assert_eq!(
+            s.service.history().await.unwrap().len(),
+            searches,
+            "valid local NFO bypasses provider re-scraping"
+        );
         assert_eq!(
             s.repo.get_media(s.media.id).await.unwrap().unwrap().title,
             before
         );
-        assert!(!s.dir.path().join("Example.nfo").exists());
+        assert!(s.dir.path().join("Example.nfo").is_file());
         image_server.abort();
         s.server.abort();
         s.repo.pool().close().await;

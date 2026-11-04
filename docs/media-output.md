@@ -1,6 +1,24 @@
-# Shared media output — Phase 4
+# Shared media output
 
-`MediaOutputService` provides persistent `preview → explicit execute → result` for NFO and selected poster sidecars. Phase 4 supports `preserve` only. It never moves, modifies or deletes source media. Provider metadata confirmation and filesystem execution are separate product actions. Output payloads and expected before-image hashes are immutable SQLite snapshots associated with `file_operations`.
+## 当前 NFO 流程（2026-11-04）
+
+首次扫描优先读取任何来源的有效本地 NFO，并把资料及外部标识写入数据库索引；已有可用 NFO 的条目不重复调用 Provider。缺失 NFO 时才进入自动刮削，可靠匹配或手动确认后自动生成缺失 NFO。已确认资料的库内条目在更新时补生成。既有 NFO 默认保留，解析失败不静默覆盖；源媒体仍只读，NFO 失败与资料识别结果分开。
+
+自动 NFO 复用受限输出服务，只允许生成缺失 NFO，不写图片、替代版本或音频标签；原子发布、路径限制、文件身份和成人授权校验仍适用。其余手动图片/旁车输出保留预览和明确确认。下面各阶段记录描述这些底层保护机制；其中“仅显式 execute”不再表示自动 NFO 需要第二次用户点击。
+
+自动输出结果单独记录在 `automatic_nfo_exports`，用于即时显示 NFO 成功/失败，不在确认过程中改动源文件清单或放宽核对凭据。下次真实扫描按普通本地 NFO 导入索引；新增源证据可以要求重新核对，但不能重放已经完成的确认。剧集系列与单集的 NFO、字段和标识分别归属；多个系列混放且无法证明目录归属时拒绝生成共享 `tvshow.nfo`，显示独立输出失败。
+
+### 本轮验证
+
+2026-11-04：`cargo test -p mediaatlas-infrastructure` 通过 251 项单元测试和 85 项集成测试；scanner 11 项通过。Clippy（两个 crate、全部 targets、`-D warnings`）、`cargo fmt --all --check` 和 diff 检查通过。
+
+覆盖第三方 NFO 首次建库/重复更新无 Provider 请求，剧集层级与稳定身份，自动匹配/手动确认后生成，已有与大写 NFO 原字节保留，多版本、损坏/空文件、删除后重建、输出失败与恢复、迟到文件冲突、取消/目录撤权/成人权限和核对队列不重复执行。
+
+这些测试在 Linux 临时数据库和合成媒体上运行，不代表真实在线 Provider 或原生 macOS/Windows 验收。附加尝试 `cargo check -p mediaatlas-desktop` 被当前主机缺少 `glib-2.0.pc` 阻断；没有声称原生宿主编译或打包通过。前端本轮 455 项及构建、双平台窗口配置/schema 与浏览器截图见 [桌面控件验收](desktop-ui-controls.md)。
+
+## Shared output implementation — Phase 4
+
+`MediaOutputService` provides persistent `preview → explicit execute → result` for NFO and selected poster sidecars. Phase 4 supports `preserve` only. It never moves, modifies or deletes source media. Automatic missing-NFO execution now follows committed metadata confirmation under the policy above; other filesystem output remains a separate explicit action. Output payloads and expected before-image hashes are immutable SQLite snapshots associated with `file_operations`.
 
 Existing sidecars are protected in full: their original bytes, comments, unknown XML attributes/elements, and local manual values are retained. NFO preview validates UTF-8/XML and rejects DTD, entities, oversized files and unsupported document roots. Existing valid NFO is displayed as old=new and is never rewritten. An actual parse/merge/serialize function preserves unknown subtrees and attributes, allows explicit protection of known fields, and adds absent known fields. When enrichment adds fields to an existing NFO, Preview includes a separate content-addressed `<name>.mediaatlas-<hash>.nfo` revision; execution creates that alternate only. Existing manual values are protected in the revision too. New NFO includes escaped known fields and external IDs, with manual/locked database values taking precedence. Replacing values in the original NFO requires a later explicit merge/editor workflow. Content-addressed alternate revisions allow future exports without overwriting user files.
 
