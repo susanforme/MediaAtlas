@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.7`，包含桌面 shadcn 共享组件与明暗主题；本轮追加左侧分类收起和对齐、自定义 Select、语言入口收敛到设置、移除盾牌与默认网页右键菜单、NFO 独立只读预览与系统文件关联、目录独立来源优先级及 TVmaze。按用户要求仅静态阅读和修改，相关安全、交互与来源回退测试只写入源码，未运行本地测试、lint、构建或安装包。依赖、锁文件和版本号不变。按用户授权移动现有 beta.7 tag 到新提交并推送重触发远程发布，不等待打包；beta.1–beta.6 保持原提交不动。NFO 关联与 macOS 固定文案的系统语言边界见 [NFO 预览说明](nfo-preview.md)，TVmaze 来源与归属要求见 [Provider 访问说明](provider-access.md)。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.8`，包含媒体库交互与来源配置流程重构，并补齐扫描结果进入来源设置时携带返回媒体库参数的测试断言。按用户要求仅静态阅读和修改，未运行本地测试、lint、构建或安装包；包清单、Tauri 配置、Cargo workspace 及锁文件中的本仓库包版本同步为 beta.8，不变更第三方依赖。新建 beta.8 tag 并推送，beta.1–beta.7 保持原提交不动。NFO 关联与 macOS 固定文案的系统语言边界见 [NFO 预览说明](nfo-preview.md)，TVmaze 来源与归属要求见 [Provider 访问说明](provider-access.md)。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |
@@ -75,7 +75,7 @@ $p.ExitCode
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 actionlint .github/workflows/release.yml
-python3 scripts/release/release.py preflight --tag v0.1.0-beta.7
+python3 scripts/release/release.py preflight --tag v0.1.0-beta.8
 ```
 
 首次准备时 24 个 verifier 测试与 actionlint 1.7.12 已在本地通过，合并 Tauri release 配置通过官方 JSON schema 验证；preflight 需 P8 的版本统一及真实许可文件齐全。模拟 fixture 测试验证发布校验器的拒绝路径和完整汇总，不把 fixture 当作 MediaAtlas 安装包通过证据。

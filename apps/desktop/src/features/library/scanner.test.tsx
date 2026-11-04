@@ -346,7 +346,11 @@ describe("Fixture scan review", () => {
       screen.getByRole("link", { name: "Configure source and continue" }),
     ).toHaveAttribute(
       "data-search",
-      JSON.stringify({ from: "library", root: root.id }),
+      JSON.stringify({
+        from: "library",
+        root: root.id,
+        return: { to: "library", search: { root: root.id } },
+      }),
     );
     expect(
       screen.getByRole("button", { name: "Update library" }),
