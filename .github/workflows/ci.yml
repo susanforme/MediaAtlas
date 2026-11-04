@@ -28,6 +28,9 @@ jobs:
           python-version: "3.12"
       - name: License validator portability regressions
         run: python -m unittest discover -s scripts/licenses -p 'test_*.py' -v
+      - name: Verify real macOS bundle signing and mounted DMG integrity
+        if: runner.os == 'macOS'
+        run: python -m unittest discover -s scripts/release -p 'test_macos_signing.py' -v
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

@@ -8,6 +8,9 @@
       "../../../docs/dependency-licenses.json": "docs/dependency-licenses.json",
       "../../../docs/third-party-licenses/": "docs/third-party-licenses/"
     },
+    "macOS": {
+      "signingIdentity": "-"
+    },
     "windows": {
       "nsis": {
         "compression": "bzip2"

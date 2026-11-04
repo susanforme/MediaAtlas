@@ -12,7 +12,7 @@
 | 影视与文件输出 | [影视刮削](phase-4-contract.md)、[安全旁车输出](media-output.md) |
 | 成人与音乐边界 | [成人契约](phase-5-contract.md)、[音乐契约](phase-6-contract.md) |
 | 文件组织、监听与系统打开 | [组织与消费契约](phase-7-contract.md) |
-| 备份、恢复与发布 | [维护说明](maintenance.md)、[维护/分发契约](phase-8-contract.md)、[发布矩阵](release-matrix.md)、[Windows 修复证据](hotfix-windows-ci.md)、[macOS CI 测试同步修复](hotfix-macos-ci.md) |
+| 备份、恢复与发布 | [维护说明](maintenance.md)、[维护/分发契约](phase-8-contract.md)、[发布矩阵](release-matrix.md)、[Windows 修复证据](hotfix-windows-ci.md)、[macOS CI 测试同步修复](hotfix-macos-ci.md)、[macOS 安装包资源签名](hotfix-macos-package.md) |
 | 实际界面验证 | [当前截图记录](../screenshots/README.md) |
 
 ## 许可材料

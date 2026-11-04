@@ -55,7 +55,8 @@ class ReleaseTests(unittest.TestCase):
                 name = f"MediaAtlas_{self.version}_{spec['target']}.{format_name}"
                 path = directory / name
                 path.write_bytes(f"verified native package {name}".encode())
-                assets.append({"name": name, "format": format_name, "bytes": path.stat().st_size, "sha256": release.sha256(path), "internal_architecture_verified": True})
+                assets.append({"name": name, "format": format_name, "bytes": path.stat().st_size, "sha256": release.sha256(path), "internal_architecture_verified": True,
+                               "package_verification": {"macos_signature_verified": True} if spec["os"] == "macos" else {}})
             manifest = {"schema": 1, "tag": self.tag, "version": self.version, "commit": self.commit, **spec, "assets": assets, "tests_passed": True}
             (directory / "manifest.json").write_text(json.dumps(manifest))
 
@@ -78,6 +79,22 @@ class ReleaseTests(unittest.TestCase):
         (self.root / "Cargo.lock").write_text('[[package]]\nname="mediaatlas-domain"\nversion="0.0.0"\n')
         with self.assertRaises(ValueError):
             release.version(self.tag)
+
+    def test_macos_package_without_verified_bundle_signature_cannot_publish(self):
+        for flag in (None, False, "true"):
+            with self.subTest(flag=flag):
+                self.fixture()
+                path = next((self.input / "aarch64-apple-darwin").glob("manifest.json"))
+                manifest = json.loads(path.read_text())
+                if flag is None:
+                    manifest["assets"][0].pop("package_verification")
+                else:
+                    manifest["assets"][0]["package_verification"]["macos_signature_verified"] = flag
+                path.write_text(json.dumps(manifest))
+                with self.assertRaisesRegex(ValueError, "signature integrity"):
+                    release.aggregate(self.args())
+                shutil.rmtree(self.input)
+                shutil.rmtree(self.output)
 
     def test_native_headers_pe_elf_and_mach(self):
         path = self.root / "binary"

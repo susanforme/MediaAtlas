@@ -269,7 +269,8 @@ class PublishTests(unittest.TestCase):
                 path = directory / filename
                 path.write_bytes(b"verified native fixture")
                 entries.append({"name": filename, "format": suffix, "bytes": path.stat().st_size,
-                                "sha256": publisher.release.sha256(path), "internal_architecture_verified": True})
+                                "sha256": publisher.release.sha256(path), "internal_architecture_verified": True,
+                                "package_verification": {"macos_signature_verified": True} if spec["os"] == "macos" else {}})
             manifest = {"schema": 1, "tag": self.tag, "version": self.tag[1:], "commit": self.commit,
                         **spec, "tests_passed": True, "assets": entries}
             (directory / "manifest.json").write_text(json.dumps(manifest))

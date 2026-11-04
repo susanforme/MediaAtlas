@@ -144,6 +144,18 @@ def check_binary(path, spec):
     require(binary_arch(path) == spec["arch"], f"wrong architecture in {path}")
 
 
+def verify_macos_signature(app):
+    """A linker signature alone does not seal a resource-bearing .app bundle."""
+    seal = app / "Contents/_CodeSignature/CodeResources"
+    require(seal.is_file() and seal.stat().st_size > 0, "missing macOS application resource seal; sign the complete bundle before creating the DMG")
+    run("codesign", "--verify", "--deep", "--strict", "--verbose=2", app, stderr=subprocess.STDOUT)
+    description = run("codesign", "--display", "--verbose=2", app, stderr=subprocess.STDOUT)
+    return {
+        "macos_code_signature": "ad-hoc" if "Signature=adhoc" in description else "present; publisher identity not verified",
+        "macos_signature_verified": True,
+    }
+
+
 def one(paths, description):
     paths = list(paths)
     require(len(paths) == 1, f"expected exactly one {description}, found {paths}")
@@ -210,12 +222,7 @@ def inspect_package(path, spec, expected_version):
                 app_binary = app / "Contents/MacOS" / info["CFBundleExecutable"]
                 check_binary(app_binary, spec)
                 require("/System/Library/Frameworks/WebKit.framework/" in run("otool", "-L", app_binary), "macOS application must link the system WebKit framework")
-                signature = subprocess.run(["codesign", "--display", "--verbose=2", str(app)], text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-                if signature.returncode == 0:
-                    inspection["macos_code_signature"] = "ad-hoc" if "Signature=adhoc" in signature.stdout else "present; publisher identity not verified"
-                else:
-                    require("not signed" in signature.stdout.lower(), "unable to determine macOS code-signature state")
-                    inspection["macos_code_signature"] = "not signed"
+                inspection.update(verify_macos_signature(app))
                 inspection["notarization"] = "not performed by this workflow"
                 inspection["payload_version"] = info["CFBundleShortVersionString"]
                 check_licenses(app / "Contents/Resources")
@@ -333,6 +340,8 @@ def aggregate(args):
             package = directory / name
             require(package.is_file() and package.stat().st_size > 0 and package.stat().st_size == asset["bytes"], "asset missing/size mismatch")
             require(asset["internal_architecture_verified"] is True and sha256(package) == asset["sha256"], "asset checksum/verification mismatch")
+            if spec["os"] == "macos":
+                require(asset.get("package_verification", {}).get("macos_signature_verified") is True, "macOS package signature integrity was not verified")
             shutil.copyfile(package, args.output / name)
         manifests.append(manifest)
     license_paths = licenses()

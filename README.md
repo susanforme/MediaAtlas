@@ -8,7 +8,7 @@ main 默认进入媒体库海报墙：添加目录后后台扫描、建立本地
 
 成人资源类型默认关闭，启用后复用统一浏览、详情与工具，应用建立后台会话授权，无额外解锁页面。普通“全部”、统计、查询与任务保持隔离，关闭开关会取消并清理私有查询。支持 `zh-CN` / `en-US`；没有桌面后端的网页预览只展示真实能力限制。
 
-最新发布 tag 为 **v0.1.0-beta.3**；main 的后续功能不等于该 tag 已发布。安装包、许可材料、平台验收与待验证项见 [发布矩阵](docs/release-matrix.md)，备份、恢复和手动升级见 [维护说明](docs/maintenance.md)。当前本地/浏览器检查不能替代各平台安装、系统关联打开、keyring 或实时 Provider 验收。
+安装包及其发布状态见[项目 Releases](https://github.com/susanforme/MediaAtlas/releases)。Apple Silicon（M 系列）选择 `aarch64-apple-darwin.dmg`，Intel Mac 选择 `x86_64-apple-darwin.dmg`。旧 macOS 包的“已损坏”与资源签名修复见 [macOS 安装包说明](docs/hotfix-macos-package.md)；当前 beta 尚无 Developer ID 签名或 Apple 公证。安装包、许可材料与平台验收见 [发布矩阵](docs/release-matrix.md)，备份、恢复和手动升级见 [维护说明](docs/maintenance.md)。
 
 ## 开发环境
 
@@ -66,7 +66,7 @@ cargo test --workspace --locked
 - `.github/workflows/ci.yml`：`main` push、PR 和手动运行仅在 Windows/macOS/Linux 执行 `pnpm test` 与 `cargo test --locked`；Rust 默认成员包含 SQLite 测试，不构建 Tauri 桌面、不安装 GTK、不打包或发布。
 - `.github/workflows/release.yml`：只由 beta tag push 触发，Windows x64、Linux x64、macOS x64/ARM64 四个原生 runner 并行构建。验证安装器实际 payload 架构/版本/许可后，汇总 SHA-256 与 manifest，完整上传 draft 后才公开 beta。Windows/Linux ARM 本次明确不构建。普通分支 push/PR 不发布。
 - `.github/tauri.release.conf.json` 只在 tag 构建时启用打包；本地 `pnpm build:desktop` 仍只生成可执行文件。
-- main 的 Windows 便携 ZIP 只包含 `MediaAtlas.exe`，运行依赖系统已安装的 WebView2。第三方许可全文嵌入 EXE，可用 `MediaAtlas.exe --export-licenses <新目录>` 导出；Release 仍单独提供 `license-materials.zip`。此包装调整未纳入既有 beta.3 tag。
+- main 的 Windows 便携 ZIP 只包含 `MediaAtlas.exe`，运行依赖系统已安装的 WebView2。第三方许可全文嵌入 EXE，可用 `MediaAtlas.exe --export-licenses <新目录>` 导出；Release 仍单独提供 `license-materials.zip`。此包装调整从 beta.4 起纳入发布包。
 - tag 名称不会自动修改应用版本，发布前需同步 Cargo workspace、Tauri 和前端包的版本。本 beta 未接入发行签名、Apple 公证或自动更新，请按手动更新说明操作；CI 包验证不替代交互式安装/卸载、实机播放、OS keyring 或实时 Provider 验收。
 
 工作流配置及静态检查不等于远端 CI、可下载安装包或平台交互已验证，实际状态以发布矩阵为准。
