@@ -1,12 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { ProviderAuthSettings } from "../settings/provider-auth";
 
 const privacy = vi.hoisted(() => ({ includeAdult: true }));
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 vi.mock("../library/context", () => ({ usePrivacy: () => privacy }));
 vi.mock("../../api/provider-auth", async (original) => ({
   ...(await original<typeof import("../../api/provider-auth")>()),
@@ -80,8 +84,10 @@ it("stores both masked DMM fields as one inbound credential and clears them on s
   fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
   expect(api).toHaveValue("");
   expect(affiliate).toHaveValue("");
-  await screen.findByText(
-    "Authentication saved. Provider enablement is unchanged.",
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Authentication saved. Provider enablement is unchanged.",
+    ),
   );
   expect(providerAuthApi.save).toHaveBeenCalledWith({
     provider_id: "dmm",

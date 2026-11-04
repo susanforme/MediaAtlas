@@ -273,7 +273,7 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
         workflow={workflow}
         setup={setup}
         credentialReady={status.data.configured}
-        saveCredential={secret.trim() ? saveCredential : undefined}
+        saveCredential={secret.trim() ? () => saveCredential(false) : undefined}
         disabled={
           pending !== null ||
           (Boolean(secret.trim()) &&
@@ -281,26 +281,15 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
             !affiliate.trim())
         }
       />
-      {outcome &&
-        !(
-          ["saved", "cleared"].includes(outcome) &&
-          status.data.status === "cleanup_pending"
-        ) && (
-          <p
-            className={`notice mt-4 ${outcome.endsWith("failed") ? "error-notice" : ""}`}
-            role={outcome.endsWith("failed") ? "alert" : "status"}
-          >
-            {t(
-              outcome === "saved"
-                ? "providerAuthSaved"
-                : outcome === "cleared"
-                  ? "providerAuthCleared"
-                  : outcome === "save_failed"
-                    ? "providerAuthSaveFailed"
-                    : "providerAuthClearFailed",
-            )}
-          </p>
-        )}
+      {outcome && (
+        <p className="notice error-notice mt-4" role="alert">
+          {t(
+            outcome === "save_failed"
+              ? "providerAuthSaveFailed"
+              : "providerAuthClearFailed",
+          )}
+        </p>
+      )}
       {error !== undefined && (
         <div className="mt-3">
           <ErrorNotice error={error} />

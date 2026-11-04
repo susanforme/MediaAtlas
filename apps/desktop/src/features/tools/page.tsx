@@ -223,15 +223,6 @@ export function OrganizationPanel({
         .map((e, index) => (
           <ErrorNotice key={String(index)} error={e} />
         ))}
-      {execute.data && (
-        <p role="status">
-          {t("organizeResult")}:{" "}
-          {t(`state_${execute.data.state}`, {
-            defaultValue: execute.data.state,
-          })}
-          {execute.data.error_code ? ` · ${execute.data.error_code}` : ""}
-        </p>
-      )}
       <h3>{t("organizeHistory")}</h3>
       <ul>
         {history.data?.map((h) => (

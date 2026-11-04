@@ -494,11 +494,6 @@ function ScraperWorkspace({
             <ErrorNotice error={error} />
           </div>
         )}
-        {restore.isSuccess && (
-          <p role="status" className="notice mt-4">
-            {t("scraperRestored")}
-          </p>
-        )}
         {search && (
           <section className="mt-7" aria-labelledby="scraper-results">
             <h2 id="scraper-results" className="text-lg font-semibold">
@@ -615,14 +610,6 @@ function ScraperWorkspace({
           >
             {t("scraperOutputDiscard")}
           </Button>
-          {write.data && (
-            <p role="status" className="notice mt-4">
-              {t("scraperOutputDone", {
-                written: write.data.written,
-                preserved: write.data.preserved,
-              })}
-            </p>
-          )}
         </section>
       )}
       {!metadata && (

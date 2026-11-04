@@ -1,0 +1,8 @@
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toaster][data-sonner-toaster],
+  [data-sonner-toaster] [data-sonner-toast],
+  [data-sonner-toaster] [data-sonner-toast] * {
+    transition: none;
+    animation: none;
+  }
+}

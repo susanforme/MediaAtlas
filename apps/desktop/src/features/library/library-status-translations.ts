@@ -3,6 +3,13 @@ import i18n from "../../i18n";
 const values = {
   "zh-CN": {
     libraryKindMusic: "音乐",
+    libraryNfoOutput: "NFO 文件",
+    health_missing_nfo: "NFO 待生成",
+    health_nfo_output_failed: "NFO 自动生成失败",
+    libraryNfoPendingHint:
+      "更新目录时会为已识别的媒体生成 NFO，现有 NFO 不会被覆盖。",
+    libraryNfoFailedHint:
+      "NFO 输出失败不影响已识别的媒体资料，可从媒体目录重试更新。",
     libraryRefreshScanning: "正在查找媒体",
     libraryRefreshIndexing: "正在添加媒体",
     libraryRefreshMetadata: "正在补全媒体资料",
@@ -43,6 +50,13 @@ const values = {
   },
   "en-US": {
     libraryKindMusic: "Music",
+    libraryNfoOutput: "NFO file",
+    health_missing_nfo: "NFO not generated",
+    health_nfo_output_failed: "Automatic NFO output failed",
+    libraryNfoPendingHint:
+      "Refreshing folders generates NFO files for identified media and preserves existing NFO files.",
+    libraryNfoFailedHint:
+      "NFO output failure does not affect identified media details. Retry the refresh from media folders.",
     libraryRefreshScanning: "Finding media",
     libraryRefreshIndexing: "Adding media",
     libraryRefreshMetadata: "Fetching media details",

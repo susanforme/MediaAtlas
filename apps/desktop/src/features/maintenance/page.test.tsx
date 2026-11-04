@@ -8,9 +8,13 @@ import {
 } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { databaseMaintenanceApi as api } from "../../api/maintenance";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { MaintenancePage } from "./page";
 
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 vi.mock("../../api/maintenance", () => ({
   databaseMaintenanceApi: {
     status: vi.fn(),
@@ -86,7 +90,9 @@ it("previews before explicit backup confirmation and makes no startup writes", a
   await waitFor(() =>
     expect(api.backupConfirm).toHaveBeenCalledWith("preview"),
   );
-  await screen.findByText("Backup saved.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith("Backup saved."),
+  );
 });
 it("warns about restart and safety snapshot before queuing restore", async () => {
   render(view());
@@ -103,7 +109,11 @@ it("warns about restart and safety snapshot before queuing restore", async () =>
   await waitFor(() =>
     expect(api.restoreConfirm).toHaveBeenCalledWith("restore-preview"),
   );
-  await screen.findByText(/Restore queued/);
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      expect.stringMatching(/Restore queued/),
+    ),
+  );
 });
 it("discards privacy-bound previews after locking", async () => {
   privacy.includeAdult = true;
@@ -162,5 +172,5 @@ it("does not reveal a diagnostic result that arrives after privacy is locked", a
   expect(
     screen.queryByDisplayValue("/synthetic/private-diagnostics.txt"),
   ).not.toBeInTheDocument();
-  expect(screen.queryByText("Diagnostics saved")).not.toBeInTheDocument();
+  expect(toast.success).not.toHaveBeenCalled();
 });

@@ -92,11 +92,6 @@ export function SourceSetupActions({
         </p>
       )}
       {workflow.error !== undefined && <ErrorNotice error={workflow.error} />}
-      {workflow.result && (
-        <p role="status" className="notice">
-          {t(workflow.result === "started" ? "setupStarted" : "setupEnabled")}
-        </p>
-      )}
     </div>
   );
 }

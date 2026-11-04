@@ -1,14 +1,18 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
 import {
   type OrganizationPlan,
+  type OrganizationResult,
   type OrganizationStrategy,
   organizationApi,
 } from "../../api/organization";
+import { toast } from "../../components/ui/sonner";
 
 export function useOrganization(mediaId: string, adult: boolean) {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const api = useMemo(() => organizationApi(adult), [adult]);
   const [target, setTarget] = useState("");
@@ -88,13 +92,21 @@ export function useOrganization(mediaId: string, adult: boolean) {
     },
     onSuccess: ({ value, epoch }) => replace(value, true, epoch),
   });
+  function notifyResult(result: OrganizationResult) {
+    if (result.state === "succeeded")
+      toast.success(`${t("organizeResult")}: ${t("state_succeeded")}`);
+    else if (result.state === "cancelled")
+      toast.info(`${t("organizeResult")}: ${t("state_cancelled")}`);
+    else toast.error(t("operationFailed"));
+  }
   const execute = useMutation({
     mutationFn: () =>
       rollback
         ? api.rollbackExecute(plan?.id ?? "")
         : api.execute(plan?.id ?? ""),
-    onSuccess: () => {
+    onSuccess: (result) => {
       if (!active.current) return;
+      notifyResult(result);
       requestEpoch.current += 1;
       current.current = undefined;
       setPlan(undefined);
@@ -103,8 +115,9 @@ export function useOrganization(mediaId: string, adult: boolean) {
   });
   const cancel = useMutation({
     mutationFn: () => api.cancel(plan?.id ?? ""),
-    onSuccess: () => {
+    onSuccess: (result) => {
       if (!active.current) return;
+      notifyResult(result);
       requestEpoch.current += 1;
       current.current = undefined;
       setPlan(undefined);

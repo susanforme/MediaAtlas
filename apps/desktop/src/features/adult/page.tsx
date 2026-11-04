@@ -18,6 +18,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
+import { toast } from "../../components/ui/sonner";
 import "../library/library.css";
 import { MediaDetailPage } from "../library/detail";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
@@ -161,7 +162,11 @@ export function AdultOutput({ mediaId }: { mediaId: string }) {
   });
   const execute = useMutation({
     mutationFn: () => adultApi.outputExecute(preview?.preview_id ?? ""),
-    onSuccess: () => setPreview(undefined),
+    onSuccess: () => {
+      if (!active.current) return;
+      setPreview(undefined);
+      toast.success(t("adultOutputDone"));
+    },
   });
   return (
     <div className="space-y-4">
@@ -185,7 +190,6 @@ export function AdultOutput({ mediaId }: { mediaId: string }) {
         </>
       )}
       {execute.error && <ErrorNotice error={execute.error} />}{" "}
-      {execute.isSuccess && <p role="status">{t("adultOutputDone")}</p>}
     </div>
   );
 }
@@ -301,6 +305,13 @@ export function AdultScraper({ mediaId }: { mediaId?: string } = {}) {
 function CatalogScraper({ mediaId }: { mediaId?: string }) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const [catalog, setCatalog] = useState("");
   const [namespace, setNamespace] = useState("dmm");
   const [studio, setStudio] = useState("");
@@ -404,8 +415,10 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
   const confirm = useMutation({
     mutationFn: () => adultApi.confirm(merge?.preview_id ?? ""),
     onSuccess: () => {
+      if (!active.current) return;
       setMerge(undefined);
       void client.invalidateQueries({ queryKey: ["adult"] });
+      toast.success(t("adultMerged"));
     },
   });
   const image = useMutation({
@@ -725,7 +738,6 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
             </section>
           )}
           {confirm.error && <ErrorNotice error={confirm.error} />}{" "}
-          {confirm.isSuccess && <p role="status">{t("adultMerged")}</p>}
         </>
       )}
     </div>

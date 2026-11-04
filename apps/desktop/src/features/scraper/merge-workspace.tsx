@@ -517,15 +517,13 @@ export function MetadataMergeWorkspace({
       </div>
       <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-surface p-5">
         <div className="min-w-0 space-y-1" role="status" aria-live="polite">
-          <p className="text-sm font-medium">
-            {done
-              ? confirm.data?.already_applied
-                ? t("scraperAlready")
-                : t("scraperConfirmed", {
-                    count: confirm.data?.applied_fields ?? 0,
-                  })
-              : t("mergeSummary", { ...count, count: count.total })}
-          </p>
+          {done ? (
+            <Badge variant="secondary">{t("reviewState_confirmed")}</Badge>
+          ) : (
+            <p className="text-sm font-medium">
+              {t("mergeSummary", { ...count, count: count.total })}
+            </p>
+          )}
           {!done && workspace.mergePreviewPending && (
             <p className="text-xs text-muted-foreground">
               {t("mergeValidating")}

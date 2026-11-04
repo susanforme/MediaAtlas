@@ -9,7 +9,13 @@ import {
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { musicApi } from "../../api/music";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import {
   syntheticMusicGraph,
   syntheticTagPreview,
@@ -157,6 +163,10 @@ it("requires an explicit release choice and import while displaying edition diff
       expect.anything(),
     ),
   );
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith("Release imported"),
+  );
+  expect(screen.queryByText("Release imported")).not.toBeInTheDocument();
 });
 it("shows online/local Diff and gates writes and restores behind separate confirmation", async () => {
   show(<TagEditor fileId="file-1" graph={syntheticMusicGraph} />);
@@ -183,7 +193,15 @@ it("shows online/local Diff and gates writes and restores behind separate confir
   fireEvent.click(
     within(preview).getByRole("button", { name: "Confirm and write tags" }),
   );
-  await screen.findByText("Tag operation recorded: Completed");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Tag operation recorded: Completed",
+    ),
+  );
+  expect(
+    screen.queryByText("Tag operation recorded: Completed"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Completed")).toHaveAttribute("data-slot", "badge");
   expect(musicApi.execute).toHaveBeenCalledWith("preview-1");
   fireEvent.click(
     screen.getByRole("button", { name: "Preview restore from backup" }),
@@ -302,7 +320,14 @@ it("keeps Music library and album read only and delegates local opening to the s
     screen.queryByRole("button", { name: "Confirm and write tags" }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
-  await screen.findByText("Requested opening in system app");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Requested opening in system app",
+    ),
+  );
+  expect(
+    screen.queryByText("Requested opening in system app"),
+  ).not.toBeInTheDocument();
   expect(musicApi.openFile).toHaveBeenCalledWith("file-1", expect.anything());
   expect(musicApi.read).not.toHaveBeenCalled();
   expect(musicApi.execute).not.toHaveBeenCalled();

@@ -147,7 +147,7 @@
 }
 .app-language {
   width: 112px;
-  background: #ffffff08;
+  background-color: #ffffff08;
   border-color: transparent;
   border-radius: 22px;
   font-size: 12px;
@@ -230,8 +230,9 @@
     display: none;
   }
   .app-language {
-    width: 78px;
-    padding-inline: 7px;
+    width: 96px;
+    padding-left: 10px;
+    padding-right: 32px;
     font-size: 11px;
   }
   .app-content {
@@ -239,5 +240,55 @@
   }
   .app-content-home {
     padding: 0;
+  }
+}
+
+.app-nav-children {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 3px 0 6px 28px;
+  padding-left: 8px;
+  border-left: 1px solid var(--color-border);
+}
+.app-nav-child {
+  height: 36px;
+  padding-inline: 12px;
+  gap: 10px;
+  font-size: 13px;
+}
+.app-nav-child.active {
+  background: #7657f51a;
+  color: var(--color-primary);
+}
+.app-shell[data-window-platform="macos"] .app-brand {
+  height: 112px;
+  padding-top: 32px;
+}
+.app-shell[data-window-platform="windows"] .app-toolbar {
+  padding-right: 168px;
+}
+@media (max-width: 1050px) {
+  .app-nav-children {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .app-nav-child {
+    padding-inline: 0;
+  }
+}
+@media (max-width: 600px) {
+  .app-shell[data-window-platform="macos"] {
+    --sidebar-width: 76px;
+  }
+  .app-shell[data-window-platform="windows"] {
+    --toolbar-height: 112px;
+  }
+  .app-shell[data-window-platform="windows"] .app-toolbar {
+    padding: 36px 16px 0;
+  }
+  .app-shell[data-window-platform="windows"] .app-content {
+    padding-top: calc(var(--toolbar-height) + 18px);
   }
 }

@@ -3,7 +3,7 @@
   "scope": "Complete Cargo.lock and pnpm-lock.yaml package union; includes dependencies not shipped on every target.",
   "lockfiles": {
     "Cargo.lock": "156843851242de56896c1365777b368942a825996f111fc3a07ee21b8febf260",
-    "pnpm-lock.yaml": "f910d792c14ef7921a0ae1f7dd72df37dd26ba134cfd4bb8aa7c8048620cf19c"
+    "pnpm-lock.yaml": "7528b7d05ef3627253a4525312003d21530993b16e6f8a90b9bad322396dc531"
   },
   "missing_notices": [],
   "upstream_notice_omissions": [
@@ -23592,6 +23592,26 @@
           "sha256": "3bdddf0b9b08aaa2fe4365b803fc958ed32c0597ca0bd727be8d9fcb8b248d18",
           "original_path": "LICENSE",
           "origin": "https://registry.npmjs.org/siginfo/-/siginfo-2.0.0.tgz"
+        }
+      ],
+      "notice_provenance": "upstream_file"
+    },
+    {
+      "ecosystem": "npm",
+      "name": "sonner",
+      "version": "2.0.8",
+      "license": "MIT",
+      "authors": "Emil Kowalski <e@emilkowal.ski>",
+      "repository": "git+https://github.com/emilkowalski/sonner.git",
+      "source": "https://registry.npmjs.org/sonner/-/sonner-2.0.8.tgz",
+      "source_integrity": "sha512-UM/ByIoFra8yzV75n1o0Puu0bw5U/9UNnDacrJNspekBewIfsQ3D6ez1nvlWpt7aTsO6rujQtifBpycwIivqlg==",
+      "scope": "locked union: frontend/runtime/build/dev/optional tooling; over-inclusive",
+      "notices": [
+        {
+          "path": "docs/third-party-licenses/texts/da9201378c36ffd81f51ad0b305f3f0981e90bc558789210ad65d1161eec3b7d.txt",
+          "sha256": "da9201378c36ffd81f51ad0b305f3f0981e90bc558789210ad65d1161eec3b7d",
+          "original_path": "LICENSE.md",
+          "origin": "https://registry.npmjs.org/sonner/-/sonner-2.0.8.tgz"
         }
       ],
       "notice_provenance": "upstream_file"

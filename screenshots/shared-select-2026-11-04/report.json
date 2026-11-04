@@ -1,0 +1,72 @@
+{
+  "date": "2026-11-04",
+  "mode": "real Chromium + synthetic IPC; disabled/invalid are explicit DOM style fixtures",
+  "source_commit": "0ec084f92ce5feac104ef3c98ad27d85a956dec7",
+  "source_sha256": {
+    "apps/desktop/src/components/ui/select.tsx": "cf6b9b273a8936408383e1929f95c82de11c462eeba568f0c2e91e8da0d4b0c1",
+    "apps/desktop/src/components/ui/select.css": "4210bcc39babc7210c1ba4588acbcd401972babbb91c1f16e98a1ee78882917b",
+    "apps/desktop/src/styles.css": "1be69ec39d9f4d50dea161691b7c7865c5994d7e894cfde2da073a6c3698a16f",
+    "apps/desktop/src/components/shell/shell.css": "bd8156be865d6897b34adac08ab46df41c4d284fe96cd9117fec09237323f3da",
+    "apps/desktop/src/features/library/library.css": "d1f1a4fc2f94745d15fb1b466fee1e064abe6fad2ecb0e9419016e7d86aa51c2"
+  },
+  "observations": {
+    "kind": {
+      "appearance": "none",
+      "webkitAppearance": "none",
+      "backgroundImage": "linear-gradient(45deg, rgba(0, 0, 0, 0) 43%, rgb(176, 173, 189) 43%, rgb(176, 173, 189) 58%, rgba(0, 0, 0, 0) 58%), linear-gradient(-45deg, rgba(0, 0, 0, 0) 43%, rgb(176, 173, 189) 43%, rgb(176, 173, 189) 58%, rgba(0, 0, 0, 0) 58%)",
+      "backgroundSize": "6px 6px, 6px 6px",
+      "backgroundColor": "rgb(36, 34, 46)",
+      "paddingRight": "40px",
+      "cursor": "pointer",
+      "opacity": "1",
+      "fontSize": "14px",
+      "borderColor": "rgba(255, 255, 255, 0.12)",
+      "boxShadow": "none"
+    },
+    "sort": {
+      "appearance": "none",
+      "webkitAppearance": "none",
+      "backgroundImage": "linear-gradient(45deg, rgba(0, 0, 0, 0) 43%, rgb(176, 173, 189) 43%, rgb(176, 173, 189) 58%, rgba(0, 0, 0, 0) 58%), linear-gradient(-45deg, rgba(0, 0, 0, 0) 43%, rgb(176, 173, 189) 43%, rgb(176, 173, 189) 58%, rgba(0, 0, 0, 0) 58%)",
+      "backgroundSize": "6px 6px, 6px 6px",
+      "backgroundColor": "rgb(36, 34, 46)",
+      "paddingRight": "40px",
+      "cursor": "pointer",
+      "opacity": "1",
+      "fontSize": "14px",
+      "borderColor": "rgba(255, 255, 255, 0.12)",
+      "boxShadow": "none"
+    },
+    "language": {
+      "appearance": "none",
+      "webkitAppearance": "none",
+      "backgroundImage": "linear-gradient(45deg, rgba(0, 0, 0, 0) 43%, rgb(176, 173, 189) 43%, rgb(176, 173, 189) 58%, rgba(0, 0, 0, 0) 58%), linear-gradient(-45deg, rgba(0, 0, 0, 0) 43%, rgb(176, 173, 189) 43%, rgb(176, 173, 189) 58%, rgba(0, 0, 0, 0) 58%)",
+      "backgroundSize": "6px 6px, 6px 6px",
+      "backgroundColor": "rgba(255, 255, 255, 0.03)",
+      "paddingRight": "40px",
+      "cursor": "pointer",
+      "opacity": "1",
+      "fontSize": "12px",
+      "borderColor": "rgba(0, 0, 0, 0)",
+      "boxShadow": "none"
+    }
+  },
+  "checks": [
+    "appearance and WebKit appearance reset on library and language controls",
+    "single theme chevron and consistent typography",
+    "keyboard selection updates real library URL",
+    "keyboard focus visible",
+    "disabled cursor/opacity and invalid border",
+    "empty/content, language switching, 390px and reduced motion, no page or right-content overflow"
+  ],
+  "limits": [
+    "Chromium browser QA; native macOS WKWebView and OS popup appearance are not verified here",
+    "Native selection semantics and change events retained; popup menu remains platform-managed"
+  ],
+  "screenshots": {
+    "fixture-shared-select-empty-1648.png": "2c752bcf9386a788b3b0cce3b7253f95384b8b217af94eabe5926d3ff18b3291",
+    "fixture-shared-select-focus-1648.png": "4f8f98c25ceec685341c648685143d01a3d9ae47d005f4d4d7b3f975009e94dc",
+    "fixture-shared-select-library-1648.png": "0ad48225577f21ebe129e0097833d5c36c7199d5e4c4aeb3cadb9d0506438395",
+    "fixture-shared-select-narrow-390.png": "09db3be8f6319ae92174e8df90d082a177396286240933140e6bff28d9444129",
+    "fixture-shared-select-states-1648.png": "c59033f64034de81dcb3cd5c0f482861866f6322a68a6b72f67376541658021a"
+  }
+}

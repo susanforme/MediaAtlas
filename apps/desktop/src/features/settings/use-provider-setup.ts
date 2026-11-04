@@ -1,9 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
 import { DesktopError } from "../../api/desktop";
 import { libraryApi, type RootView } from "../../api/library";
 import { providerApi } from "../../api/providers";
+import { toast } from "../../components/ui/sonner";
 import { usePrivacy } from "../library/context";
 import type {
   ProviderSetupSearch,
@@ -30,13 +32,13 @@ export function useProviderSetup(
   root: RootView | undefined,
   onComplete?: SetupComplete,
 ) {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const { includeAdult } = usePrivacy();
   const adult = providerId === "dmm" || providerId === "wikidata";
   const active = useRef(false);
   const locked = useRef(false);
   const [phase, setPhase] = useState<"save" | "enable" | "start" | null>(null);
-  const [result, setResult] = useState<"enabled" | "started" | null>(null);
   const [error, setError] = useState<unknown>();
   const [failurePhase, setFailurePhase] = useState<"enable" | "start" | null>(
     null,
@@ -77,7 +79,6 @@ export function useProviderSetup(
     locked.current = true;
     setError(undefined);
     setFailurePhase(null);
-    setResult(null);
     let nextPhase: "enable" | "start" = "enable";
     try {
       if (saveCredential) {
@@ -121,14 +122,14 @@ export function useProviderSetup(
           queryKey: adult ? ["adult", "scan-tasks"] : ["tasks", false],
         });
         void client.invalidateQueries({ queryKey: ["summary", false] });
-        setResult("started");
+        toast.success(t("setupStarted"));
         onComplete?.(
           root.id,
           task.id,
           (root.kind ?? setup.kind) as SetupKind | undefined,
         );
       } else {
-        setResult("enabled");
+        toast.success(t("setupEnabled"));
         if (setup.from) onComplete?.(undefined, undefined, setup.kind);
       }
     } catch (failure) {
@@ -147,7 +148,6 @@ export function useProviderSetup(
     incompatible,
     unavailable,
     phase,
-    result,
     error,
     failurePhase,
     run,

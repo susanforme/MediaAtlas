@@ -32,14 +32,16 @@ body {
   margin: 0;
   min-width: 320px;
 }
-button,
-select,
-input,
-textarea {
-  font: inherit;
+@layer base {
+  button,
+  select,
+  input,
+  textarea {
+    font: inherit;
+  }
 }
 button:not(:disabled),
-select {
+select:not(:disabled) {
   cursor: pointer;
 }
 button,

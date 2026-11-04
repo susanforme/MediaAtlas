@@ -1,13 +1,16 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { DesktopError } from "../../api/desktop";
 import {
   type AuthMethod,
   type AuthStorage,
   providerAuthApi,
 } from "../../api/provider-auth";
+import { toast } from "../../components/ui/sonner";
 
 export function useProviderAuth(providerId: string) {
+  const { t } = useTranslation();
   const client = useQueryClient();
   const active = useRef(false);
   const operation = useRef(false);
@@ -16,9 +19,9 @@ export function useProviderAuth(providerId: string) {
   const [secret, setSecret] = useState("");
   const [affiliate, setAffiliate] = useState("");
   const [pending, setPending] = useState<"save" | "clear" | null>(null);
-  const [outcome, setOutcome] = useState<
-    "saved" | "cleared" | "save_failed" | "clear_failed" | null
-  >(null);
+  const [outcome, setOutcome] = useState<"save_failed" | "clear_failed" | null>(
+    null,
+  );
   const [error, setError] = useState<unknown>();
   const [invalid, setInvalid] = useState(false);
   const status = useQuery({
@@ -48,7 +51,7 @@ export function useProviderAuth(providerId: string) {
     event.preventDefault();
     await saveCredential();
   }
-  async function saveCredential(): Promise<boolean> {
+  async function saveCredential(notify = true): Promise<boolean> {
     if (operation.current) return false;
     const submitted =
       method === "affiliate"
@@ -87,7 +90,8 @@ export function useProviderAuth(providerId: string) {
       if (!saved.configured) throw new DesktopError("invalid_response");
       if (active.current) {
         client.setQueryData(["provider-auth", providerId], saved);
-        setOutcome("saved");
+        if (notify && saved.status !== "cleanup_pending")
+          toast.success(t("providerAuthSaved"));
         return true;
       }
       return false;
@@ -120,7 +124,8 @@ export function useProviderAuth(providerId: string) {
       if (cleared.configured) throw new DesktopError("invalid_response");
       if (active.current) {
         client.setQueryData(["provider-auth", providerId], cleared);
-        setOutcome("cleared");
+        if (cleared.status !== "cleanup_pending")
+          toast.success(t("providerAuthCleared"));
       }
     } catch (failure: unknown) {
       if (active.current) {

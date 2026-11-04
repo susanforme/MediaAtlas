@@ -1,10 +1,8 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
-  Clapperboard,
   FolderOpen,
   Layers3,
   ListTodo,
-  Music2,
   Search,
   Settings2,
   ShieldCheck,
@@ -15,53 +13,56 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
+import { Toaster } from "../ui/sonner";
+import { LibraryNavigation } from "./library-navigation";
 import { useTaskEvents } from "./use-task-events";
+import { useWindowChrome, type WindowChrome } from "./use-window-controls";
+import { WindowControls } from "./window-controls";
 import "./shell.css";
 
-const browseEntries = [
-  ["/library", "library", Clapperboard],
-  ["/music", "music", Music2],
-] as const;
 const workEntries = [
   ["/roots", "roots", FolderOpen],
   ["/tools", "videoTools", Wrench],
   ["/tasks", "tasks", ListTodo],
 ] as const;
 
-function Sidebar() {
+function Sidebar({ chrome }: { chrome: WindowChrome }) {
   const { t } = useTranslation();
   return (
     <aside className="app-sidebar">
-      <div className="app-brand">
+      <div
+        className="app-brand"
+        data-tauri-drag-region={chrome.platform ? "deep" : undefined}
+      >
         <span className="app-brand-icon">
           <Layers3 size={23} aria-hidden="true" />
         </span>
         <span className="app-brand-name">MediaAtlas</span>
       </div>
       <nav className="app-nav" aria-label={t("local")}>
-        {[browseEntries, workEntries].map((group, index) => (
-          <div className="app-nav-group" key={group[0][0]}>
-            {index > 0 && <div className="app-nav-divider" />}
-            {group.map(([to, label, Icon]) => (
-              <Button asChild variant="ghost" key={to} className="app-nav-item">
-                <Link
-                  to={to}
-                  activeOptions={{ exact: true }}
-                  activeProps={{ className: "active" }}
-                  aria-label={t(label)}
-                >
-                  <Icon size={20} aria-hidden="true" />
-                  <span className="app-nav-label">{t(label)}</span>
-                </Link>
-              </Button>
-            ))}
-          </div>
-        ))}
+        <LibraryNavigation />
+        <div className="app-nav-group">
+          <div className="app-nav-divider" />
+          {workEntries.map(([to, label, Icon]) => (
+            <Button asChild variant="ghost" key={to} className="app-nav-item">
+              <Link
+                to={to}
+                activeOptions={{ exact: true, includeSearch: false }}
+                activeProps={{ className: "active" }}
+                aria-label={t(label)}
+              >
+                <Icon size={20} aria-hidden="true" />
+                <span className="app-nav-label">{t(label)}</span>
+              </Link>
+            </Button>
+          ))}
+        </div>
       </nav>
       <div className="app-sidebar-bottom">
         <Button asChild variant="ghost" className="app-nav-item">
           <Link
             to="/settings"
+            activeOptions={{ includeSearch: false }}
             activeProps={{ className: "active" }}
             aria-label={t("settings")}
           >
@@ -74,7 +75,7 @@ function Sidebar() {
   );
 }
 
-function Toolbar() {
+function Toolbar({ chrome }: { chrome: WindowChrome }) {
   const { t, i18n } = useTranslation();
   const pathname = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
@@ -84,11 +85,22 @@ function Toolbar() {
     void navigate({ to: "/library", search: { q: query.trim() || undefined } });
   }
   return (
-    <header className="app-toolbar">
+    <header
+      className="app-toolbar"
+      data-tauri-drag-region={chrome.platform ? "deep" : undefined}
+    >
       {pathname === "/library" ? (
-        <div id="library-toolbar-search" className="app-toolbar-search" />
+        <div
+          id="library-toolbar-search"
+          className="app-toolbar-search"
+          data-tauri-drag-region="false"
+        />
       ) : (
-        <form className="app-toolbar-search" onSubmit={submit}>
+        <form
+          className="app-toolbar-search"
+          onSubmit={submit}
+          data-tauri-drag-region="false"
+        >
           <Search className="app-search-icon" size={19} aria-hidden="true" />
           <Input
             aria-label={t("search")}
@@ -106,7 +118,7 @@ function Toolbar() {
           </Button>
         </form>
       )}
-      <div className="app-toolbar-actions">
+      <div className="app-toolbar-actions" data-tauri-drag-region="false">
         <ShieldCheck className="app-local-icon" size={19} aria-hidden="true" />
         <Select
           className="app-language"
@@ -118,6 +130,7 @@ function Toolbar() {
           <option value="en-US">English</option>
         </Select>
       </div>
+      <WindowControls chrome={chrome} />
     </header>
   );
 }
@@ -126,6 +139,7 @@ export function AppShell() {
   const { i18n } = useTranslation();
   const pathname = useLocation({ select: (location) => location.pathname });
   const main = useRef<HTMLDivElement>(null);
+  const chrome = useWindowChrome();
   useTaskEvents();
   useEffect(() => {
     // Route changes start at the content top; in-page field edits keep position.
@@ -135,14 +149,18 @@ export function AppShell() {
     document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";
   }, [i18n.resolvedLanguage]);
   return (
-    <div className="app-shell">
-      <Sidebar />
+    <div
+      className="app-shell"
+      data-window-platform={chrome.platform ?? undefined}
+    >
+      <Sidebar chrome={chrome} />
       <div className="app-main" ref={main}>
-        <Toolbar />
+        <Toolbar chrome={chrome} />
         <main className="app-content">
           <Outlet />
         </main>
       </div>
+      <Toaster />
     </div>
   );
 }

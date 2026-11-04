@@ -20,7 +20,13 @@ import {
 } from "../../api/library";
 import { providerAuthApi } from "../../api/provider-auth";
 import { type ProviderView, providerApi } from "../../api/providers";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import { PrivacyProvider } from "./context";
 import { RootsPage } from "./pages";
 
@@ -249,9 +255,15 @@ it.each([
     );
     expect(libraryApi.start).not.toHaveBeenCalled();
     expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root");
-    expect(await screen.findByRole("status")).toHaveTextContent(
-      "Library update started in the background.",
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+        "Library update started in the background.",
+      ),
     );
+    expect(
+      screen.queryByText("Library update started in the background."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View library" })).toBeVisible();
   },
 );
 
@@ -592,9 +604,14 @@ it("allows local indexing with an unconfigured source and labels only the backgr
   await screen.findByText("/media/Movies");
   await screen.findByText("Local media can be added now");
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Library update started in the background.",
+    ),
+  );
   expect(
-    await screen.findByText("Library update started in the background."),
-  ).toBeInTheDocument();
+    screen.queryByText("Library update started in the background."),
+  ).not.toBeInTheDocument();
   expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root");
   expect(screen.queryByText("Scan complete")).not.toBeInTheDocument();
 });

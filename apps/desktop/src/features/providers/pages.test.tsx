@@ -4,10 +4,14 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DesktopError } from "../../api/desktop";
 import { providerApi } from "../../api/providers";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { fixtureSnapshot, fixtureTask } from "./fixtures";
 import { NetworkInspectorPage, ProvidersPage, ProviderTasks } from "./pages";
 
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     to,
@@ -82,8 +86,10 @@ it("requires an explicit user action to run and disable the fixture", async () =
       "en-US",
     ),
   );
-  await screen.findByText(
-    "Task submitted. View its result in the task center.",
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Task submitted. View its result in the task center.",
+    ),
   );
   fireEvent.click(screen.getByLabelText("Enable provider"));
   await waitFor(() =>

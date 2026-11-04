@@ -19,7 +19,6 @@ export function MaintenancePage({
     setPreview,
     error,
     setError,
-    message,
     exportPath,
     status,
     makePreview,
@@ -166,11 +165,6 @@ export function MaintenancePage({
               {t("maintenanceCancel")}
             </Button>
           </div>
-        )}
-        {message && (
-          <p role="status" className="notice">
-            {message}
-          </p>
         )}
         {error !== undefined && <ErrorNotice error={error} />}
       </div>

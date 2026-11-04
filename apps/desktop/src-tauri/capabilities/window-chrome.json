@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "main-window-chrome",
+  "description": "Only the local main window can drag, minimize, maximize, restore and close itself.",
+  "windows": ["main"],
+  "platforms": ["windows", "macOS"],
+  "permissions": [
+    "core:window:allow-is-maximized",
+    "core:window:allow-is-focused",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize"
+  ],
+  "local": true
+}

@@ -7,6 +7,7 @@ import {
   type CachePreview,
   type RestorePreview,
 } from "../../api/maintenance";
+import { toast } from "../../components/ui/sonner";
 import { usePrivacy } from "../library/context";
 
 type Preview =
@@ -21,7 +22,6 @@ export function useMaintenance() {
   const [working, setWorking] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<unknown>();
-  const [message, setMessage] = useState("");
   const [exportPath, setExportPath] = useState("");
   const status = useQuery({
     queryKey: ["database-maintenance"],
@@ -31,7 +31,6 @@ export function useMaintenance() {
     generation.current += 1;
     if (!includeAdult) setExportPath("");
     setPreview(null);
-    setMessage("");
     return () => {
       generation.current += 1;
     };
@@ -41,7 +40,6 @@ export function useMaintenance() {
     busy.current = true;
     setWorking(true);
     setError(undefined);
-    setMessage("");
     const epoch = generation.current;
     try {
       await action();
@@ -73,14 +71,14 @@ export function useMaintenance() {
     await run(async () => {
       if (selected.kind === "backup") {
         await api.backupConfirm(selected.value.id);
-        if (epoch === generation.current) setMessage(t("maintenanceSaved"));
+        if (epoch === generation.current) toast.success(t("maintenanceSaved"));
       } else if (selected.kind === "restore") {
         await api.restoreConfirm(selected.value.id);
-        if (epoch === generation.current) setMessage(t("maintenanceQueued"));
+        if (epoch === generation.current) toast.success(t("maintenanceQueued"));
       } else {
         const result = await api.cacheConfirm(selected.value.id);
         if (epoch === generation.current)
-          setMessage(
+          toast.success(
             t("maintenanceCacheCleared", { files: result.removed_files }),
           );
       }
@@ -93,7 +91,7 @@ export function useMaintenance() {
       const exported = await api.diagnostics();
       if (epoch === generation.current) {
         setExportPath(exported.path);
-        setMessage(t("maintenanceExported"));
+        toast.success(t("maintenanceExported"));
       }
     });
   }
@@ -103,7 +101,6 @@ export function useMaintenance() {
     setPreview,
     error,
     setError,
-    message,
     exportPath,
     status,
     makePreview,

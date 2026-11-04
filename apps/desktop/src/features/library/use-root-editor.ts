@@ -9,6 +9,7 @@ import {
   type RootView,
   type ScanTask,
 } from "../../api/library";
+import { toast } from "../../components/ui/sonner";
 import {
   directoryName,
   newRootInput,
@@ -44,6 +45,7 @@ export function useRootEditor(
     task?: ScanTask;
   } | null>(null);
   const epoch = useRef(0);
+  const mounted = useRef(true);
   const nameEdited = useRef(false);
   const operationLock = useRef(false);
   const pickerLock = useRef(false);
@@ -68,12 +70,13 @@ export function useRootEditor(
     }
     hadAdultAccess.current = adultAvailable;
   }, [adultAvailable, form?.kind]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       epoch.current += 1;
-    },
-    [],
-  );
+    };
+  }, []);
   const save = useMutation({
     mutationFn: (input: RootInput) => libraryApi.saveRoot(input),
   });
@@ -90,8 +93,13 @@ export function useRootEditor(
   const refresh = useMutation({
     mutationFn: (root: RootView) => libraryApi.sync(root.id),
     onSuccess: (task, root) => {
-      if (root.kind === "adult_video" && !hadAdultAccess.current) return;
+      if (
+        !mounted.current ||
+        (root.kind === "adult_video" && !hadAdultAccess.current)
+      )
+        return;
       setCompleted({ root, task });
+      toast.success(t("autoRootStarted"));
       void client.invalidateQueries({
         queryKey:
           root.kind === "adult_video" ? ["adult", "scan-tasks"] : ["tasks"],
@@ -234,10 +242,12 @@ export function useRootEditor(
         });
         if (started !== epoch.current || !permitted.current) return;
         setCompleted({ root, task });
+        toast.success(t("autoRootStarted"));
         setForm(null);
         onScanStarted?.(root.id, task.id, root.kind);
       } else {
         setCompleted({ root });
+        toast.success(t("rootSaved"));
         setForm(null);
         onSaved?.(root);
       }

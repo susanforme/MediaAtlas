@@ -1,0 +1,195 @@
+{
+  "date": "2026-11-04",
+  "runtime": "Real Chromium browser, synthetic window/IPC and clearly labelled test artwork; no native system control is executed",
+  "source_commit": "0ec084f92ce5feac104ef3c98ad27d85a956dec7",
+  "source_sha256": {
+    "apps/desktop/src/components/shell/app-shell.tsx": "8e33a01fc7f80e7c5124bccf0acad209ba589b86de626cdb1bb139d985752dc9",
+    "apps/desktop/src/components/shell/shell.css": "bd8156be865d6897b34adac08ab46df41c4d284fe96cd9117fec09237323f3da",
+    "apps/desktop/src/components/shell/library-navigation.tsx": "2d5f499e091fe457145f247438859100965ed336f1e02c80aa4d1729fe144275",
+    "apps/desktop/src/components/shell/use-window-controls.ts": "f429399fa5a55731722725cf907d24b2e2af322aa9ea905cbc291d5a249f083d",
+    "apps/desktop/src/components/shell/window-controls.tsx": "7ecc8f541f4ca0bdd93fdc7e850efda680b6c64e0247a164b9d74b43e947096e",
+    "apps/desktop/src/components/shell/window-chrome.css": "03474e7907c80cab0b4db4ce3bf26fc3c3d76ac7ddd7afa7be2c6c6aebecb1b2",
+    "apps/desktop/src/components/ui/sonner.tsx": "dd8ec1847b30cebccc71b4771bcef8f76ff6095ac68af663c9d7b6a8363c4d10",
+    "apps/desktop/src/components/ui/sonner.css": "75a4da4fb8ed158233dbdd37bdaee29cdedb08c38a7da16ec90993c0774a3839",
+    "apps/desktop/src/features/library/native-open.tsx": "eee6981fd67de5236726e84dbaa0c429d5723f345257ece0dddc3f85e07de588"
+  },
+  "observations": {
+    "windows_commands": [
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|toggle_maximize",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|toggle_maximize",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|minimize",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|close",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|minimize",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_maximized",
+        "args": {
+          "label": "main"
+        }
+      },
+      {
+        "cmd": "plugin:window|is_focused",
+        "args": {
+          "label": "main"
+        }
+      }
+    ],
+    "toast_transition": "0s",
+    "native_open_requests": [
+      {
+        "cmd": "library_open",
+        "input": {
+          "file_id": "file-0"
+        }
+      }
+    ]
+  },
+  "checks": [
+    "clickable library parent clears category",
+    "movie/tv/anime links preserve active state with q/sort/health",
+    "adult category hidden by disabled setting",
+    "fixed sidebar while right main scrolls",
+    "Windows buttons dispatch real SDK commands into explicit mock; maximize/restore state, duplicate minimize suppression, focus, safe error/retry",
+    "drag opt-out on actual interactive regions",
+    "toolbar/control non-overlap at1648 and390",
+    "one Sonner toast on system-open request, closes version picker, no inline success duplicate, localized region/dismiss, keyboard dismissal",
+    "reduced motion removes toast transitions",
+    "Mac Overlay reserve only, no fabricated HTML traffic lights",
+    "no page errors or horizontal overflow"
+  ],
+  "limits": [
+    "No native Windows/macOS host or OS interactions verified. Synthetic close/minimize do not change the browser window.",
+    "Mac screenshots show reserved space; system traffic lights exist only in the real Tauri Overlay window.",
+    "No real library, provider credentials, files, or native application were used."
+  ],
+  "screenshots": {
+    "fixture-fixed-sidebar-scroll-1648.png": "2e83b9b3fad338efc8e5c26f51591ce926861debceae09366a2a98b0524b24ea",
+    "fixture-library-filter-selection-1648.png": "cdfa22c926101df4012afa4b10add88911992371976a338c4901e061f13fdfce",
+    "fixture-macos-narrow-390.png": "8dbb2d433e0d2275eaab8a9f2f9c813d0e5350fd10e2829aa71b8b4adffed51f",
+    "fixture-macos-overlay-spacing-1648.png": "ee034c442a0c88fc77dc1a9e695361dbbc03af293093333ff6bf50fb3a65d59b",
+    "fixture-sonner-native-open-1648.png": "309ab317f65c4961c30510fe1752560ab9ce9fe31702467909ed74a171e5eb3a",
+    "fixture-window-error-recovery-1648.png": "819d240d5b84ba8d05c90f523a976d45d5a15a331daadc9ca189976d3caaf55a",
+    "fixture-windows-library-1648.png": "8a972ab11246e3e188beda7476bbf4d6d701947979edbf884f4816865f63a90c",
+    "fixture-windows-narrow-keyboard-390.png": "84a11591536bf4c6326ccd0e841bcea523e3c0a6b317bc4b16705aefd5683211"
+  }
+}

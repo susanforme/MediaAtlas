@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next";
 import { libraryApi, type MediaFile } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
 import { Button } from "../../components/ui/button";
+import { toast } from "../../components/ui/sonner";
 import { ErrorNotice } from "./shared";
 import "./native-open-translations";
 
@@ -59,8 +60,10 @@ export function NativeOpen({
     mutationFn: async (fileId: string) => {
       const started = currentContext.current;
       const result = await nativeOpenApi.open(fileId, adult);
-      if (active.current && started === currentContext.current)
+      if (active.current && started === currentContext.current) {
         setChoices(undefined);
+        if (result.requested) toast.success(t("nativeRequested"));
+      }
       return result;
     },
   });
@@ -110,7 +113,6 @@ export function NativeOpen({
       {(choose.error || launch.error) && (
         <ErrorNotice error={choose.error ?? launch.error} />
       )}
-      {launch.isSuccess && <p role="status">{t("nativeRequested")}</p>}
     </>
   );
 }

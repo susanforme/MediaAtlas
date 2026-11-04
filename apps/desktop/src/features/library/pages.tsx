@@ -270,27 +270,21 @@ export function RootsPage({
           </div>
         </form>
       )}
-      {completed && (
-        <div
-          className="notice mb-6 flex flex-wrap items-center justify-between gap-3"
-          role="status"
-        >
-          <p>{t(completed.task ? "autoRootStarted" : "rootSaved")}</p>
-          {completed.task && (
-            <Button variant="outline" asChild>
-              <Link
-                to="/library"
-                search={{
-                  root: completed.root.id,
-                  ...(completed.root.kind === "adult_video"
-                    ? { kind: "adult_video" as const }
-                    : {}),
-                }}
-              >
-                {t("autoBrowseLibrary")}
-              </Link>
-            </Button>
-          )}
+      {completed?.task && (
+        <div className="mb-6 flex flex-wrap items-center gap-3">
+          <Button variant="outline" asChild>
+            <Link
+              to="/library"
+              search={{
+                root: completed.root.id,
+                ...(completed.root.kind === "adult_video"
+                  ? { kind: "adult_video" as const }
+                  : {}),
+              }}
+            >
+              {t("autoBrowseLibrary")}
+            </Link>
+          </Button>
         </div>
       )}
       {remove && (

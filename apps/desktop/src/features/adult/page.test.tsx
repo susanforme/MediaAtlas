@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ComponentProps } from "react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -7,6 +13,7 @@ import { type AdultSettings, adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
 import { providerApi } from "../../api/providers";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { fixtureSnapshot } from "../providers/fixtures";
 import {
@@ -39,6 +46,9 @@ const privacy = vi.hoisted(() => ({
   error: undefined,
   unlock: vi.fn(),
   lock: vi.fn(),
+}));
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 vi.mock("../library/context", () => ({ usePrivacy: () => privacy }));
 vi.mock("@tanstack/react-router", () => ({
@@ -297,7 +307,9 @@ it("uses catalog-specific metadata and requires separate merge and output confir
   expect(adultApi.confirm).not.toHaveBeenCalled();
   expect(adultApi.outputExecute).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Save metadata" }));
-  await screen.findByText("Metadata saved");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith("Metadata saved"),
+  );
   fireEvent.click(
     screen.getByRole("button", { name: "Preview sidecar output" }),
   );
@@ -306,7 +318,9 @@ it("uses catalog-specific metadata and requires separate merge and output confir
   fireEvent.click(
     screen.getByRole("button", { name: "Confirm and write sidecars" }),
   );
-  await screen.findByText("Sidecar output recorded");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith("Sidecar output recorded"),
+  );
   expect(adultApi.outputExecute).toHaveBeenCalledWith("synthetic-output");
 });
 it("downloads only a requested validated thumbnail and keeps artwork selection independent", async () => {
@@ -529,4 +543,37 @@ it("uses the selected resource and its parsed catalog without asking the user to
   );
   expect(adultApi.toolsMedia).not.toHaveBeenCalled();
   expect(adultApi.confirm).not.toHaveBeenCalled();
+});
+
+it("does not notify an output result after the private workspace unmounts", async () => {
+  let finish!: (
+    value: Awaited<ReturnType<typeof adultApi.outputExecute>>,
+  ) => void;
+  vi.mocked(adultApi.outputExecute).mockReturnValue(
+    new Promise((resolve) => {
+      finish = resolve;
+    }),
+  );
+  const view = show(<AdultOutput mediaId="synthetic-media" />);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Preview sidecar output" }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm and write sidecars" }),
+  );
+  await waitFor(() =>
+    expect(adultApi.outputExecute).toHaveBeenCalledWith("synthetic-output"),
+  );
+  view.unmount();
+  await act(async () => {
+    finish({
+      state: "succeeded",
+      schema_version: 1,
+      preview_id: "synthetic-output",
+      written: 1,
+      preserved: 0,
+      already_applied: false,
+    });
+  });
+  expect(toast.success).not.toHaveBeenCalled();
 });

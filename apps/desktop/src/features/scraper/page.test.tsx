@@ -15,6 +15,7 @@ import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import { type ReviewQueue, reviewQueueApi } from "../../api/review-queue";
 import { scraperApi, scraperOutputApi } from "../../api/scraper";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { fixtureSnapshot } from "../providers/fixtures";
 import {
@@ -24,6 +25,10 @@ import {
   syntheticSearch,
 } from "./fixtures";
 import { ScraperPage } from "./page";
+
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 
 const recoveryNavigate = vi.hoisted(() => vi.fn());
 vi.mock("@tanstack/react-router", () => ({
@@ -211,7 +216,11 @@ async function confirmMerge() {
 }
 async function openOutputPreview() {
   // Query notifications are asynchronous; observe confirmation before its next action.
-  await screen.findByText("Metadata confirmed. 1 fields applied.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Metadata confirmed. 1 fields applied.",
+    ),
+  );
   const button = screen.getByRole("button", {
     name: "Preview NFO and poster output",
   });
@@ -288,7 +297,11 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
     selected_artwork: [],
   });
   await confirmMerge();
-  await screen.findByText("Metadata confirmed. 1 fields applied.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Metadata confirmed. 1 fields applied.",
+    ),
+  );
   expect(scraperApi.confirm).toHaveBeenCalledWith("merge-1");
   expect(scraperOutputApi.preview).not.toHaveBeenCalled();
   await openOutputPreview();
@@ -300,7 +313,11 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
   fireEvent.click(
     screen.getByRole("button", { name: "Confirm and write sidecars" }),
   );
-  await screen.findByText("Output recorded: 1 written, 0 preserved.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Output recorded: 1 written, 0 preserved.",
+    ),
+  );
   expect(scraperOutputApi.execute).toHaveBeenCalledWith("output-1");
 });
 it("loads only an explicitly requested validated thumbnail without changing artwork selection", async () => {
@@ -501,8 +518,10 @@ it("restores saved candidates without issuing a new provider search", async () =
   show();
   await screen.findByRole("button", { name: "Restore candidates" });
   fireEvent.click(screen.getByRole("button", { name: "Restore candidates" }));
-  await screen.findByText(
-    "Saved candidates restored. No new provider search was sent.",
+  await waitFor(() =>
+    expect(toast.info).toHaveBeenCalledWith(
+      "Saved candidates restored. No new provider search was sent.",
+    ),
   );
   expect(scraperApi.searchPreview).toHaveBeenCalledWith("saved-run");
   expect(scraperApi.search).not.toHaveBeenCalled();
@@ -518,7 +537,11 @@ it("discards an abandoned output preview on component unmount without executing 
     expect(screen.getByRole("checkbox", { name: /^Title/ })).toBeDisabled(),
   );
   await confirmMerge();
-  await screen.findByText("Metadata confirmed. 1 fields applied.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Metadata confirmed. 1 fields applied.",
+    ),
+  );
   await openOutputPreview();
   await screen.findByText("/synthetic/library/film.nfo");
   view.unmount();
@@ -919,9 +942,11 @@ it("discards a late output preview from a queue item after an external route cha
       already_applied: false,
     });
   });
-  expect(
-    await screen.findByText("Metadata confirmed. 1 fields applied."),
-  ).toBeVisible();
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Metadata confirmed. 1 fields applied.",
+    ),
+  );
   let finish!: (value: typeof syntheticOutput) => void;
   vi.mocked(scraperOutputApi.preview).mockImplementation(
     () =>
@@ -1362,7 +1387,11 @@ it("binds a durable checkpoint before explicit confirmation and leaves sidecar o
     await screen.findByRole("button", { name: "Choose this candidate" }),
   );
   await confirmMerge();
-  await screen.findByText("Metadata confirmed. 1 fields applied.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Metadata confirmed. 1 fields applied.",
+    ),
+  );
   expect(reviewQueueApi.checkpoint).toHaveBeenCalledWith({
     queue_id: savedSessionId,
     media_id: "media-1",
@@ -1646,7 +1675,11 @@ it("confirms exactly the current proof when clicked in its first enabled commit"
   try {
     // Do not pre-flush passive effects with act before the observer can click.
     finish(syntheticMerge);
-    await screen.findByText("Metadata confirmed. 1 fields applied.");
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Metadata confirmed. 1 fields applied.",
+      ),
+    );
     expect(click.clicks()).toBe(1);
     expect(scraperApi.confirm).toHaveBeenCalledExactlyOnceWith("merge-1");
     expect(scraperOutputApi.preview).not.toHaveBeenCalled();
@@ -1682,7 +1715,11 @@ it.each(["execute", "discard"] as const)(
     try {
       finish(syntheticOutput);
       if (action === "execute") {
-        await screen.findByText("Output recorded: 1 written, 0 preserved.");
+        await waitFor(() =>
+          expect(toast.success).toHaveBeenCalledWith(
+            "Output recorded: 1 written, 0 preserved.",
+          ),
+        );
       } else {
         await waitFor(() =>
           expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),

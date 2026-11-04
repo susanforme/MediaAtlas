@@ -10,6 +10,7 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { libraryApi, type RootView } from "../../api/library";
 import { maintenanceApi, type OrganizationPlan } from "../../api/organization";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { MediaToolsPage, OrganizationPanel } from "./page";
 
@@ -23,6 +24,9 @@ const api = vi.hoisted(() => ({
   history: vi.fn(),
   logs: vi.fn(),
   plan: vi.fn(),
+}));
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
 }));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
@@ -158,6 +162,9 @@ it("defaults to Preserve, shows every attachment and requires explicit plan conf
     screen.getByRole("button", { name: "Confirm and execute this plan" }),
   );
   await waitFor(() => expect(api.execute).toHaveBeenCalledWith("plan"));
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith("Operation result: Completed"),
+  );
   expect(api.preview).toHaveBeenCalledWith(
     expect.objectContaining({
       media_item_id: "media",

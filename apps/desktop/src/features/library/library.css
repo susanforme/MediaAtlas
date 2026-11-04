@@ -88,8 +88,7 @@
 .library-compact-select select {
   height: 36px;
   padding-block: 6px;
-  border-color: transparent;
-  background: var(--color-muted);
+  background-color: var(--color-muted);
 }
 .library-control-row > .library-search {
   flex: 1 1 200px;

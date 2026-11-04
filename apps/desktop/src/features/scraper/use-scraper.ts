@@ -24,6 +24,7 @@ import {
   type VideoKind,
   type VideoMetadata,
 } from "../../api/scraper";
+import { toast } from "../../components/ui/sonner";
 import { type FieldPreset, selectScraperFields } from "./field-selection";
 import {
   buildMergePreview,
@@ -43,7 +44,7 @@ export function useScraper(
     failed: () => void;
   },
 ) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const [kind, setKind] = useState<VideoKind>("movie");
   const [title, setTitle] = useState("");
@@ -276,6 +277,7 @@ export function useScraper(
       if (!current(epoch)) return;
       clearDetail();
       setSearch(result);
+      toast.info(t("scraperRestored"));
       const saved = history.data?.find((entry) => entry.id === runId);
       if (saved && !target) {
         setKind(saved.query.kind);
@@ -337,8 +339,13 @@ export function useScraper(
         ? review.confirmPreview(action.previewId)
         : scraperApi.confirm(action.previewId);
     },
-    onSuccess: (_result, action) => {
+    onSuccess: (result, action) => {
       if (!current(action.epoch)) return;
+      toast.success(
+        t(result.already_applied ? "scraperAlready" : "scraperConfirmed", {
+          count: result.applied_fields,
+        }),
+      );
       void client.invalidateQueries({ queryKey: ["media"] });
       void client.invalidateQueries({ queryKey: ["detail"] });
       void client.invalidateQueries({ queryKey: ["video-source-detail"] });
@@ -375,8 +382,14 @@ export function useScraper(
         throw new DesktopError("request_failed");
       return scraperOutputApi.execute(action.previewId);
     },
-    onSuccess: (_result, action) => {
+    onSuccess: (result, action) => {
       if (!current(action.epoch)) return;
+      toast.success(
+        t("scraperOutputDone", {
+          written: result.written,
+          preserved: result.preserved,
+        }),
+      );
       void client.invalidateQueries({ queryKey: ["media"] });
       void client.invalidateQueries({ queryKey: ["detail"] });
       void client.invalidateQueries({ queryKey: ["video-source-detail"] });

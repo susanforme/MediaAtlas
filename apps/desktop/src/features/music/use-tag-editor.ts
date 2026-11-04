@@ -1,14 +1,24 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   type MusicReleaseGraph,
   musicApi,
   type TagPreview,
   type TagResult,
 } from "../../api/music";
+import { toast } from "../../components/ui/sonner";
 import { tagDefaults } from "./tag-model";
 
 export function useTagEditor(fileId: string, graph: MusicReleaseGraph) {
+  const { t } = useTranslation();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const tags = useQuery({
     queryKey: ["music-tags", fileId],
     queryFn: () => musicApi.read(fileId),
@@ -48,6 +58,12 @@ export function useTagEditor(fileId: string, graph: MusicReleaseGraph) {
         ? musicApi.restoreExecute(preview?.id ?? "")
         : musicApi.execute(preview?.id ?? ""),
     onSuccess: (r) => {
+      if (!mounted.current) return;
+      const message = t("musicWritten", {
+        state: t(`musicState_${r.state}`, { defaultValue: t("musicUnknown") }),
+      });
+      if (r.state === "succeeded") toast.success(message);
+      else toast.error(message);
       setOperation(r);
       setPreview(undefined);
       setConfirmed(false);

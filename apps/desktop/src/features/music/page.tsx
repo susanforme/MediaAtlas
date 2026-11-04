@@ -7,12 +7,14 @@ import {
   type MusicReleaseGraph,
   musicApi,
 } from "../../api/music";
+import { Badge } from "../../components/ui/badge";
 import { Anchor, Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
+import { toast } from "../../components/ui/sonner";
 import { Empty, ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { tagFields } from "./tag-model";
 import { useTagEditor } from "./use-tag-editor";
@@ -178,11 +180,14 @@ export function MusicToolsPage() {
             <ReleaseContents graph={selected} />
             <Button
               disabled={add.isPending || add.isSuccess}
-              onClick={() => add.mutate(selectedMbid)}
+              onClick={() =>
+                add.mutate(selectedMbid, {
+                  onSuccess: () => toast.success(t("musicImported")),
+                })
+              }
             >
               {t("musicImport")}
             </Button>
-            {add.isSuccess && <p role="status">{t("musicImported")}</p>}
           </section>
         )}
         {add.error && <ErrorNotice error={add.error} />}
@@ -484,7 +489,14 @@ function LocalAudioFiles({ graph }: { graph: MusicReleaseGraph }) {
             <Button
               variant="outline"
               disabled={open.isPending}
-              onClick={() => open.mutate(file.file_id)}
+              onClick={() =>
+                open.mutate(file.file_id, {
+                  onSuccess: (result) => {
+                    if (result.requested)
+                      toast.success(t("musicOpenRequested"));
+                  },
+                })
+              }
             >
               {t("musicOpenNative")}
             </Button>
@@ -494,9 +506,6 @@ function LocalAudioFiles({ graph }: { graph: MusicReleaseGraph }) {
         <p>{t("musicNoFiles")}</p>
       )}
       {open.error && <ErrorNotice error={open.error} />}
-      {open.isSuccess && open.data.requested && (
-        <p role="status">{t("musicOpenRequested")}</p>
-      )}
     </div>
   );
 }
@@ -818,13 +827,15 @@ export function TagEditor({
       )}
       {operation && (
         <div className="space-y-3">
-          <p role="status">
-            {t("musicWritten", {
-              state: t(`musicState_${operation.state}`, {
-                defaultValue: t("musicUnknown"),
-              }),
+          <Badge
+            variant={
+              operation.state === "succeeded" ? "secondary" : "destructive"
+            }
+          >
+            {t(`musicState_${operation.state}`, {
+              defaultValue: t("musicUnknown"),
             })}
-          </p>
+          </Badge>
           <Button
             variant="outline"
             disabled={

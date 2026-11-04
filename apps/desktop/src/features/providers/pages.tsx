@@ -16,6 +16,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { toast } from "../../components/ui/sonner";
 import { usePrivacy } from "../library/context";
 import {
   Empty,
@@ -63,6 +64,7 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
       }),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["providers"] });
+      toast.success(t("providerConfigSaved"));
     },
   });
   return (
@@ -110,7 +112,6 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
         </Button>
         {invalid && <p role="alert">{t("providerConfigInvalid")}</p>}
         {save.isError && <ErrorNotice error={save.error} />}{" "}
-        {save.isSuccess && <p role="status">{t("providerConfigSaved")}</p>}
       </form>
     </Details>
   );
@@ -154,7 +155,10 @@ function ProviderCard({
         query.trim(),
         i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
       ),
-    onSuccess: refresh,
+    onSuccess: () => {
+      refresh();
+      toast.success(t("providerJobStarted"));
+    },
   });
   return (
     <article className="panel">
@@ -252,11 +256,6 @@ function ProviderCard({
             </Link>
           </Button>
         </div>
-      )}
-      {provider.descriptor.fixture && start.isSuccess && (
-        <p role="status" className="mt-3">
-          {t("providerJobStarted")}
-        </p>
       )}
       <ProviderConfiguration provider={provider} />
       <Details className="mt-4">

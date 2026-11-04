@@ -4,9 +4,13 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DesktopError } from "../../api/desktop";
 import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { ProviderAuthSettings } from "./provider-auth";
 
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 vi.mock("../../api/provider-auth", async (original) => ({
   ...(await original<typeof import("../../api/provider-auth")>()),
   providerAuthApi: { status: vi.fn(), save: vi.fn(), clear: vi.fn() },
@@ -65,9 +69,17 @@ it("defaults to OS storage, clears the password before saving and never enables 
   fireEvent.change(input, { target: { value: "synthetic-bearer-token" } });
   fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
   expect(input).toHaveValue("");
-  await screen.findByText(
-    "Authentication saved. Provider enablement is unchanged.",
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Authentication saved. Provider enablement is unchanged.",
+    ),
   );
+  expect(
+    screen.queryByText(
+      "Authentication saved. Provider enablement is unchanged.",
+    ),
+  ).not.toBeInTheDocument();
+  expect(toast.success).toHaveBeenCalledTimes(1);
   expect(providerAuthApi.save).toHaveBeenCalledWith({
     provider_id: "tmdb",
     method: "bearer",
@@ -106,8 +118,10 @@ it("requires an explicit session-only selection and supports the TMDB v3 key met
     target: { value: "synthetic-v3-key" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
-  await screen.findByText(
-    "Authentication saved. Provider enablement is unchanged.",
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Authentication saved. Provider enablement is unchanged.",
+    ),
   );
   expect(providerAuthApi.save).toHaveBeenCalledWith({
     provider_id: "tmdb",
@@ -208,6 +222,7 @@ it("ignores late save results after changing providers", async () => {
     ).not.toBeInTheDocument(),
   );
   expect(screen.queryByLabelText("Credential")).not.toBeInTheDocument();
+  expect(toast.success).not.toHaveBeenCalled();
 });
 it("deletes authentication and clears input without echoing the saved value", async () => {
   vi.mocked(providerAuthApi.status).mockResolvedValue({
@@ -222,7 +237,9 @@ it("deletes authentication and clears input without echoing the saved value", as
   fireEvent.click(
     screen.getByRole("button", { name: "Delete saved authentication" }),
   );
-  await screen.findByText("Saved authentication deleted.");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith("Saved authentication deleted."),
+  );
   expect(providerAuthApi.clear).toHaveBeenCalledWith("tmdb");
   expect(screen.getByLabelText("Credential")).toHaveValue("");
   expect(screen.getByText("No credential configured")).toBeInTheDocument();
@@ -252,10 +269,16 @@ it("supports the full save and delete interaction in Simplified Chinese", async 
     target: { value: "synthetic-zh-token" },
   });
   fireEvent.click(screen.getByRole("button", { name: "保存认证" }));
-  await screen.findByText("认证已保存，来源启用状态保持不变。");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "认证已保存，来源启用状态保持不变。",
+    ),
+  );
   expect(screen.getByLabelText("凭据")).toHaveValue("");
   fireEvent.click(screen.getByRole("button", { name: "删除已保存认证" }));
-  await screen.findByText("已删除保存的认证。");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith("已删除保存的认证。"),
+  );
 });
 it("does not report saved when a response says the credential is unavailable", async () => {
   vi.mocked(providerAuthApi.save).mockResolvedValue({
@@ -325,6 +348,7 @@ it("distinguishes disabled authentication from completed physical credential cle
   await screen.findByText(
     "Authentication is disabled; old credentials are awaiting secure cleanup. Refresh the status to retry.",
   );
+  expect(toast.success).not.toHaveBeenCalled();
   expect(
     screen.queryByText("Saved authentication deleted."),
   ).not.toBeInTheDocument();

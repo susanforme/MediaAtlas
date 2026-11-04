@@ -215,3 +215,35 @@ it.each(["music_release", "music_track", "music_video", "concert"] as const)(
     ).toEqual({ action: "none" });
   },
 );
+
+it("keeps missing NFO output separate from an identified media result", async () => {
+  await show(fixture(["missing_nfo"]));
+  const section = screen.getByRole("region", { name: "NFO file" });
+  expect(section).toHaveTextContent("NFO not generated");
+  expect(section).toHaveTextContent("preserves existing NFO files");
+  expect(screen.getAllByText("NFO not generated")).toHaveLength(1);
+  expect(
+    screen.queryByRole("link", { name: "Identify media" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Manage media folders" }),
+  ).toHaveAttribute("href", "/roots?");
+});
+
+it("reports automatic NFO failure independently and keeps private recovery scoped", async () => {
+  await show(
+    fixture(
+      ["missing_nfo", "nfo_output_failed"],
+      ["actual-root"],
+      "adult_video",
+    ),
+  );
+  const section = screen.getByRole("region", { name: "NFO file" });
+  expect(section).toHaveTextContent("Automatic NFO output failed");
+  expect(screen.getAllByText("Automatic NFO output failed")).toHaveLength(1);
+  expect(screen.queryByText("NFO not generated")).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Manage media folders" }),
+  ).toHaveAttribute("href", "/roots?kind=adult_video");
+  expect(libraryApi.detail).not.toHaveBeenCalled();
+});

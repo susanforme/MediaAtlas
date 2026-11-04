@@ -16,7 +16,13 @@ import {
   type MediaFile,
 } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
+
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), error: vi.fn() },
+}));
+
 import { LibraryPage } from "./browse";
 import { MediaDetailPage } from "./detail";
 import { NativeOpen } from "./native-open";
@@ -132,7 +138,14 @@ it("opens one explicitly clicked file ID and reports only system request submiss
   expect(libraryApi.detail).not.toHaveBeenCalled();
   expect(nativeOpenApi.open).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
-  await screen.findByText("Submitted system opening request");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Submitted system opening request",
+    ),
+  );
+  expect(
+    screen.queryByText("Submitted system opening request"),
+  ).not.toBeInTheDocument();
   expect(nativeOpenApi.open).toHaveBeenCalledWith("movie", false);
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
@@ -158,7 +171,14 @@ it("requires an explicit version or Part selection and excludes sidecars", async
     expect(nativeOpenApi.open).toHaveBeenCalledWith("part2", false),
   );
   expect(nativeOpenApi.open).toHaveBeenCalledOnce();
-  await screen.findByText("Submitted system opening request");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Submitted system opening request",
+    ),
+  );
+  expect(
+    screen.queryByText("Submitted system opening request"),
+  ).not.toBeInTheDocument();
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
   );
@@ -166,7 +186,14 @@ it("requires an explicit version or Part selection and excludes sidecars", async
 it("uses the adult typed endpoint without ordinary detail queries", async () => {
   show(<NativeOpen mediaId="private" adult />);
   fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
-  await screen.findByText("Submitted system opening request");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Submitted system opening request",
+    ),
+  );
+  expect(
+    screen.queryByText("Submitted system opening request"),
+  ).not.toBeInTheDocument();
   expect(adultApi.getMedia).toHaveBeenCalledWith("private");
   expect(libraryApi.detail).not.toHaveBeenCalled();
   expect(nativeOpenApi.open).toHaveBeenCalledWith("adult-file", true);
@@ -179,7 +206,14 @@ it("opens poster cards as details and reserves system opening for an explicit ac
   const page = show(<MediaDetailPage mediaId="media" />);
   await screen.findByRole("heading", { name: "Confirmed resource" });
   fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
-  await screen.findByText("Submitted system opening request");
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+      "Submitted system opening request",
+    ),
+  );
+  expect(
+    screen.queryByText("Submitted system opening request"),
+  ).not.toBeInTheDocument();
   expect(nativeOpenApi.open).toHaveBeenCalledWith("movie", false);
   expect(page.container.querySelector("audio,video")).toBeNull();
 });
@@ -283,4 +317,32 @@ it("keeps version selection available after a failed system opening request", as
   fireEvent.click(screen.getByRole("button", { name: "first.mkv" }));
   await waitFor(() => expect(nativeOpenApi.open).toHaveBeenCalledOnce());
   expect(screen.getByRole("dialog")).toBeInTheDocument();
+});
+
+it("does not publish a late opening notification after the resource changes", async () => {
+  let resolve!: (result: { requested: boolean }) => void;
+  vi.mocked(nativeOpenApi.open).mockReturnValue(
+    new Promise((done) => {
+      resolve = done;
+    }),
+  );
+  show(<ChangingResource />);
+  fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
+  await waitFor(() => expect(nativeOpenApi.open).toHaveBeenCalledOnce());
+  fireEvent.click(screen.getByRole("button", { name: "Change resource" }));
+  await act(async () => resolve({ requested: true }));
+  expect(toast.success).not.toHaveBeenCalled();
+});
+
+it("does not claim a system opening request when the backend reports requested false", async () => {
+  vi.mocked(nativeOpenApi.open).mockResolvedValue({ requested: false });
+  show(<NativeOpen files={[file("movie", "feature.mkv")]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
+  await waitFor(() => expect(nativeOpenApi.open).toHaveBeenCalledOnce());
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Open in system app" }),
+    ).toBeEnabled(),
+  );
+  expect(toast.success).not.toHaveBeenCalled();
 });

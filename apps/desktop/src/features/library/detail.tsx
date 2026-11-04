@@ -7,6 +7,7 @@ import { lazy, type ReactNode, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { usePrivacy } from "./context";
 import { DetailRecoveryAction } from "./detail-recovery-action";
@@ -106,7 +107,12 @@ export function MediaDetailPage({
           <div className="mt-4">
             <HealthBadges
               health={data.health.filter(
-                (health) => health !== "metadata_pending",
+                (health) =>
+                  ![
+                    "metadata_pending",
+                    "missing_nfo",
+                    "nfo_output_failed",
+                  ].includes(health),
               )}
             />
           </div>
@@ -120,6 +126,42 @@ export function MediaDetailPage({
             <Suspense fallback={<Loading />}>
               <LibraryVideoSourceDetail mediaId={mediaId} />
             </Suspense>
+          )}
+          {(data.health.includes("missing_nfo") ||
+            data.health.includes("nfo_output_failed")) && (
+            <section
+              className="panel space-y-3"
+              aria-label={t("libraryNfoOutput")}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <h2 className="section-title mb-0">{t("libraryNfoOutput")}</h2>
+                <Badge
+                  variant={
+                    data.health.includes("nfo_output_failed")
+                      ? "destructive"
+                      : "secondary"
+                  }
+                >
+                  {t(
+                    data.health.includes("nfo_output_failed")
+                      ? "health_nfo_output_failed"
+                      : "health_missing_nfo",
+                  )}
+                </Badge>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  data.health.includes("nfo_output_failed")
+                    ? "libraryNfoFailedHint"
+                    : "libraryNfoPendingHint",
+                )}
+              </p>
+              <Button asChild variant="outline" size="sm">
+                <Link to="/roots" search={adult ? { kind: "adult_video" } : {}}>
+                  {t("libraryRefreshManage")}
+                </Link>
+              </Button>
+            </section>
           )}
           <section className="panel">
             <h2 className="section-title">{t("files")}</h2>

@@ -11,11 +11,15 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { libraryApi, type RootView, type ScanTask } from "../../api/library";
 import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
+import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { fixtureSnapshot } from "../providers/fixtures";
 import { ProviderAuthSettings } from "./provider-auth";
 import type { ProviderSetupSearch } from "./setup-search";
 
+vi.mock("../../components/ui/sonner", () => ({
+  toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
+}));
 vi.mock("../library/context", () => ({
   usePrivacy: () => ({ includeAdult: true, settings: { entry_visible: true } }),
 }));
@@ -163,6 +167,9 @@ it("only performs save, enable, verified source state and the same folder refres
     expect(view.complete).toHaveBeenCalledWith(folder.id, task.id, "movie"),
   );
   expect(events).toEqual(["save", "enable", "verify", "sync"]);
+  expect(toast.success).toHaveBeenCalledExactlyOnceWith(
+    "Library update started.",
+  );
   expect(libraryApi.sync).toHaveBeenCalledWith(folder.id);
   expect(
     screen.queryByDisplayValue("synthetic-test-secret"),
@@ -265,8 +272,10 @@ it("keeps the ordinary authentication save separate from enablement and folder u
   show();
   await enter();
   fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
-  await screen.findByText(
-    "Authentication saved. Provider enablement is unchanged.",
+  await waitFor(() =>
+    expect(toast.success).toHaveBeenCalledWith(
+      "Authentication saved. Provider enablement is unchanged.",
+    ),
   );
   expect(providerApi.setEnabled).not.toHaveBeenCalled();
   expect(libraryApi.sync).not.toHaveBeenCalled();
