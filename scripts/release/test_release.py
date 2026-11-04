@@ -30,8 +30,8 @@ class ReleaseTests(unittest.TestCase):
             path.write_text(json.dumps({"version": self.version}))
         (self.root / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{self.version}"\n')
         (self.root / "Cargo.lock").write_text(f'[[package]]\nname = "mediaatlas-domain"\nversion = "{self.version}"\n')
-        notice = self.root / "LICENSE-STATUS.md"
-        notice.write_text("No license granted.\n")
+        notice = self.root / "LICENSE.md"
+        notice.write_bytes((Path(__file__).resolve().parents[2] / "LICENSE.md").read_bytes())
         (self.root / "THIRD_PARTY_NOTICES.md").write_text("Third-party licenses.\n")
         (self.root / "docs").mkdir()
         (self.root / "docs/dependency-licenses.json").write_text("{}\n")
@@ -264,6 +264,8 @@ class ReleaseTests(unittest.TestCase):
             release.inspect_package(package, spec, self.version)
 
     def test_bundled_license_material_must_match(self):
+        # Dependencies may retain their upstream LICENSE.md filenames too.
+        (self.root / "docs/third-party-licenses/fixture/LICENSE.md").write_text("Upstream fixture license.\n")
         directory = self.root / "extracted"
         directory.mkdir()
         for source in release.licenses():
@@ -271,7 +273,7 @@ class ReleaseTests(unittest.TestCase):
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(source.read_bytes())
         release.check_licenses(directory)
-        (directory / "LICENSE-STATUS.md").write_text("changed")
+        (directory / "LICENSE.md").write_text("changed")
         with self.assertRaisesRegex(ValueError, "license material"):
             release.check_licenses(directory)
 

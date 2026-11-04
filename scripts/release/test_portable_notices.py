@@ -63,9 +63,9 @@ class PortableVerifierTests(unittest.TestCase):
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(source, destination)
             if self.corrupt is True:
-                (target / "LICENSE-STATUS.md").write_bytes(b"incorrect notice")
+                (target / "LICENSE.md").write_bytes(b"incorrect notice")
             elif self.corrupt is False:
-                (target / "LICENSE-STATUS.md").unlink()
+                (target / "LICENSE.md").unlink()
 
         with patch.object(release, "check_binary"), patch.object(release, "check_windows_crt"), patch.object(release, "run", side_effect=export):
             self.corrupt = None

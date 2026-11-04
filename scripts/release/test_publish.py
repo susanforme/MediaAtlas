@@ -253,7 +253,7 @@ class PublishTests(unittest.TestCase):
             path.write_text(json.dumps({"version": self.tag[1:]}))
         (source / "Cargo.toml").write_text(f'[workspace.package]\nversion = "{self.tag[1:]}"\n')
         (source / "Cargo.lock").write_text('package = []\n')
-        for filename in ["LICENSE-STATUS.md", "THIRD_PARTY_NOTICES.md", "docs/dependency-licenses.json", "docs/third-party-licenses/texts/license.txt"]:
+        for filename in ["LICENSE.md", "THIRD_PARTY_NOTICES.md", "docs/dependency-licenses.json", "docs/third-party-licenses/texts/license.txt"]:
             path = source / filename
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text("Fixture license material.\n")

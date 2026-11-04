@@ -100,7 +100,7 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 
 当前文档见 [docs/README.md](docs/README.md)，视觉与开发规范见根 [design.md](design.md)和两级 `AGENTS.md`。旧实施计划、阶段成绩和旧 UI 走查已移除，不作为当前行为或本轮验收依据。
 
-当前 P0 已实现 [持久化人工核对队列](docs/review-queue.md)及 schema 19：最近队列、逐项状态与确认检查点以实际后端账本为准。本轮前端 397 项、Rust 343 项测试及构建检查通过，见[队列截图](screenshots/review-queue-2026-11-04/README.md)。P1 来源顺序、资料语言与补图策略仍为后续契约。
+当前已实现 [持久化人工核对队列](docs/review-queue.md)及本地 NFO 优先、缺失时自动输出流程（schema 20）：首次扫描导入其他工具生成的有效 NFO，不重复刮削；详见[自动媒体库](docs/automatic-library.md)。本轮前端 455 项、基础设施 336 项、扫描器 11 项测试通过；构建与平台验证限制见[桌面控件](docs/desktop-ui-controls.md)和[NFO 输出](docs/media-output.md)。P1 来源顺序、资料语言与补图策略仍为后续契约。
 
 ## 验证与截图
 
@@ -108,4 +108,4 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 
 ## 许可与分发
 
-项目源码许可状态见 [LICENSE-STATUS.md](LICENSE-STATUS.md)。第三方许可说明、完整清单与原文/必要源包分别保存在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[dependency-licenses.json](docs/dependency-licenses.json)及 `docs/third-party-licenses/`。这些材料是构建和发布输入，必须随分发包保留，不能作为旧文档或缓存清理。
+项目源码按 [MIT License](LICENSE.md) 授权。第三方许可说明、完整清单与原文/必要源包分别保存在 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)、[dependency-licenses.json](docs/dependency-licenses.json)及 `docs/third-party-licenses/`。这些材料是构建和发布输入，必须随分发包保留，不能作为旧文档或缓存清理。

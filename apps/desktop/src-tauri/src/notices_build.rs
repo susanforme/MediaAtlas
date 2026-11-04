@@ -32,7 +32,7 @@ fn collect(directory: &Path, files: &mut Vec<std::path::PathBuf>) -> io::Result<
 pub fn generate(repository: &Path, output: &Path) -> io::Result<()> {
     let root = fs::canonicalize(repository)?;
     let mut files = vec![
-        root.join("LICENSE-STATUS.md"),
+        root.join("LICENSE.md"),
         root.join("THIRD_PARTY_NOTICES.md"),
         root.join("docs/dependency-licenses.json"),
     ];

@@ -167,7 +167,12 @@ def check_licenses(directory):
     require(not any(path.name in browser_engines for path in directory.rglob("*")), "embedded browser engine must not be bundled; use the system WebView")
     forbidden = {"ffmpeg", "ffprobe", "ffmpeg.exe", "ffprobe.exe"}
     require(not any(path.is_file() and path.name.lower() in forbidden for path in directory.rglob("*")), "external media probe tools must not be bundled")
-    marker = one(directory.rglob("LICENSE-STATUS.md"), "bundled licensing-status marker")
+    marker = one(
+        (path for path in directory.rglob("LICENSE.md")
+         if (path.parent / "THIRD_PARTY_NOTICES.md").is_file()
+         and (path.parent / "docs/dependency-licenses.json").is_file()),
+        "bundled project license",
+    )
     resource_root = marker.parent
     for source in licenses():
         relative = source.relative_to(ROOT)
@@ -234,7 +239,7 @@ def inspect_package(path, spec, expected_version):
 
 
 def licenses():
-    paths = [ROOT / "LICENSE-STATUS.md", ROOT / "THIRD_PARTY_NOTICES.md", ROOT / "docs/dependency-licenses.json"]
+    paths = [ROOT / "LICENSE.md", ROOT / "THIRD_PARTY_NOTICES.md", ROOT / "docs/dependency-licenses.json"]
     full_texts = sorted(path for path in (ROOT / "docs/third-party-licenses").rglob("*") if path.is_file())
     require(full_texts, "release requires full third-party license texts")
     paths.extend(full_texts)
@@ -353,7 +358,7 @@ def aggregate(args):
     summary = {"schema": 1, "tag": args.tag, "version": expected, "commit": args.commit, "platforms": manifests, "unavailable_optional_targets": unavailable, "license_materials": [{"path": path.relative_to(ROOT).as_posix(), "bytes": path.stat().st_size, "sha256": sha256(path)} for path in license_paths]}
     (args.output / "release-manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
     source = f"https://github.com/{args.repository}/tree/{args.commit}"
-    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Beta packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP contains only MediaAtlas.exe, with complete license materials embedded at build time; use MediaAtlas.exe --export-licenses <new-directory> to export them explicitly. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this beta because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE-STATUS.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); no project open-source license has been specified. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
+    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Beta packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP contains only MediaAtlas.exe, with complete license materials embedded at build time; use MediaAtlas.exe --export-licenses <new-directory> to export them explicitly. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this beta because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); MediaAtlas is licensed under the MIT License; third-party components retain their own licenses. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
     for manifest in manifests:
         lines.append(f"| `{manifest['target']}` | {', '.join(asset['format'] for asset in manifest['assets'])} |")
     for item in unavailable:

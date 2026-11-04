@@ -1,6 +1,6 @@
 # Third-party notices for MediaAtlas beta
 
-MediaAtlas includes third-party software. Its authors retain their original copyrights and license terms. This notice grants no license for MediaAtlas's own source code; see `LICENSE-STATUS.md`.
+MediaAtlas includes third-party software. Its authors retain their original copyrights and license terms. MediaAtlas's own project source is licensed under the MIT License in `LICENSE.md`; third-party components remain subject to their own terms.
 
 The machine-readable inventory is `docs/dependency-licenses.json`. It enumerates every registry package in both `Cargo.lock` and the multi-document `pnpm-lock.yaml`, including build tools, tests, optional platform tools, and dependencies that are not present in a particular application binary. This intentionally broad inventory is not a claim that every package is distributed or executed on every platform.
 

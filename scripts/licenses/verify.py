@@ -96,7 +96,7 @@ def verify():
             path = material_file(entry['covered_source'], ROOT)
             if digest(path) != entry['source_sha256']:
                 raise ValueError(f'Covered source mismatch: {entry["name"]}')
-    for required in ['THIRD_PARTY_NOTICES.md', 'LICENSE-STATUS.md']:
+    for required in ['THIRD_PARTY_NOTICES.md', 'LICENSE.md']:
         if not (ROOT / required).is_file():
             raise ValueError(f'Missing {required}')
     print(f'License inventory verified: {len(records)} dependencies, {count} notice references, exact lockfile and source hashes.')

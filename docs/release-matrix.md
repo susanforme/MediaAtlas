@@ -35,13 +35,13 @@
 - AppImage：本次明确 `not_built`。Tauri AppImage 会带入 GTK/WebKit 等原生库；实际归属、逐项版权及同处对应源码分发 gate 尚未完成，不能以 Rust/npm notices 冒称覆盖。preflight/stage 显式禁止重新启用此格式。保留底层提取/架构检查工具供未来开发使用，不代表可分发。
 - DMG：`hdiutil` 只读挂载，检查 app 的 Info.plist 版本及实际 Mach-O；无论检查结果如何都卸载。
 
-原生安装包中的 LICENSE-STATUS.md、THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 与 docs/third-party-licenses/** 全文也需逐文件与源码材料 SHA-256 一致；目录结构保留，避免同名 LICENSE 覆盖。Apple bundle short version 或 Windows product version 在工具链只支持数字版本时允许 SemVer core；完整 beta 版本仍由 tag/config/Cargo/manifest 保持一致。产物以完整版本和 Rust target 重命名，避免不同平台重名。
+原生安装包中的 LICENSE.md、THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 与 docs/third-party-licenses/** 全文也需逐文件与源码材料 SHA-256 一致；目录结构保留，避免同名 LICENSE 覆盖。Apple bundle short version 或 Windows product version 在工具链只支持数字版本时允许 SemVer core；完整 beta 版本仍由 tag/config/Cargo/manifest 保持一致。产物以完整版本和 Rust target 重命名，避免不同平台重名。
 
 `stage` 默认只记录 package validation，不宣称自动化测试通过；仅在 workflow 前端与 native Rust core 两步成功后传入 `--tests-passed`。聚合拒绝没有真实测试通过记录的包，本地打包 dryrun 不会自动生成可发布的测试声明。
 
 每目标上传经过检查的包及 manifest，记录 tag、commit、版本、OS、CPU、runner、format、大小、SHA-256、签名状态与实际测试边界。聚合 job 再核对所有必需目标、完整格式集合、路径、重复名、commit/version/target 元数据、实际大小、SHA-256；多余文件、空包、被改动的包或缺少必需格式会阻止 Release。
 
-聚合产物包括所有可用安装包、许可状态/说明/清单、保留全部许可材料目录结构的 license-materials.zip、RELEASE_NOTES.md、release-manifest.json、SHA256SUMS。SHA256SUMS 覆盖除自身以外的每个 Release 资产。GitHub 自动提供的源代码档案链接可由 tag 获取，源码 commit 链接也写入说明。校验和验证字节完整性，不代表签名身份。
+聚合产物包括所有可用安装包、项目许可/说明/清单、保留全部许可材料目录结构的 license-materials.zip、RELEASE_NOTES.md、release-manifest.json、SHA256SUMS。SHA256SUMS 覆盖除自身以外的每个 Release 资产。GitHub 自动提供的源代码档案链接可由 tag 获取，源码 commit 链接也写入说明。校验和验证字节完整性，不代表签名身份。
 
 ## 单 EXE 与许可导出（main，待下次发布）
 
@@ -66,7 +66,9 @@ $p.ExitCode
 
 不启用自动更新、updater artifacts、证书签名或 Apple notarization。未配置凭据时不会伪造签名；macOS 在完整应用资源复制后显式生成 ad-hoc 签名，并在只读挂载的 DMG 内强制验证资源签名完整性；此验证不等同可信分发签名或 Apple 公证，见 [资源签名修复](hotfix-macos-package.md)。Windows SmartScreen、macOS Gatekeeper 可能提示，发布说明明确这一状态。Windows NSIS 显式使用官方 downloadBootstrapper：系统缺少 WebView2 runtime 时在线安装，不捆绑 fixed/offline Chromium/WebView2 engine；ZIP 要求已有 WebView2 runtime。macOS 实际 app 用 otool 验证链接系统 WebKit/WKWebView，禁止内嵌 Chromium/WebKit framework；Debian 包显式依赖系统 WebKitGTK 4.1、GTK3、libdbus-1 与 xdg-utils，实际 ELF 的 DT_NEEDED 必须有 WebKitGTK/GTK/libdbus，readelf symbol versions 的最高 GLIBC 不得超过 2.35；AppImage 本次不分发，缺少其实际原生库归属和对应源码分发 gate；Ubuntu 22.04 构建的 glibc 基线为 2.35，不承诺旧发行版兼容。ffmpeg/ffprobe 仅为开发 fixture 工具，应用不调用或捆绑它们；拆包校验显式拒绝夹带这两个可执行文件。AppImage 候选 overlay 显式关闭 bundleMediaFramework，但此设置不能替代其未完成的原生库分发审查，也不使该格式进入本次矩阵。
 
-项目自身尚未指定开源许可，不因公开源码或 beta 二进制而新增权利授予；保持 LICENSE-STATUS.md 的准确说明。依赖保留其自身许可，P8 维护真实的 THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 及 docs/third-party-licenses/** 内所需完整许可材料。
+项目自身按所有者提供的 MIT License 授权，分发时保留 LICENSE.md 原文。依赖保留其自身许可，P8 维护真实的 THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 及 docs/third-party-licenses/** 内所需完整许可材料。
+
+2026-11-04：合入所有者的 MIT 许可提交后，将构建资源、嵌入导出、发布归档和校验入口统一到 `LICENSE.md`，保留逐字节与 SHA-256 校验。许可证 18 项测试、发布 56 项测试通过；4 项原生 macOS 签名测试及 1 项 NSIS 工具测试因当前 Linux 主机缺少对应工具跳过，不作为本轮实机验收。实际便携版嵌入/导出测试使用 Rust 编译运行，未跳过。清单验证为 1002 依赖、1626 notice 引用。
 
 ## 本地验证与外部前提
 

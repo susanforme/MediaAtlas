@@ -17,4 +17,4 @@
 
 ## 许可材料
 
-[dependency-licenses.json](dependency-licenses.json)与整个 `third-party-licenses/` 是构建和发布的必要输入，保留原始许可、NOTICE、版权与必要源包，不能因旧日期删除或改写。分发要求见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)和 [LICENSE-STATUS.md](../LICENSE-STATUS.md)。
+[dependency-licenses.json](dependency-licenses.json)与整个 `third-party-licenses/` 是构建和发布的必要输入，保留原始许可、NOTICE、版权与必要源包，不能因旧日期删除或改写。分发要求见 [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)和 [LICENSE.md](../LICENSE.md)。

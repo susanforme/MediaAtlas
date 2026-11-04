@@ -100,7 +100,7 @@ mod tests {
         for (relative, bytes) in EMBEDDED_NOTICES {
             assert_eq!(fs::read(target.join(relative)).unwrap(), *bytes);
         }
-        let marker = target.join("LICENSE-STATUS.md");
+        let marker = target.join("LICENSE.md");
         fs::write(&marker, b"user-edited sentinel").unwrap();
         assert!(export(&target).is_err());
         assert_eq!(fs::read(&marker).unwrap(), b"user-edited sentinel");

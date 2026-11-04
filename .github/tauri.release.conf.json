@@ -3,7 +3,7 @@
     "active": true,
     "createUpdaterArtifacts": false,
     "resources": {
-      "../../../LICENSE-STATUS.md": "LICENSE-STATUS.md",
+      "../../../LICENSE.md": "LICENSE.md",
       "../../../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
       "../../../docs/dependency-licenses.json": "docs/dependency-licenses.json",
       "../../../docs/third-party-licenses/": "docs/third-party-licenses/"

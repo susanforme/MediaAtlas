@@ -65,7 +65,7 @@ class IntegrityTests(unittest.TestCase):
         self.source.write_bytes(b'\x1f\x8bOriginal source archive\x00\xff')
         (self.root / 'Cargo.lock').write_text('version = 4\npackage = []\n', encoding='utf-8')
         (self.root / 'pnpm-lock.yaml').write_text('lockfileVersion: 9\n', encoding='utf-8')
-        for name in ['THIRD_PARTY_NOTICES.md', 'LICENSE-STATUS.md']:
+        for name in ['THIRD_PARTY_NOTICES.md', 'LICENSE.md']:
             (self.root / name).write_text('Fixture required notice.\n', encoding='utf-8')
         self.inventory = {
             'schema_version': 1,
