@@ -178,6 +178,8 @@ pub struct ScanTaskView {
     pub phase: String,
     pub matched_count: u64,
     pub review_count: u64,
+    /// Subset of review_count awaiting an enabled, configured metadata source.
+    pub unconfigured_count: u64,
     pub metadata_failed_count: u64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

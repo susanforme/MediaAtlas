@@ -9,34 +9,39 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
+import { RootCard } from "./root-card";
+import type { RootProviderId } from "./root-source-model";
+import { RootSourceReadiness } from "./root-source-readiness";
 import type { ScannerSearch } from "./scanner-navigation";
+import { useRootActivity } from "./use-root-activity";
 import { useRootEditor } from "./use-root-editor";
+import "./root-management.css";
 import "./translations";
 import "../adult/translations";
 import { Button } from "../../components/ui/button";
-import {
-  Empty,
-  ErrorNotice,
-  Loading,
-  PageHeading,
-  ROOT_KINDS,
-  useFormat,
-} from "./shared";
-
-export { DashboardPage } from "../home/page";
+import { Empty, ErrorNotice, Loading, PageHeading, ROOT_KINDS } from "./shared";
 
 export function RootsPage({
   adult = false,
   onScan,
   onNavigateScan,
+  initialAdd = false,
+  initialKind,
+  onConfigureSource,
 }: {
   adult?: boolean;
+  initialAdd?: boolean;
+  initialKind?: MediaKind;
+  onConfigureSource?: (search: {
+    root: string;
+    kind?: MediaKind;
+    provider: RootProviderId;
+  }) => void;
   onScan?: (rootId: string, taskId?: string) => void;
   onNavigateScan?: (search: ScannerSearch) => void;
   onTypeChange?: (adult: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const { date } = useFormat();
   const advancedId = useId();
   const removeTrigger = useRef<HTMLButtonElement | null>(null);
   const addTrigger = useRef<HTMLButtonElement>(null);
@@ -54,6 +59,8 @@ export function RootsPage({
     save,
     deletion,
     edit,
+    add,
+    persist,
     submit,
     closeEditor,
     changeName,
@@ -65,30 +72,51 @@ export function RootsPage({
     pickerError,
     operation,
     scan,
+    refresh,
     savedRoot,
     savedVersion,
     completed,
-  } = useRootEditor(adult, (root, task, kind) => {
-    if (onNavigateScan)
-      onNavigateScan({
-        root,
-        task,
-        ...(kind === "adult_video" ? { kind: "adult_video" as const } : {}),
-      });
-    else onScan?.(root, task);
-  });
+  } = useRootEditor(
+    adult,
+    (root, task, kind) => {
+      if (onNavigateScan)
+        onNavigateScan({
+          root,
+          task,
+          ...(kind === "adult_video" ? { kind: "adult_video" as const } : {}),
+        });
+      else onScan?.(root, task);
+    },
+    initialAdd,
+    initialKind,
+  );
   const working = operation !== null;
+  const activity = useRootActivity(roots.data, adultAvailable);
+  function configureSource(provider: RootProviderId) {
+    if (!onConfigureSource) return;
+    void persist(false, (root) =>
+      onConfigureSource({
+        root: root.id,
+        ...(root.kind ? { kind: root.kind } : {}),
+        provider,
+      }),
+    );
+  }
   return (
     <>
       <PageHeading title={t("roots")}>
-        <Button ref={addTrigger} disabled={working} onClick={() => edit()}>
+        <Button
+          ref={addTrigger}
+          disabled={working || Boolean(form)}
+          onClick={add}
+        >
           {t("addRoot")}
         </Button>
       </PageHeading>
       {form && (
-        <form className="panel mb-6 space-y-4" onSubmit={submit} noValidate>
+        <form className="root-editor space-y-5" onSubmit={submit} noValidate>
           <h2 className="section-title">{t(form.id ? "edit" : "addRoot")}</h2>
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="root-path-picker">
             <Button
               variant="outline"
               disabled={
@@ -115,40 +143,48 @@ export function RootsPage({
             </p>
           </div>
           {pickerError !== undefined && <ErrorNotice error={pickerError} />}
-          <Label className="filter-field">
-            <span>{t("rootName")}</span>
-            <Input
-              value={form.name}
-              disabled={working}
-              onChange={(event) => changeName(event.target.value)}
-              required
-            />
-          </Label>
-          <Label className="filter-field">
-            <span>{t("rootType")}</span>
-            <Select
-              disabled={working}
-              value={form.kind ?? "mixed"}
-              onChange={(event) =>
-                setForm({
-                  ...form,
-                  kind:
-                    event.target.value === "mixed"
-                      ? null
-                      : (event.target.value as MediaKind),
-                })
-              }
-            >
-              {ROOT_KINDS.filter(
-                (kind) => adultVisible || kind !== "adult_video",
-              ).map((kind) => (
-                <option value={kind} key={kind}>
-                  {t(`kind_${kind}`)}
-                </option>
-              ))}
-              <option value="mixed">{t("mixed")}</option>
-            </Select>
-          </Label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Label className="filter-field">
+              <span>{t("rootName")}</span>
+              <Input
+                value={form.name}
+                disabled={working}
+                onChange={(event) => changeName(event.target.value)}
+                required
+              />
+            </Label>
+            <Label className="filter-field">
+              <span>{t("rootType")}</span>
+              <Select
+                disabled={working}
+                value={form.kind ?? "mixed"}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    kind:
+                      event.target.value === "mixed"
+                        ? null
+                        : (event.target.value as MediaKind),
+                  })
+                }
+              >
+                {ROOT_KINDS.filter(
+                  (kind) => adultVisible || kind !== "adult_video",
+                ).map((kind) => (
+                  <option value={kind} key={kind}>
+                    {t(`kind_${kind}`)}
+                  </option>
+                ))}
+                <option value="mixed">{t("mixed")}</option>
+              </Select>
+            </Label>
+          </div>
+          <RootSourceReadiness
+            kind={form.kind}
+            adultAvailable={adultAvailable}
+            disabled={working || picking}
+            onConfigure={onConfigureSource ? configureSource : undefined}
+          />
           <Button
             variant="ghost"
             size="sm"
@@ -300,68 +336,28 @@ export function RootsPage({
       ) : !roots.data.length ? (
         <Empty title={t("noRoots")} />
       ) : (
-        <div className="space-y-4">
+        <div className="root-grid">
           {roots.data.map((root) => (
-            <article className="panel" key={root.id}>
-              <div className="flex flex-wrap justify-between gap-4">
-                <div>
-                  <h2 className="font-semibold">
-                    {root.name}{" "}
-                    <span className="badge">
-                      {t(root.enabled ? "enabled" : "disabled")}
-                    </span>
-                  </h2>
-                  <p className="mt-2 break-all text-sm">{root.path}</p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {root.kind ? t(`kind_${root.kind}`) : t("mixed")} ·{" "}
-                    {t("lastScan")}:{" "}
-                    {root.last_scan_at
-                      ? date(root.last_scan_at)
-                      : t("neverScanned")}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={working}
-                    onClick={() => edit(root)}
-                  >
-                    {t("edit")}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(event) => {
-                      removeTrigger.current = event.currentTarget;
-                      deletion.reset();
-                      setRemove(root);
-                    }}
-                  >
-                    {t("remove")}
-                  </Button>
-                  {root.enabled && (
-                    <Button asChild variant="ghost">
-                      <Link
-                        className="action-link"
-                        to="/scanner"
-                        search={{
-                          root: root.id,
-                          ...(root.kind === "adult_video"
-                            ? { kind: "adult_video" as const }
-                            : {}),
-                        }}
-                      >
-                        {t("autoRefreshLibrary")}
-                      </Link>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </article>
+            <RootCard
+              key={root.id}
+              root={root}
+              task={activity.get(root.id)}
+              refreshing={
+                refresh.isPending && refresh.variables?.id === root.id
+              }
+              disabled={working || refresh.isPending}
+              onEdit={() => edit(root)}
+              onRefresh={() => refresh.mutate(root)}
+              onRemove={(event) => {
+                removeTrigger.current = event.currentTarget;
+                deletion.reset();
+                setRemove(root);
+              }}
+            />
           ))}
         </div>
       )}
+      {refresh.isError && <ErrorNotice error={refresh.error} />}
     </>
   );
 }

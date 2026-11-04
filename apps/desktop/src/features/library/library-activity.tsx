@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
+import { refreshCounts } from "./library-activity-model";
 import type { useLibraryActivity } from "./use-library-activity";
 import "./library-status-translations";
 
@@ -14,6 +15,17 @@ export function LibraryActivity({
   if (!task) return null;
   const running = activity.active.length > 0;
   const visibleTasks = running ? activity.active : activity.attention;
+  const incomplete = visibleTasks.reduce(
+    (total, entry) => {
+      const counts = refreshCounts(entry);
+      return {
+        review: total.review + counts.review,
+        unconfigured: total.unconfigured + counts.unconfigured,
+        failed: total.failed + counts.failed,
+      };
+    },
+    { review: 0, unconfigured: 0, failed: 0 },
+  );
   const count = (
     key:
       | "imported_count"
@@ -31,11 +43,13 @@ export function LibraryActivity({
           : task.phase === "metadata"
             ? "libraryRefreshMetadata"
             : "libraryRefreshActive"
-    : "libraryRefreshAttention";
+    : incomplete.unconfigured > 0
+      ? "libraryRefreshUnconfigured"
+      : "libraryRefreshIncomplete";
   return (
     <section
       className="notice mb-6 flex flex-wrap items-center justify-between gap-4"
-      aria-label={t("libraryRefreshActive")}
+      aria-label={t(title)}
     >
       <div role="status" aria-live="polite">
         <p className="font-medium">{t(title)}</p>
@@ -54,10 +68,15 @@ export function LibraryActivity({
           <li>
             {t("libraryRefreshMatched", { count: count("matched_count") })}
           </li>
-          {count("review_count") > 0 && (
+          {incomplete.unconfigured > 0 && (
             <li>
-              {t("libraryRefreshReview", { count: count("review_count") })}
+              {t("libraryRefreshUnconfiguredCount", {
+                count: incomplete.unconfigured,
+              })}
             </li>
+          )}
+          {incomplete.review > 0 && (
+            <li>{t("libraryRefreshReview", { count: incomplete.review })}</li>
           )}
           {count("metadata_failed_count") > 0 && (
             <li>
@@ -69,7 +88,24 @@ export function LibraryActivity({
         </ul>
       </div>
       <div className="flex flex-wrap gap-2">
-        {!running && count("review_count") > 0 && (
+        {!running && incomplete.unconfigured > 0 && (
+          <Button asChild size="sm">
+            <Link
+              to="/settings"
+              search={{
+                from: "library",
+                ...(visibleTasks.length === 1 ? { root: task.root_id } : {}),
+              }}
+            >
+              {t(
+                visibleTasks.length === 1
+                  ? "libraryRefreshConfigureAction"
+                  : "libraryRefreshConfigureOnly",
+              )}
+            </Link>
+          </Button>
+        )}
+        {!running && incomplete.review > 0 && (
           <Button asChild variant="outline" size="sm">
             <Link
               to="/tools"

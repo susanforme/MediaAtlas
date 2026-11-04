@@ -326,8 +326,13 @@ function ScraperWorkspace({
           <div className="mb-4 flex flex-wrap gap-3">
             <Button asChild variant="outline" size="sm">
               <Link
-                to="/providers"
-                search={{ from: "scraper", media: target || undefined, queue }}
+                to="/settings"
+                search={{
+                  tab: "providers",
+                  from: "scraper",
+                  media: target || undefined,
+                  queue,
+                }}
               >
                 {t("scraperConfigureProviders")}
               </Link>
@@ -335,7 +340,13 @@ function ScraperWorkspace({
             <Button asChild variant="outline" size="sm">
               <Link
                 to="/settings"
-                search={{ from: "scraper", media: target || undefined, queue }}
+                search={{
+                  tab: "auth",
+                  from: "scraper",
+                  media: target || undefined,
+                  queue,
+                  provider: kind === "anime" ? "anilist" : "tmdb",
+                }}
               >
                 {t("scraperConfigureAuth")}
               </Link>

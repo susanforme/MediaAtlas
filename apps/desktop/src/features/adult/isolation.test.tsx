@@ -2,12 +2,12 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, waitFor } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
-import { defaultBrowse, libraryApi } from "../../api/library";
+import { libraryApi } from "../../api/library";
 import { providerApi } from "../../api/providers";
 import i18n from "../../i18n";
 import { LibraryPage } from "../library/browse";
 import { MediaDetailPage } from "../library/detail";
-import { DashboardPage, RootsPage } from "../library/pages";
+import { RootsPage } from "../library/pages";
 import { ScannerPage, TasksPage } from "../library/scanner";
 
 vi.mock("../library/context", () => ({
@@ -88,18 +88,14 @@ beforeEach(async () => {
     new Error("Synthetic ordinary channel not found"),
   );
 });
-it("keeps dashboard and ordinary library queries adult-free after unlock", async () => {
+it("keeps ordinary poster-wall queries adult-free after the category is enabled", async () => {
   show(
-    <>
-      <DashboardPage />
-      <LibraryPage
-        search={{ kind: "adult_video", q: "Synthetic" }}
-        onSearch={() => {}}
-      />
-    </>,
+    <LibraryPage
+      search={{ kind: "adult_video", q: "Synthetic" }}
+      onSearch={() => {}}
+    />,
   );
   await waitFor(() => expect(libraryApi.media).toHaveBeenCalled());
-  expect(libraryApi.summary).toHaveBeenCalledWith(defaultBrowse(false));
   expect(libraryApi.media).toHaveBeenCalledWith(
     expect.objectContaining({ include_adult: false, kind: null }),
   );

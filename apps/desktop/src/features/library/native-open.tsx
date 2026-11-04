@@ -56,7 +56,13 @@ export function NativeOpen({
     };
   }, [context]);
   const launch = useMutation({
-    mutationFn: (fileId: string) => nativeOpenApi.open(fileId, adult),
+    mutationFn: async (fileId: string) => {
+      const started = currentContext.current;
+      const result = await nativeOpenApi.open(fileId, adult);
+      if (active.current && started === currentContext.current)
+        setChoices(undefined);
+      return result;
+    },
   });
   const choose = useMutation({
     mutationFn: async () => {

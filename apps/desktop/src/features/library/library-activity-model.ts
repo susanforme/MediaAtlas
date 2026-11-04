@@ -27,9 +27,32 @@ export function refreshNeedsAttention(task: ScanTask) {
     (task.state === "failed" ||
       task.state === "interrupted" ||
       task.state === "cancelled" ||
+      task.state === "waiting_for_user" ||
       (task.review_count ?? 0) > 0 ||
+      (task.unconfigured_count ?? 0) > 0 ||
       (task.metadata_failed_count ?? 0) > 0)
   );
+}
+
+/** Source setup is an actionable prerequisite, not a failed movie match. */
+export function refreshCounts(task: ScanTask) {
+  const unconfigured = task.unconfigured_count ?? 0;
+  return {
+    unconfigured,
+    review: Math.max(0, (task.review_count ?? 0) - unconfigured),
+    failed: task.metadata_failed_count ?? 0,
+  };
+}
+
+export function refreshResultTitle(task: ScanTask) {
+  if (refreshIsRunning(task)) return "autoRefreshRunning";
+  if (["failed", "cancelled", "interrupted"].includes(task.state))
+    return `state_${task.state}`;
+  if (refreshCounts(task).unconfigured > 0) return "libraryRefreshUnconfigured";
+  if (refreshNeedsAttention(task)) return "libraryRefreshIncomplete";
+  return (task.matched_count ?? 0) > 0
+    ? "libraryRefreshCompleted"
+    : "libraryRefreshLocalComplete";
 }
 
 export function refreshSnapshot(tasks: ScanTask[]) {
@@ -44,6 +67,7 @@ export function refreshSnapshot(tasks: ScanTask[]) {
         task.imported_count,
         task.matched_count,
         task.review_count,
+        task.unconfigured_count,
         task.metadata_failed_count,
       ].join(":"),
     )

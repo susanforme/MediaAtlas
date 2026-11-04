@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ComponentProps } from "react";
+import { type ComponentProps, StrictMode } from "react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { adultApi } from "../../api/adult";
@@ -18,6 +18,8 @@ import {
   type RootView,
   type ScanTask,
 } from "../../api/library";
+import { providerAuthApi } from "../../api/provider-auth";
+import { type ProviderView, providerApi } from "../../api/providers";
 import i18n from "../../i18n";
 import { PrivacyProvider } from "./context";
 import { RootsPage } from "./pages";
@@ -33,7 +35,11 @@ vi.mock("./context", async (original) => ({
 }));
 vi.mock("../../api/adult", async (original) => ({
   ...(await original<typeof import("../../api/adult")>()),
-  adultApi: { roots: vi.fn() },
+  adultApi: { roots: vi.fn(), tasks: vi.fn(), providers: vi.fn() },
+}));
+vi.mock("../../api/providers", () => ({ providerApi: { snapshot: vi.fn() } }));
+vi.mock("../../api/provider-auth", () => ({
+  providerAuthApi: { status: vi.fn() },
 }));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
@@ -47,6 +53,7 @@ vi.mock("../../api/library", async (original) => {
     libraryApi: {
       ...module.libraryApi,
       roots: vi.fn(),
+      tasks: vi.fn(),
       saveRoot: vi.fn(),
       start: vi.fn(),
       sync: vi.fn(),
@@ -83,13 +90,15 @@ function show(props: ComponentProps<typeof RootsPage> = {}) {
     defaultOptions: { queries: { retry: false } },
   });
   return render(
-    <I18nextProvider i18n={i18n}>
-      <QueryClientProvider client={client}>
-        <PrivacyProvider>
-          <RootsPage {...props} />
-        </PrivacyProvider>
-      </QueryClientProvider>
-    </I18nextProvider>,
+    <StrictMode>
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={client}>
+          <PrivacyProvider>
+            <RootsPage {...props} />
+          </PrivacyProvider>
+        </QueryClientProvider>
+      </I18nextProvider>
+    </StrictMode>,
   );
 }
 beforeEach(async () => {
@@ -100,6 +109,16 @@ beforeEach(async () => {
   scope.allowed = true;
   vi.mocked(libraryApi.roots).mockResolvedValue([]);
   vi.mocked(adultApi.roots).mockResolvedValue([]);
+  vi.mocked(libraryApi.tasks).mockResolvedValue([]);
+  vi.mocked(adultApi.tasks).mockResolvedValue([]);
+  const snapshot = {
+    schema_version: 1 as const,
+    providers: [],
+    tasks: [],
+    requests: [],
+  };
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  vi.mocked(adultApi.providers).mockResolvedValue(snapshot);
   vi.mocked(pickDirectory).mockResolvedValue(null);
   vi.mocked(libraryApi.start).mockResolvedValue(scanTask);
   vi.mocked(libraryApi.sync).mockResolvedValue({
@@ -134,6 +153,11 @@ it("submits an explicit root type and normalized exclusion lines", async () => {
     screen.getByLabelText("Exclude patterns (one glob per line)"),
     { target: { value: "  **/sample/**\n\n**/*.tmp  " } },
   );
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Add to library" }),
+    ).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
   await waitFor(() =>
     expect(libraryApi.saveRoot).toHaveBeenCalledWith({
@@ -150,6 +174,11 @@ it("uses localized validation instead of submitting empty root fields", async ()
   show();
   await screen.findByText("No library roots yet");
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Add to library" }),
+    ).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Enter a root name, absolute path and media type.",
@@ -204,9 +233,13 @@ it.each([
     expect(
       screen.queryByLabelText("Exclude patterns (one glob per line)"),
     ).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
     await waitFor(() =>
       expect(screen.getByLabelText("Root name")).toHaveValue(name),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Add to library" }),
+      ).toBeEnabled(),
     );
     fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
     await waitFor(() =>
@@ -217,7 +250,7 @@ it.each([
     expect(libraryApi.start).not.toHaveBeenCalled();
     expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root");
     expect(await screen.findByRole("status")).toHaveTextContent(
-      "Scanning and fetching metadata in the background.",
+      "Library update started in the background.",
     );
   },
 );
@@ -231,7 +264,6 @@ it("preserves an edited name and leaves the form untouched when the native picke
   fireEvent.change(screen.getByLabelText("Root name"), {
     target: { value: "My archive" },
   });
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Selected");
   expect(screen.getByLabelText("Root name")).toHaveValue("My archive");
   fireEvent.click(screen.getByRole("button", { name: "Change folder" }));
@@ -254,14 +286,12 @@ it("ignores a late picker result after cancelling and opening another editor", a
     .mockResolvedValueOnce("/media/Current");
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   expect(screen.getByRole("button", { name: "Add to library" })).toBeDisabled();
   expect(
     screen.queryByRole("button", { name: "Save and scan" }),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Current");
   await act(async () => oldPicker.resolve("/media/Stale"));
   expect(screen.getByLabelText("Root name")).toHaveValue("Current");
@@ -274,7 +304,6 @@ it("keeps name edits made while a folder picker is pending", async () => {
   vi.mocked(pickDirectory).mockReturnValue(picker.promise);
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   fireEvent.change(screen.getByLabelText("Root name"), {
     target: { value: "Custom name" },
   });
@@ -288,7 +317,6 @@ it("shows the typed picker error and keeps manual path entry available as a fall
   );
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "Open in the desktop app",
   );
@@ -304,7 +332,6 @@ it("waits for saving before scanning, prevents duplicate submissions, and naviga
   const onNavigateScan = vi.fn();
   show({ onNavigateScan });
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Movies");
   const submit = screen.getByRole("button", { name: "Add to library" });
   fireEvent.click(submit);
@@ -344,8 +371,12 @@ it("retains a successfully saved root when scanning fails and retries only scann
   const onNavigateScan = vi.fn();
   show({ onNavigateScan });
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Movies");
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Add to library" }),
+    ).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
   expect(
     await screen.findByText(
@@ -371,11 +402,15 @@ it("adds an adult directory through the same form and starts the grant-bound aut
   const onNavigateScan = vi.fn();
   show({ onNavigateScan });
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Private");
   fireEvent.change(screen.getByRole("combobox", { name: "Root media type" }), {
     target: { value: "adult_video" },
   });
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Add to library" }),
+    ).toBeEnabled(),
+  );
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
   await waitFor(() =>
     expect(onNavigateScan).toHaveBeenCalledWith({
@@ -396,7 +431,6 @@ it("submitting the directory form starts automatic discovery without a separate 
   vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Movies");
   const submit = screen.getByRole("button", { name: "Add to library" });
   expect(submit).toHaveAttribute("type", "submit");
@@ -418,7 +452,6 @@ it("saves an explicitly disabled directory without starting background work", as
   vi.mocked(pickDirectory).mockResolvedValue("/media/Offline");
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Offline");
   fireEvent.click(screen.getByRole("button", { name: "Advanced settings" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "Enabled" }));
@@ -461,7 +494,6 @@ it("does not save or synchronize an adult directory before the backend grant is 
   vi.mocked(pickDirectory).mockResolvedValue("/media/Private");
   show();
   fireEvent.click(screen.getByRole("button", { name: "Add root" }));
-  fireEvent.click(screen.getByRole("button", { name: "Choose folder" }));
   await screen.findByText("/media/Private");
   fireEvent.change(screen.getByRole("combobox", { name: "Root media type" }), {
     target: { value: "adult_video" },
@@ -470,4 +502,178 @@ it("does not save or synchronize an adult directory before the backend grant is 
   expect(adultApi.roots).not.toHaveBeenCalled();
   expect(libraryApi.saveRoot).not.toHaveBeenCalled();
   expect(libraryApi.sync).not.toHaveBeenCalled();
+});
+
+function source(id: string, requiresKey = false): ProviderView {
+  return {
+    descriptor: {
+      id,
+      name: id === "anilist" ? "AniList" : id.toUpperCase(),
+      description: "",
+      website: null,
+      terms_url: null,
+      privacy_url: null,
+      license: "",
+      documentation_url: null,
+      engine_types: [],
+      requires_api_key: requiresKey,
+      requires_login: false,
+      rate_limit_policy: "",
+      attribution: "",
+      data_usage_notes: "",
+      media_kinds: [],
+      languages: [],
+      capabilities: [],
+      fixture: false,
+    },
+    config: {
+      enabled: true,
+      revision: 1,
+      timeout_ms: 1000,
+      concurrency: 1,
+      image_concurrency: 1,
+      interval_ms: 0,
+      max_response_bytes: 1000,
+      max_retries: 0,
+      credential_ref: null,
+    },
+    health: "healthy",
+  };
+}
+
+it("opens the system chooser once from the add route, preserving the requested media type", async () => {
+  vi.mocked(pickDirectory).mockResolvedValue("/media/Anime");
+  vi.mocked(providerApi.snapshot).mockResolvedValue({
+    schema_version: 1,
+    providers: [source("anilist")],
+    tasks: [],
+    requests: [],
+  });
+  show({ initialAdd: true, initialKind: "anime" });
+  await screen.findByText("/media/Anime");
+  expect(pickDirectory).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole("combobox", { name: "Root media type" })).toHaveValue(
+    "anime",
+  );
+  expect(
+    await screen.findByText("Metadata sources configured"),
+  ).toBeInTheDocument();
+  expect(providerAuthApi.status).not.toHaveBeenCalled();
+});
+
+it("saves the chosen directory before source setup and does not claim metadata has been fetched", async () => {
+  vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
+  const onConfigureSource = vi.fn();
+  show({ initialAdd: true, onConfigureSource });
+  await screen.findByText("/media/Movies");
+  await screen.findByText("Local media can be added now");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Save and configure TMDB" }),
+  );
+  await waitFor(() =>
+    expect(onConfigureSource).toHaveBeenCalledWith({
+      root: "fixture-root",
+      kind: "movie",
+      provider: "tmdb",
+    }),
+  );
+  expect(libraryApi.saveRoot).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ path: "/media/Movies" }),
+  );
+  expect(libraryApi.sync).not.toHaveBeenCalled();
+  expect(
+    screen.queryByText("Metadata sources configured"),
+  ).not.toBeInTheDocument();
+});
+
+it("allows local indexing with an unconfigured source and labels only the background start", async () => {
+  vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
+  show({ initialAdd: true });
+  await screen.findByText("/media/Movies");
+  await screen.findByText("Local media can be added now");
+  fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
+  expect(
+    await screen.findByText("Library update started in the background."),
+  ).toBeInTheDocument();
+  expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root");
+  expect(screen.queryByText("Scan complete")).not.toBeInTheDocument();
+});
+
+it("accepts one configured catalog source and keeps the other optional", async () => {
+  scope.visible = true;
+  vi.mocked(adultApi.providers).mockResolvedValue({
+    schema_version: 1,
+    providers: [source("wikidata")],
+    tasks: [],
+    requests: [],
+  });
+  show({ initialAdd: true, initialKind: "adult_video" });
+  expect(
+    await screen.findByText("Metadata sources configured"),
+  ).toBeInTheDocument();
+  expect(providerAuthApi.status).not.toHaveBeenCalled();
+  expect(providerApi.snapshot).not.toHaveBeenCalled();
+});
+
+it("refreshes an existing directory directly without saving or asking for manual import", async () => {
+  vi.mocked(libraryApi.roots).mockResolvedValue([
+    {
+      id: "fixture-root",
+      name: "Films",
+      path: "/media/Movies",
+      path_style: "posix",
+      kind: "movie",
+      enabled: true,
+      exclude_patterns: [],
+      created_at: time,
+      updated_at: time,
+      last_scan_at: null,
+    },
+  ]);
+  show();
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Update library" }),
+  );
+  await waitFor(() =>
+    expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root"),
+  );
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+  expect(libraryApi.confirm).not.toHaveBeenCalled();
+});
+
+it("checks credentials for a source that requires them without claiming readiness", async () => {
+  vi.mocked(providerApi.snapshot).mockResolvedValue({
+    schema_version: 1,
+    providers: [source("tmdb", true)],
+    tasks: [],
+    requests: [],
+  });
+  vi.mocked(providerAuthApi.status).mockResolvedValue({
+    provider_id: "tmdb",
+    supported_methods: ["bearer"],
+    method: "bearer",
+    storage: "system",
+    configured: false,
+    status: "not_configured",
+  });
+  show({ initialAdd: true });
+  expect(await screen.findByText("Credentials needed")).toBeInTheDocument();
+  expect(providerAuthApi.status).toHaveBeenCalledWith("tmdb");
+  expect(
+    screen.queryByText("Metadata sources configured"),
+  ).not.toBeInTheDocument();
+});
+
+it("describes automatic music as local tags without checking unrelated online sources", async () => {
+  show({ initialAdd: true, initialKind: "music_release" });
+  expect(
+    await screen.findByText(
+      "Music reads local tags first. Continue in media tools when you need online matching.",
+    ),
+  ).toBeInTheDocument();
+  expect(providerApi.snapshot).not.toHaveBeenCalled();
+  expect(providerAuthApi.status).not.toHaveBeenCalled();
+  expect(
+    screen.queryByText("Metadata sources configured"),
+  ).not.toBeInTheDocument();
 });

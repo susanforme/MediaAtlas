@@ -99,6 +99,19 @@ async fn automatic_refresh_indexes_local_files_without_manual_import_or_provider
     assert_eq!(task.phase, "complete");
     assert_eq!(task.imported_count, 1);
     assert_eq!(task.review_count, 1);
+    assert_eq!(task.unconfigured_count, 1);
+    assert_eq!(task.matched_count, 0);
+    assert_eq!(task.metadata_failed_count, 0);
+    let restored = ScanService::new(repo.clone())
+        .list_tasks(false)
+        .await
+        .unwrap();
+    let restored = restored.iter().find(|value| value.id == task.id).unwrap();
+    assert_eq!(restored.state, TaskState::WaitingForUser);
+    assert_eq!(
+        restored.unconfigured_count, 1,
+        "source setup status is derived from persisted results, not UI inference"
+    );
     let page = BrowseService::new(repo.clone(), Path::new(&root.path).join("cache"))
         .list_media(&Default::default())
         .await

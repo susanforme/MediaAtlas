@@ -24,6 +24,8 @@ export function useRootEditor(
     taskId: string,
     kind: MediaKind | null,
   ) => void,
+  initialAdd = false,
+  initialKind?: MediaKind,
 ) {
   const { t } = useTranslation();
   const { roots, adultAvailable, adultVisible } = useLibraryDirectories();
@@ -48,6 +50,7 @@ export function useRootEditor(
   const permitted = useRef(true);
   permitted.current = form?.kind !== "adult_video" || adultAvailable;
   const hadAdultAccess = useRef(adultAvailable);
+  const initialAddHandled = useRef(false);
   useEffect(() => {
     if (hadAdultAccess.current && !adultAvailable) {
       if (form?.kind === "adult_video") {
@@ -84,6 +87,17 @@ export function useRootEditor(
       void client.invalidateQueries();
     },
   });
+  const refresh = useMutation({
+    mutationFn: (root: RootView) => libraryApi.sync(root.id),
+    onSuccess: (task, root) => {
+      if (root.kind === "adult_video" && !hadAdultAccess.current) return;
+      setCompleted({ root, task });
+      void client.invalidateQueries({
+        queryKey:
+          root.kind === "adult_video" ? ["adult", "scan-tasks"] : ["tasks"],
+      });
+    },
+  });
   function closeEditor() {
     if (operationLock.current) return;
     epoch.current += 1;
@@ -112,9 +126,27 @@ export function useRootEditor(
     const value = root
       ? rootInputFromView(root)
       : newRootInput(adult && adultVisible);
+    if (!root && initialKind && (initialKind !== "adult_video" || adultVisible))
+      value.kind = initialKind;
     setForm(value);
     setExcludes(value.exclude_patterns.join("\n"));
+    return value;
   }
+  function add() {
+    const input = edit();
+    if (input) void chooseDirectory(input);
+  }
+  const addCurrent = useRef(add);
+  addCurrent.current = add;
+  useEffect(() => {
+    if (!initialAdd || initialAddHandled.current) return;
+    // Defer until mount settles so StrictMode does not open two native windows.
+    const timer = setTimeout(() => {
+      initialAddHandled.current = true;
+      addCurrent.current();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [initialAdd]);
   function changeName(name: string) {
     nameEdited.current = true;
     setForm((current) => (current ? { ...current, name } : current));
@@ -130,12 +162,12 @@ export function useRootEditor(
         : current,
     );
   }
-  async function chooseDirectory() {
+  async function chooseDirectory(input: RootInput | null = form) {
     if (
-      !form ||
+      !input ||
       operationLock.current ||
       pickerLock.current ||
-      !permitted.current
+      (input.kind === "adult_video" && !adultAvailable)
     )
       return;
     const started = epoch.current;
@@ -145,7 +177,7 @@ export function useRootEditor(
     try {
       const path = await pickDirectory({
         title: t("rootChooseDirectory"),
-        ...(form.path ? { defaultPath: form.path } : {}),
+        ...(input.path ? { defaultPath: input.path } : {}),
       });
       if (started !== epoch.current || !permitted.current || path === null)
         return;
@@ -172,7 +204,10 @@ export function useRootEditor(
       JSON.stringify(normalizeRootInput(form, excludes)) ===
         JSON.stringify(rootInputFromView(savedRoot)),
   );
-  async function persist(scanAfter: boolean) {
+  async function persist(
+    scanAfter: boolean,
+    onSaved?: (root: RootView) => void,
+  ) {
     if (operationLock.current || pickerLock.current || !permitted.current)
       return;
     const input = normalizedForm();
@@ -204,6 +239,7 @@ export function useRootEditor(
       } else {
         setCompleted({ root });
         setForm(null);
+        onSaved?.(root);
       }
     } catch {
       // Mutations expose only the repository's typed, redacted errors.
@@ -234,8 +270,10 @@ export function useRootEditor(
     adultVisible,
     save,
     scan,
+    refresh,
     deletion,
     edit,
+    add,
     submit,
     persist,
     closeEditor,

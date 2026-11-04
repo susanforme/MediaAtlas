@@ -151,6 +151,8 @@ export interface ScanTask {
   phase?: "scan" | "index" | "metadata" | "complete";
   matched_count?: number;
   review_count?: number;
+  /** Items awaiting source setup; included in review_count. */
+  unconfigured_count?: number;
   metadata_failed_count?: number;
 }
 export interface ScanCandidate {
@@ -290,6 +292,12 @@ function task(v: unknown): v is ScanTask {
     [v.matched_count, v.review_count, v.metadata_failed_count].every(
       (count) => count === undefined || uint(count),
     ) &&
+    (v.unconfigured_count === undefined ||
+      (typeof v.unconfigured_count === "number" &&
+        typeof v.review_count === "number" &&
+        uint(v.unconfigured_count) &&
+        uint(v.review_count) &&
+        v.unconfigured_count <= v.review_count)) &&
     (v.mode !== "automatic" ||
       (["scan", "index", "metadata", "complete"].includes(String(v.phase)) &&
         [v.matched_count, v.review_count, v.metadata_failed_count].every(uint)))

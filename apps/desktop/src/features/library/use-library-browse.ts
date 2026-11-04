@@ -73,6 +73,10 @@ export function useLibraryBrowse(
     facets,
     filter,
     allowed,
+    reset: () => {
+      setHistory([undefined]);
+      onSearch({ view: search.view });
+    },
     activity,
     adultAvailable: settings.entry_visible,
   };

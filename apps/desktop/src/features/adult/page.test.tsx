@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ComponentProps } from "react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { type AdultSettings, adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
+import { nativeOpenApi } from "../../api/organization";
 import { providerApi } from "../../api/providers";
 import i18n from "../../i18n";
 import { fixtureSnapshot } from "../providers/fixtures";
@@ -40,9 +42,38 @@ const privacy = vi.hoisted(() => ({
 }));
 vi.mock("../library/context", () => ({ usePrivacy: () => privacy }));
 vi.mock("@tanstack/react-router", () => ({
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
+  Link: ({
+    to,
+    params,
+    search,
+    children,
+    onClick,
+    ...props
+  }: ComponentProps<"a"> & {
+    to: string;
+    params?: { mediaId: string };
+    search?: Record<string, unknown>;
+  }) => {
+    const query = new URLSearchParams(
+      Object.entries(search ?? {}).map(([key, value]) => [key, String(value)]),
+    ).toString();
+    return (
+      <a
+        {...props}
+        href={`${to.replace("$mediaId", params?.mediaId ?? "")}${query ? `?${query}` : ""}`}
+        onClick={(event) => {
+          event.preventDefault();
+          onClick?.(event);
+        }}
+      >
+        {children}
+      </a>
+    );
+  },
+}));
+vi.mock("../../api/organization", async (original) => ({
+  ...(await original<typeof import("../../api/organization")>()),
+  nativeOpenApi: { open: vi.fn() },
 }));
 vi.mock("../../api/adult", async (original) => ({
   ...(await original<typeof import("../../api/adult")>()),
@@ -229,10 +260,17 @@ it("keeps local adult searches and images separate from ordinary APIs", async ()
       }),
     ),
   );
-  expect(await screen.findByRole("link", { name: "Details" })).toHaveAttribute(
+  const poster = await screen.findByRole("link", {
+    name: "Details: Synthetic local adult fixture",
+  });
+  expect(poster).toHaveAttribute(
     "href",
-    "/media/$mediaId",
+    "/media/synthetic-media?kind=adult_video",
   );
+  expect(poster).toHaveTextContent("Synthetic local adult fixture");
+  expect(poster.querySelector(".poster-image")).not.toBeNull();
+  expect(libraryApi.detail).not.toHaveBeenCalled();
+  expect(nativeOpenApi.open).not.toHaveBeenCalled();
 });
 it("uses catalog-specific metadata and requires separate merge and output confirmations", async () => {
   await candidate();
@@ -379,19 +417,33 @@ it("does not introduce a type-specific recent visits or lock panel", async () =>
 it("keeps adult consumption read-only and links to separate tools", async () => {
   show();
   await screen.findByText("Synthetic local adult fixture");
+  const poster = screen.getByRole("link", {
+    name: "Details: Synthetic local adult fixture",
+  });
+  expect(poster).toHaveAttribute(
+    "href",
+    "/media/synthetic-media?kind=adult_video",
+  );
+  poster.focus();
+  expect(poster).toHaveFocus();
+  fireEvent.click(poster);
+  expect(nativeOpenApi.open).not.toHaveBeenCalled();
   expect(
-    screen.getByRole("button", {
-      name: "Open in system app: Synthetic local adult fixture",
-    }),
-  ).toBeInTheDocument();
+    screen.queryByRole("button", { name: /Open in system app/ }),
+  ).not.toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: /Preview|Confirm|Search catalog/ }),
   ).not.toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Media tools" })).toHaveAttribute(
     "href",
-    "/tools",
+    "/tools?kind=adult_video",
   );
+  expect(libraryApi.media).not.toHaveBeenCalled();
+  expect(libraryApi.detail).not.toHaveBeenCalled();
+  expect(adultApi.confirm).not.toHaveBeenCalled();
+  expect(adultApi.outputExecute).not.toHaveBeenCalled();
+  expect(adultApi.batchExecute).not.toHaveBeenCalled();
   expect(adultApi.batchPreview).not.toHaveBeenCalled();
   expect(adultApi.outputPreview).not.toHaveBeenCalled();
   expect(document.querySelector("audio,video")).toBeNull();

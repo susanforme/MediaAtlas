@@ -529,6 +529,9 @@ function MediaToolsWorkspace({
     <>
       <PageHeading title={t("videoTools")}>
         <Button asChild variant="outline">
+          <Link to="/scanner">{t("scanner")}</Link>
+        </Button>
+        <Button asChild variant="outline">
           <Link to="/library" search={{ kind: search?.kind }}>
             {t("library")}
           </Link>

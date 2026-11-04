@@ -248,7 +248,7 @@ it("routes real providers to Scraper and Settings without an offline fixture sea
   ).toHaveAttribute("href", "/scraper");
   expect(
     screen.getByRole("link", { name: "Save authentication in Settings" }),
-  ).toHaveAttribute("href", "/settings");
+  ).toHaveAttribute("href", "/settings?provider=tmdb&tab=auth");
   expect(
     screen.getByText("Details · Images · External IDs · Article lookup"),
   ).toBeInTheDocument();
@@ -298,7 +298,10 @@ it("keeps scraper context when continuing from providers to authentication setti
     await screen.findByRole("link", {
       name: "Save authentication in Settings",
     }),
-  ).toHaveAttribute("href", "/settings?from=scraper&media=media-1");
+  ).toHaveAttribute(
+    "href",
+    "/settings?from=scraper&media=media-1&provider=tmdb&tab=auth",
+  );
   expect(
     screen.getByRole("link", { name: "Search in Scraper" }),
   ).toHaveAttribute("href", "/scraper?media=media-1");

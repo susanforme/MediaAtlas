@@ -150,7 +150,11 @@ impl ScanService {
         let task = self.get_task(id).await?;
         self.finish(
             id,
-            if pending > 0 || task.review_count > 0 || task.metadata_failed_count > 0 {
+            if pending > 0
+                || task.review_count > 0
+                || task.unconfigured_count > 0
+                || task.metadata_failed_count > 0
+            {
                 "waiting_for_user"
             } else {
                 "succeeded"

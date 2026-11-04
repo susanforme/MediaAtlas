@@ -7,7 +7,11 @@ import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { useMaintenance } from "./use-maintenance";
 import "./translations";
 
-export function MaintenancePage() {
+export function MaintenancePage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const {
     working,
@@ -24,7 +28,7 @@ export function MaintenancePage() {
   } = useMaintenance();
   return (
     <>
-      <PageHeading title={t("maintenanceTitle")} />
+      {!embedded && <PageHeading title={t("maintenanceTitle")} />}
       <div className="space-y-6">
         <section className="panel space-y-4">
           {status.isPending && <Loading />}

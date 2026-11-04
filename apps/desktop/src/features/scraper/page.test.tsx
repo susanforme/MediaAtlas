@@ -594,10 +594,16 @@ it("requires configured credentials and offers manual setup without enabling pro
   ).toBeDisabled();
   expect(
     screen.getByRole("link", { name: "Configure credentials" }),
-  ).toHaveAttribute("href", "/settings?from=scraper&media=media-1");
+  ).toHaveAttribute(
+    "href",
+    "/settings?tab=auth&from=scraper&media=media-1&provider=tmdb",
+  );
   expect(
     screen.getByRole("link", { name: "Configure providers" }),
-  ).toHaveAttribute("href", "/providers?from=scraper&media=media-1");
+  ).toHaveAttribute(
+    "href",
+    "/settings?tab=providers&from=scraper&media=media-1",
+  );
   expect(scraperApi.search).not.toHaveBeenCalled();
 });
 it("rejects adult and unsupported local targets instead of defaulting to movie", async () => {
@@ -878,13 +884,14 @@ it("preserves the whole review queue in both manual provider setup links", async
   vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
   show("media-2", ["media-1", "media-2"], vi.fn());
   await screen.findByRole("link", { name: "Configure providers" });
-  for (const [name, path] of [
-    ["Configure providers", "/providers"],
-    ["Configure credentials", "/settings"],
+  for (const [name, tab] of [
+    ["Configure providers", "providers"],
+    ["Configure credentials", "auth"],
   ]) {
     const href = screen.getByRole("link", { name }).getAttribute("href") ?? "";
     const url = new URL(href, "https://example.test");
-    expect(url.pathname).toBe(path);
+    expect(url.pathname).toBe("/settings");
+    expect(url.searchParams.get("tab")).toBe(tab);
     expect(url.searchParams.get("from")).toBe("scraper");
     expect(url.searchParams.get("media")).toBe("media-2");
     expect(JSON.parse(url.searchParams.get("queue") ?? "null")).toEqual([

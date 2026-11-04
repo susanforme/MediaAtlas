@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { ScanTask } from "../../api/library";
 import {
   latestLibraryRefreshes,
+  refreshCounts,
   refreshIsRunning,
   refreshNeedsAttention,
+  refreshResultTitle,
+  refreshSnapshot,
 } from "./library-activity-model";
 
 const task: ScanTask = {
@@ -65,5 +68,46 @@ describe("library refresh activity", () => {
         "folder",
       ),
     ).toEqual([task]);
+  });
+  it("keeps local indexing distinct from metadata readiness and source setup", () => {
+    const blocked = {
+      ...task,
+      state: "waiting_for_user" as const,
+      phase: "complete" as const,
+      matched_count: 0,
+      review_count: 4,
+      unconfigured_count: 4,
+    };
+    expect(refreshCounts(blocked)).toEqual({
+      unconfigured: 4,
+      review: 0,
+      failed: 0,
+    });
+    expect(refreshNeedsAttention(blocked)).toBe(true);
+    expect(refreshResultTitle(blocked)).toBe("libraryRefreshUnconfigured");
+    expect(refreshResultTitle({ ...blocked, state: "succeeded" })).toBe(
+      "libraryRefreshUnconfigured",
+    );
+    expect(refreshCounts({ ...blocked, unconfigured_count: 2 }).review).toBe(2);
+    expect(refreshSnapshot([blocked])).not.toBe(
+      refreshSnapshot([{ ...blocked, unconfigured_count: 0 }]),
+    );
+  });
+  it("never labels a legacy waiting task or a local-only scan as metadata complete", () => {
+    expect(
+      refreshResultTitle({
+        ...task,
+        state: "waiting_for_user",
+        review_count: 0,
+      }),
+    ).toBe("libraryRefreshIncomplete");
+    expect(
+      refreshResultTitle({
+        ...task,
+        state: "succeeded",
+        review_count: 0,
+        matched_count: 0,
+      }),
+    ).toBe("libraryRefreshLocalComplete");
   });
 });

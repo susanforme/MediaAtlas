@@ -2,11 +2,33 @@ import i18n from "../../i18n";
 
 const values = {
   "zh-CN": {
+    rootSourceCheck: "资料来源配置",
+    rootSourcesChecking: "正在检查资料来源…",
+    rootSourcesConfigured: "资料来源已配置",
+    rootSourcesLocalFirst: "可先添加本地媒体",
+    rootSourcesMissingHelp:
+      "可先收录本地文件，待配置来源后再补全资料。配置前会保存当前目录。",
+    rootSourcesCatalogHelp:
+      "自动匹配使用编号对应的来源；未识别或来源不匹配时保留待处理状态。",
+    rootLocalTagsOnly:
+      "音乐先读取本地标签。需要在线匹配时，可在媒体工具中继续。",
+    rootSource_checking: "检查中",
+    rootSource_configured: "已配置",
+    rootSource_disabled: "未启用",
+    rootSource_credentials: "缺少可用凭据",
+    rootSource_unavailable: "尚不可用",
+    rootSource_error: "检查失败",
+    rootConfigureSource: "保存并配置 {{source}}",
+    rootNeedsAttention: "需处理",
+    rootUpToDate: "扫描完成",
+    rootUpdating: "更新中…",
+    rootReviewUpdate: "查看结果",
+
     autoRootAdd: "添加到媒体库",
     autoRootSave: "保存并更新媒体库",
     autoRootRetry: "重试更新",
     autoRootSavedFailed: "目录已保存，媒体库更新未能启动。",
-    autoRootStarted: "正在后台扫描并获取媒体资料。",
+    autoRootStarted: "已开始在后台更新媒体库。",
     autoBrowseLibrary: "查看媒体库",
     autoRefreshLibrary: "更新媒体库",
     autoRefreshReady: "更新目录后，媒体会自动出现在媒体库。",
@@ -56,12 +78,34 @@ const values = {
     scanNothingToReview: "本次扫描没有待确认的候选。",
   },
   "en-US": {
+    rootSourceCheck: "Metadata source configuration",
+    rootSourcesChecking: "Checking metadata sources…",
+    rootSourcesConfigured: "Metadata sources configured",
+    rootSourcesLocalFirst: "Local media can be added now",
+    rootSourcesMissingHelp:
+      "You can add local files now and fetch metadata after source setup. Your directory will be saved before opening settings.",
+    rootSourcesCatalogHelp:
+      "Automatic matching uses the source for each catalog number. Unrecognized or unsupported numbers remain available for review.",
+    rootLocalTagsOnly:
+      "Music reads local tags first. Continue in media tools when you need online matching.",
+    rootSource_checking: "Checking",
+    rootSource_configured: "Configured",
+    rootSource_disabled: "Disabled",
+    rootSource_credentials: "Credentials needed",
+    rootSource_unavailable: "Unavailable",
+    rootSource_error: "Check failed",
+    rootConfigureSource: "Save and configure {{source}}",
+    rootNeedsAttention: "Needs attention",
+    rootUpToDate: "Scan complete",
+    rootUpdating: "Updating…",
+    rootReviewUpdate: "View results",
+
     autoRootAdd: "Add to library",
     autoRootSave: "Save and update library",
     autoRootRetry: "Retry update",
     autoRootSavedFailed:
       "The directory is saved, but the library update could not start.",
-    autoRootStarted: "Scanning and fetching metadata in the background.",
+    autoRootStarted: "Library update started in the background.",
     autoBrowseLibrary: "View library",
     autoRefreshLibrary: "Update library",
     autoRefreshReady:

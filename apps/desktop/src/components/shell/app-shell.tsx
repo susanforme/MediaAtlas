@@ -1,19 +1,13 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
-  AudioLines,
   Clapperboard,
-  Database,
-  FileScan,
   FolderOpen,
-  Globe2,
-  House,
   Layers3,
   ListTodo,
   Music2,
   Search,
   Settings2,
   ShieldCheck,
-  Stethoscope,
   Wrench,
 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -25,22 +19,13 @@ import { useTaskEvents } from "./use-task-events";
 import "./shell.css";
 
 const browseEntries = [
-  ["/", "dashboard", House],
   ["/library", "library", Clapperboard],
   ["/music", "music", Music2],
 ] as const;
 const workEntries = [
   ["/roots", "roots", FolderOpen],
-  ["/scanner", "scanner", FileScan],
-  ["/scraper", "scraper", Layers3],
   ["/tools", "videoTools", Wrench],
-  ["/music/tools", "musicTools", AudioLines],
   ["/tasks", "tasks", ListTodo],
-] as const;
-const serviceEntries = [
-  ["/providers", "providers", Database],
-  ["/network", "networkInspector", Globe2],
-  ["/diagnostics", "diagnostics", Stethoscope],
 ] as const;
 
 function Sidebar() {
@@ -54,7 +39,7 @@ function Sidebar() {
         <span className="app-brand-name">MediaAtlas</span>
       </div>
       <nav className="app-nav" aria-label={t("local")}>
-        {[browseEntries, workEntries, serviceEntries].map((group, index) => (
+        {[browseEntries, workEntries].map((group, index) => (
           <div className="app-nav-group" key={group[0][0]}>
             {index > 0 && <div className="app-nav-divider" />}
             {group.map(([to, label, Icon]) => (
@@ -139,7 +124,6 @@ function Toolbar() {
 
 export function AppShell() {
   const { i18n } = useTranslation();
-  const pathname = useLocation({ select: (location) => location.pathname });
   useTaskEvents();
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";
@@ -149,9 +133,7 @@ export function AppShell() {
       <Sidebar />
       <div className="app-main">
         <Toolbar />
-        <main
-          className={`app-content${pathname === "/" ? " app-content-home" : ""}`}
-        >
+        <main className="app-content">
           <Outlet />
         </main>
       </div>

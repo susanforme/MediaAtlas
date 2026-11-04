@@ -158,6 +158,10 @@ it("requires an explicit version or Part selection and excludes sidecars", async
     expect(nativeOpenApi.open).toHaveBeenCalledWith("part2", false),
   );
   expect(nativeOpenApi.open).toHaveBeenCalledOnce();
+  await screen.findByText("Submitted system opening request");
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
 });
 it("uses the adult typed endpoint without ordinary detail queries", async () => {
   show(<NativeOpen mediaId="private" adult />);
@@ -167,23 +171,17 @@ it("uses the adult typed endpoint without ordinary detail queries", async () => 
   expect(libraryApi.detail).not.toHaveBeenCalled();
   expect(nativeOpenApi.open).toHaveBeenCalledWith("adult-file", true);
 });
-it("keeps library cards and details read-only with a primary native open action", async () => {
+it("opens poster cards as details and reserves system opening for an explicit action", async () => {
   const view = show(<LibraryPage search={{}} onSearch={() => {}} />);
-  const primary = await screen.findByRole("button", {
-    name: "Open in system app: Confirmed resource",
-  });
-  expect(screen.getByRole("link", { name: "Details" })).toBeInTheDocument();
+  await screen.findByRole("link", { name: /Confirmed resource/ });
   expect(nativeOpenApi.open).not.toHaveBeenCalled();
-  fireEvent.click(primary);
-  await screen.findByText("Submitted system opening request");
   view.unmount();
   const page = show(<MediaDetailPage mediaId="media" />);
   await screen.findByRole("heading", { name: "Confirmed resource" });
-  expect(
-    screen.queryByRole("button", { name: /Preview|Confirm|Export|Scrape/ }),
-  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
+  await screen.findByText("Submitted system opening request");
+  expect(nativeOpenApi.open).toHaveBeenCalledWith("movie", false);
   expect(page.container.querySelector("audio,video")).toBeNull();
-  expect(screen.getByRole("link", { name: "Media tools" })).toBeInTheDocument();
 });
 
 it("does not dispatch a delayed card-detail response after the view closes", async () => {
@@ -273,4 +271,16 @@ it("mounts the single library search in the toolbar before data arrives and pres
     cursor: undefined,
     page: 1,
   });
+});
+
+it("keeps version selection available after a failed system opening request", async () => {
+  vi.mocked(nativeOpenApi.open).mockRejectedValue(new Error("failed"));
+  show(
+    <NativeOpen files={[file("a", "first.mkv"), file("b", "second.mkv")]} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Open in system app" }));
+  await screen.findByRole("dialog");
+  fireEvent.click(screen.getByRole("button", { name: "first.mkv" }));
+  await waitFor(() => expect(nativeOpenApi.open).toHaveBeenCalledOnce());
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
 });

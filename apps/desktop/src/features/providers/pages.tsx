@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { adultApi } from "../../api/adult";
 import {
   type ProviderConfig,
   type ProviderView,
@@ -15,6 +16,7 @@ import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import { usePrivacy } from "../library/context";
 import {
   Empty,
   ErrorNotice,
@@ -22,11 +24,18 @@ import {
   PageHeading,
   useFormat,
 } from "../library/shared";
+import {
+  type ProviderSetupSearch,
+  SETUP_PROVIDERS,
+  type SetupProvider,
+} from "../settings/setup-search";
 
-function useSnapshot() {
+function useSnapshot(adult = false) {
+  const { includeAdult } = usePrivacy();
   return useQuery({
-    queryKey: ["providers"],
-    queryFn: providerApi.snapshot,
+    queryKey: adult ? ["adult", "providers"] : ["providers"],
+    queryFn: adult ? adultApi.providers : providerApi.snapshot,
+    enabled: !adult || includeAdult,
     refetchInterval: 2000,
   });
 }
@@ -111,13 +120,21 @@ function ProviderCard({
   returnToScraper = false,
   returnMediaId,
   returnQueue,
+  setup,
 }: {
   provider: ProviderView;
   returnToScraper?: boolean;
   returnMediaId?: string;
   returnQueue?: string[];
+  setup?: ProviderSetupSearch;
 }) {
   const { t, i18n } = useTranslation();
+  const scraperContext =
+    setup?.from === "scraper"
+      ? setup
+      : returnToScraper
+        ? { media: returnMediaId, queue: returnQueue }
+        : undefined;
   const client = useQueryClient();
   const [query, setQuery] = useState("");
   const refresh = () => {
@@ -195,29 +212,38 @@ function ProviderCard({
         </form>
       ) : (
         <div className="flex flex-wrap gap-3">
-          <Button asChild variant="outline">
-            <Link
-              to="/scraper"
-              search={{
-                media: returnToScraper ? returnMediaId : undefined,
-                queue: returnToScraper ? returnQueue : undefined,
-              }}
-            >
-              {t("providerOpenScraper")}
-            </Link>
-          </Button>
+          {setup?.from !== "library" && (
+            <Button asChild variant="outline">
+              <Link
+                to="/scraper"
+                search={{
+                  media: scraperContext?.media,
+                  queue: scraperContext?.queue,
+                }}
+              >
+                {t("providerOpenScraper")}
+              </Link>
+            </Button>
+          )}
           <Button asChild variant="outline">
             <Link
               to="/settings"
-              search={
-                returnToScraper
-                  ? {
-                      from: "scraper",
-                      media: returnMediaId,
-                      queue: returnQueue,
-                    }
-                  : {}
-              }
+              search={{
+                ...(setup ??
+                  (returnToScraper
+                    ? {
+                        from: "scraper",
+                        media: returnMediaId,
+                        queue: returnQueue,
+                      }
+                    : {})),
+                provider: SETUP_PROVIDERS.includes(
+                  provider.descriptor.id as SetupProvider,
+                )
+                  ? (provider.descriptor.id as SetupProvider)
+                  : undefined,
+                tab: "auth",
+              }}
             >
               {t("providerOpenAuthSettings")}
             </Link>
@@ -300,27 +326,33 @@ export function ProvidersPage({
   returnMediaId,
   returnQueue,
   returnToScraper = false,
+  setup,
+  embedded = false,
 }: {
   returnMediaId?: string;
   returnQueue?: string[];
   returnToScraper?: boolean;
+  setup?: ProviderSetupSearch;
+  embedded?: boolean;
 } = {}) {
   const { t } = useTranslation();
-  const snapshot = useSnapshot();
+  const snapshot = useSnapshot(setup?.kind === "adult_video");
   return (
     <>
-      <PageHeading title={t("providers")}>
-        {returnToScraper && (
-          <Button asChild variant="outline">
-            <Link
-              to="/scraper"
-              search={{ media: returnMediaId, queue: returnQueue }}
-            >
-              {t("scraperReturn")}
-            </Link>
-          </Button>
-        )}
-      </PageHeading>
+      {!embedded && (
+        <PageHeading title={t("providers")}>
+          {returnToScraper && (
+            <Button asChild variant="outline">
+              <Link
+                to="/scraper"
+                search={{ media: returnMediaId, queue: returnQueue }}
+              >
+                {t("scraperReturn")}
+              </Link>
+            </Button>
+          )}
+        </PageHeading>
+      )}
       {snapshot.isPending ? (
         <Loading />
       ) : snapshot.isError ? (
@@ -337,6 +369,7 @@ export function ProvidersPage({
               returnToScraper={returnToScraper}
               returnMediaId={returnMediaId}
               returnQueue={returnQueue}
+              setup={setup}
             />
           ))}
         </div>
@@ -411,13 +444,17 @@ export function ProviderTasks() {
     </section>
   );
 }
-export function NetworkInspectorPage() {
+export function NetworkInspectorPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+} = {}) {
   const { t } = useTranslation();
   const { number } = useFormat();
   const snapshot = useSnapshot();
   return (
     <>
-      <PageHeading title={t("networkInspector")} />
+      {!embedded && <PageHeading title={t("networkInspector")} />}
       {snapshot.isPending ? (
         <Loading />
       ) : snapshot.isError ? (

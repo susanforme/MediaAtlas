@@ -8,16 +8,17 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { AppShell } from "./components/shell/app-shell";
-import { DashboardPage } from "./features/home/page";
 import { validateLibrarySearch } from "./features/library/browse-model";
 import { PrivacyProvider } from "./features/library/context";
 import { validateScannerSearch } from "./features/library/scanner-navigation";
 import { Loading } from "./features/library/shared";
-import "./features/scraper/navigation";
 import {
-  validateScraperReturnSearch,
-  validateScraperSearch,
-} from "./features/scraper/search";
+  SETUP_KINDS,
+  type SetupKind,
+  validateProviderSetupSearch,
+} from "./features/settings/setup-search";
+import "./features/scraper/navigation";
+import { validateScraperSearch } from "./features/scraper/search";
 import "./features/music/navigation";
 import "./features/tools/navigation";
 import { validateToolsRouteSearch } from "./features/tools/search";
@@ -42,14 +43,6 @@ const SettingsPage = lazyRouteComponent(
   () => import("./features/settings/page"),
   "SettingsPage",
 );
-const ProvidersPage = lazyRouteComponent(
-  () => import("./features/providers/pages"),
-  "ProvidersPage",
-);
-const NetworkInspectorPage = lazyRouteComponent(
-  () => import("./features/providers/pages"),
-  "NetworkInspectorPage",
-);
 const ScannerPage = lazyRouteComponent(
   () => import("./features/library/scanner"),
   "ScannerPage",
@@ -69,7 +62,7 @@ const rootRoute = createRootRoute({ component: RootLayout });
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: DashboardPage,
+  component: () => <Navigate to="/library" replace />,
 });
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -162,13 +155,25 @@ const detailRoute = createRoute({
 const rootsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/roots",
-  validateSearch: (search: Record<string, unknown>) =>
-    search.kind === "adult_video" ? { kind: "adult_video" as const } : {},
+  validateSearch: (search: Record<string, unknown>) => ({
+    ...(SETUP_KINDS.includes(search.kind as SetupKind)
+      ? { kind: search.kind as SetupKind }
+      : {}),
+    ...(search.add === true || search.add === "true" ? { add: true } : {}),
+  }),
   component: () => {
     const navigate = rootsRoute.useNavigate();
     const search = rootsRoute.useSearch();
     return (
       <RootsPage
+        onConfigureSource={(value) =>
+          void navigate({
+            to: "/settings",
+            search: validateProviderSetupSearch({ from: "library", ...value }),
+          })
+        }
+        initialKind={search.kind}
+        initialAdd={search.add}
         adult={search.kind === "adult_video"}
         onNavigateScan={(search) =>
           void navigate({
@@ -281,45 +286,31 @@ const tasksRoute = createRoute({
 const settingsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/settings",
-  validateSearch: validateScraperReturnSearch,
+  validateSearch: validateProviderSetupSearch,
   component: () => {
     const search = settingsRoute.useSearch();
+    const navigate = settingsRoute.useNavigate();
     return (
       <SettingsPage
+        setup={search}
+        onTabChange={(tab) =>
+          void navigate({ search: { ...search, tab }, replace: true })
+        }
+        onSetupComplete={(root, _task, kind) => {
+          if (root) void navigate({ to: "/library", search: { root, kind } });
+          else if (search.from === "scraper")
+            void navigate({
+              to: "/scraper",
+              search: { media: search.media, queue: search.queue },
+            });
+          else void navigate({ to: "/library", search: { kind } });
+        }}
         returnToScraper={search.from === "scraper"}
         returnMediaId={search.media}
         returnQueue={search.queue}
       />
     );
   },
-});
-const diagnosticsRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/diagnostics",
-  component: lazyRouteComponent(
-    () => import("./features/maintenance/page"),
-    "MaintenancePage",
-  ),
-});
-const providersRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/providers",
-  validateSearch: validateScraperReturnSearch,
-  component: () => {
-    const search = providersRoute.useSearch();
-    return (
-      <ProvidersPage
-        returnToScraper={search.from === "scraper"}
-        returnMediaId={search.media}
-        returnQueue={search.queue}
-      />
-    );
-  },
-});
-const networkRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/network",
-  component: NetworkInspectorPage,
 });
 const router = createRouter({
   defaultPendingComponent: Loading,
@@ -341,10 +332,7 @@ const router = createRouter({
     musicToolsRoute,
     musicAlbumRoute,
     musicArtistRoute,
-    providersRoute,
-    networkRoute,
     settingsRoute,
-    diagnosticsRoute,
   ]),
 });
 const queryClient = new QueryClient({

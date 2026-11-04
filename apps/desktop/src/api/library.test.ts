@@ -53,6 +53,7 @@ describe("library IPC contracts", () => {
       phase: "scan",
       matched_count: 0,
       review_count: 0,
+      unconfigured_count: 0,
       metadata_failed_count: 0,
     };
     vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data: task });
@@ -63,11 +64,20 @@ describe("library IPC contracts", () => {
     expect(scanTaskGuard({ ...task, phase: "pretend_done" })).toBe(false);
     expect(scanTaskGuard({ ...task, matched_count: -1 })).toBe(false);
     expect(scanTaskGuard({ ...task, review_count: undefined })).toBe(false);
+    expect(scanTaskGuard({ ...task, unconfigured_count: undefined })).toBe(
+      true,
+    );
+    expect(scanTaskGuard({ ...task, unconfigured_count: -1 })).toBe(false);
+    expect(scanTaskGuard({ ...task, unconfigured_count: 1 })).toBe(false);
+    expect(
+      scanTaskGuard({ ...task, review_count: 2, unconfigured_count: 1 }),
+    ).toBe(true);
     const {
       mode,
       phase,
       matched_count,
       review_count,
+      unconfigured_count,
       metadata_failed_count,
       ...legacy
     } = task;

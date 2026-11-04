@@ -10,6 +10,7 @@ import {
 export function useProviderAuth(providerId: string) {
   const client = useQueryClient();
   const active = useRef(false);
+  const operation = useRef(false);
   const [method, setMethod] = useState<AuthMethod>("bearer");
   const [storage, setStorage] = useState<AuthStorage>("system");
   const [secret, setSecret] = useState("");
@@ -45,7 +46,10 @@ export function useProviderAuth(providerId: string) {
   );
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    await saveCredential();
+  }
+  async function saveCredential(): Promise<boolean> {
+    if (operation.current) return false;
     const submitted =
       method === "affiliate"
         ? JSON.stringify({
@@ -65,10 +69,11 @@ export function useProviderAuth(providerId: string) {
     if (!valid) {
       setSecret("");
       setAffiliate("");
-      return;
+      return false;
     }
     setSecret("");
     setAffiliate("");
+    operation.current = true;
     setPending("save");
     setOutcome(null);
     setError(undefined);
@@ -83,13 +88,17 @@ export function useProviderAuth(providerId: string) {
       if (active.current) {
         client.setQueryData(["provider-auth", providerId], saved);
         setOutcome("saved");
+        return true;
       }
+      return false;
     } catch (failure: unknown) {
       if (active.current) {
         setError(failure);
         setOutcome("save_failed");
       }
+      return false;
     } finally {
+      operation.current = false;
       if (active.current) {
         setSecret("");
         setAffiliate("");
@@ -98,7 +107,8 @@ export function useProviderAuth(providerId: string) {
     }
   }
   async function clear() {
-    if (pending) return;
+    if (operation.current) return;
+    operation.current = true;
     setSecret("");
     setAffiliate("");
     setPending("clear");
@@ -118,6 +128,7 @@ export function useProviderAuth(providerId: string) {
         setOutcome("clear_failed");
       }
     } finally {
+      operation.current = false;
       if (active.current) {
         setSecret("");
         setAffiliate("");
@@ -144,6 +155,7 @@ export function useProviderAuth(providerId: string) {
     status,
     needsSecret,
     save,
+    saveCredential,
     clear,
   };
 }

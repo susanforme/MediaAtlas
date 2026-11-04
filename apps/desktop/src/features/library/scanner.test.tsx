@@ -326,24 +326,26 @@ describe("Fixture scan review", () => {
         imported_count: 2,
         matched_count: 0,
         review_count: 2,
+        unconfigured_count: 1,
         metadata_failed_count: 1,
       },
     ]);
     show();
     expect(
-      await screen.findByText(
-        "Media is available to browse. Some metadata needs attention.",
-      ),
+      (await screen.findAllByText("Metadata source setup required"))[0],
     ).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: "Review unmatched media" }),
     ).toHaveAttribute("href", "/tools");
     expect(
-      screen.getByRole("link", { name: "Configure metadata sources" }),
-    ).toHaveAttribute("href", "/providers");
-    expect(
-      screen.getByRole("link", { name: "Configure credentials" }),
+      screen.getByRole("link", { name: "Configure source and continue" }),
     ).toHaveAttribute("href", "/settings");
+    expect(
+      screen.getByRole("link", { name: "Configure source and continue" }),
+    ).toHaveAttribute(
+      "data-search",
+      JSON.stringify({ from: "library", root: root.id }),
+    );
     expect(
       screen.getByRole("button", { name: "Update library" }),
     ).toBeEnabled();

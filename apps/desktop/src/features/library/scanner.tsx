@@ -11,6 +11,8 @@ import type { ScannerSearch } from "./scanner-navigation";
 import { useLibraryDirectories } from "./use-library-directories";
 import "./translations";
 import { AutomaticScanResult } from "./automatic-scan-result";
+import { refreshIsRunning, refreshResultTitle } from "./library-activity-model";
+import "./library-status-translations";
 import { isActiveScanTask } from "./library-model";
 import { useScannerPreview } from "./use-scanner-preview";
 
@@ -78,7 +80,13 @@ export function TasksPage() {
             <article className="panel" key={task.id}>
               <div className="flex flex-wrap justify-between gap-4">
                 <div>
-                  <p className="badge">{t(`state_${task.state}`)}</p>
+                  <p className="badge">
+                    {t(
+                      task.mode === "automatic" && !refreshIsRunning(task)
+                        ? refreshResultTitle(task)
+                        : `state_${task.state}`,
+                    )}
+                  </p>
                   <p className="mt-2 break-all text-xs text-muted-foreground">
                     {roots.data?.find((root) => root.id === task.root_id)
                       ?.name ?? t("root")}
@@ -263,7 +271,13 @@ export function ScannerPage({
                 <option key={entry.id} value={entry.id}>
                   {roots.data?.find((root) => root.id === entry.root_id)
                     ?.name ?? t("root")}{" "}
-                  · {t(`state_${entry.state}`)} · {date(entry.created_at)}
+                  ·{" "}
+                  {t(
+                    entry.mode === "automatic" && !refreshIsRunning(entry)
+                      ? refreshResultTitle(entry)
+                      : `state_${entry.state}`,
+                  )}{" "}
+                  · {date(entry.created_at)}
                 </option>
               ))}
             </Select>
@@ -289,7 +303,9 @@ export function ScannerPage({
                         task.mode === "automatic" &&
                           (task.state === "queued" || task.state === "running")
                           ? `autoPhase_${task.phase ?? "scan"}`
-                          : `state_${task.state}`,
+                          : task.mode === "automatic"
+                            ? refreshResultTitle(task)
+                            : `state_${task.state}`,
                       )}
                     </strong>
                     <p className="mt-2 text-sm">

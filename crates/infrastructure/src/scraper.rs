@@ -1138,6 +1138,48 @@ mod tests {
         s.repo.pool().close().await;
     }
 
+    #[tokio::test]
+    async fn automatic_refresh_without_enabled_source_remains_unconfigured_until_real_retry() {
+        let s = setup().await;
+        let mut config = s.providers.config("tmdb").await.unwrap();
+        config.enabled = false;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans =
+            crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let first = scans.start_automatic(root.id).await.unwrap();
+        let pending = settle_automatic(&scans, first.id).await;
+        assert_eq!(pending.state, TaskState::WaitingForUser);
+        assert_eq!(pending.imported_count, 1);
+        assert_eq!(pending.matched_count, 0);
+        assert_eq!(pending.unconfigured_count, 1);
+        assert_eq!(pending.review_count, 1);
+        assert!(
+            s.service.history().await.unwrap().is_empty(),
+            "disabled source performs no remote scraping"
+        );
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_none());
+        config = s.providers.config("tmdb").await.unwrap();
+        config.enabled = true;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        assert_eq!(
+            scans.list_tasks(false).await.unwrap()[0].unconfigured_count,
+            1,
+            "saving source config does not pretend scraping has occurred"
+        );
+        let retry = scans.start_automatic(root.id).await.unwrap();
+        let completed = settle_automatic(&scans, retry.id).await;
+        assert_eq!(completed.state, TaskState::Succeeded);
+        assert_eq!(completed.unconfigured_count, 0);
+        assert_eq!(completed.review_count, 0);
+        assert_eq!(completed.matched_count, 1);
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
+        assert_eq!(s.repo.list_files(s.media.id).await.unwrap().len(), 1);
+        assert!(!s.dir.path().join("Example.nfo").exists());
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
     async fn wait_for_automatic_detail(repo: &LibraryRepository) {
         tokio::time::timeout(Duration::from_secs(5), async {
             loop {

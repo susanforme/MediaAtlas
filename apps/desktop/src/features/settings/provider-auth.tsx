@@ -1,17 +1,56 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { RootView } from "../../api/library";
 import type { AuthMethod, AuthStorage } from "../../api/provider-auth";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { usePrivacy } from "../library/context";
-import { ErrorNotice } from "../library/shared";
+import { Empty, ErrorNotice, Loading } from "../library/shared";
+import {
+  type ProviderSetupSearch,
+  type SetupComplete,
+  suggestedProvider,
+} from "./setup-search";
+import { SourceSetupActions } from "./source-setup-actions";
 import { useProviderAuth } from "./use-provider-auth";
+import { useProviderSetup, useSetupRoot } from "./use-provider-setup";
 import "./auth-translations";
+import "./setup-translations";
 
-function AuthEditor({ providerId }: { providerId: string }) {
+type EditorProps = {
+  providerId: string;
+  setup: ProviderSetupSearch;
+  root?: RootView;
+  onSetupComplete?: SetupComplete;
+};
+function PublicSourceEditor({
+  providerId,
+  setup,
+  root,
+  onSetupComplete,
+}: EditorProps) {
   const { t } = useTranslation();
+  const workflow = useProviderSetup(providerId, setup, root, onSetupComplete);
+  return (
+    <>
+      <p className="notice mt-4">{t("setupPublicProvider")}</p>
+      <SourceSetupActions
+        workflow={workflow}
+        setup={setup}
+        credentialReady={Boolean(
+          workflow.provider &&
+            !workflow.provider.descriptor.requires_api_key &&
+            !workflow.provider.descriptor.requires_login,
+        )}
+      />
+    </>
+  );
+}
+function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
+  const { t } = useTranslation();
+  const workflow = useProviderSetup(providerId, setup, root, onSetupComplete);
   const {
     method,
     setMethod,
@@ -31,8 +70,10 @@ function AuthEditor({ providerId }: { providerId: string }) {
     status,
     needsSecret,
     save,
+    saveCredential,
     clear,
   } = useProviderAuth(providerId);
+  const working = pending !== null || workflow.phase !== null;
   if (status.isPending)
     return (
       <p role="status" className="mt-4 text-sm text-muted-foreground">
@@ -46,7 +87,12 @@ function AuthEditor({ providerId }: { providerId: string }) {
       </div>
     );
   if (!needsSecret)
-    return <p className="notice mt-4">{t("providerAuthPublic")}</p>;
+    return (
+      <>
+        <p className="notice mt-4">{t("providerAuthPublic")}</p>
+        <SourceSetupActions workflow={workflow} setup={setup} credentialReady />
+      </>
+    );
   return (
     <div className="mt-4">
       <p className="badge" role="status">
@@ -85,7 +131,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
       <Button
         variant="outline"
         className="mt-3"
-        disabled={pending !== null || status.isFetching}
+        disabled={working || status.isFetching}
         onClick={() => {
           setSecret("");
           setAffiliate("");
@@ -99,14 +145,17 @@ function AuthEditor({ providerId }: { providerId: string }) {
       </Button>
       <form
         className="mt-4 space-y-4"
-        onSubmit={(event) => void save(event)}
+        onSubmit={(event) => {
+          if (workflow.phase) event.preventDefault();
+          else void save(event);
+        }}
         noValidate
       >
         <Label className="filter-field">
           <span>{t("providerAuthMethod")}</span>
           <Select
             value={method}
-            disabled={pending !== null}
+            disabled={working}
             onChange={(event) => {
               setMethod(event.target.value as AuthMethod);
               setSecret("");
@@ -135,7 +184,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
           <span>{t("providerAuthStorage")}</span>
           <Select
             value={storage}
-            disabled={pending !== null}
+            disabled={working}
             onChange={(event) => {
               setStorage(event.target.value as AuthStorage);
               setOutcome(null);
@@ -161,7 +210,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
             spellCheck={false}
             value={secret}
             maxLength={4096}
-            disabled={pending !== null}
+            disabled={working}
             onChange={(event) => {
               setSecret(event.target.value);
               setInvalid(false);
@@ -178,7 +227,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
               spellCheck={false}
               maxLength={4096}
               value={affiliate}
-              disabled={pending !== null}
+              disabled={working}
               onChange={(event) => {
                 setAffiliate(event.target.value);
                 setInvalid(false);
@@ -200,7 +249,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
           <Button
             type="submit"
             disabled={
-              pending !== null ||
+              working ||
               !secret.trim() ||
               (method === "affiliate" && !affiliate.trim())
             }
@@ -209,7 +258,7 @@ function AuthEditor({ providerId }: { providerId: string }) {
           </Button>
           <Button
             variant="outline"
-            disabled={pending !== null || !status.data.configured}
+            disabled={working || !status.data.configured}
             onClick={() => void clear()}
           >
             {t(
@@ -220,6 +269,18 @@ function AuthEditor({ providerId }: { providerId: string }) {
           </Button>
         </div>
       </form>
+      <SourceSetupActions
+        workflow={workflow}
+        setup={setup}
+        credentialReady={status.data.configured}
+        saveCredential={secret.trim() ? saveCredential : undefined}
+        disabled={
+          pending !== null ||
+          (Boolean(secret.trim()) &&
+            method === "affiliate" &&
+            !affiliate.trim())
+        }
+      />
       {outcome &&
         !(
           ["saved", "cleared"].includes(outcome) &&
@@ -248,9 +309,44 @@ function AuthEditor({ providerId }: { providerId: string }) {
     </div>
   );
 }
-export function ProviderAuthSettings() {
+export function ProviderAuthSettings({
+  setup = {},
+  onSetupComplete,
+}: {
+  setup?: ProviderSetupSearch;
+  onSetupComplete?: SetupComplete;
+} = {}) {
   const { t } = useTranslation();
-  const [provider, setProvider] = useState("tmdb");
+  const { roots, root, requested, allowed } = useSetupRoot(setup);
+  if (requested && (!allowed || roots.isPending)) return <Loading />;
+  if (requested && roots.error)
+    return (
+      <ErrorNotice error={roots.error} retry={() => void roots.refetch()} />
+    );
+  if (requested && !root?.enabled)
+    return <Empty title={t("setupRootUnavailable")} />;
+  return (
+    <ProviderAuthForm
+      key={`${setup.root ?? ""}:${setup.provider ?? ""}`}
+      setup={setup}
+      root={root}
+      onSetupComplete={onSetupComplete}
+    />
+  );
+}
+function ProviderAuthForm({
+  setup,
+  root,
+  onSetupComplete,
+}: {
+  setup: ProviderSetupSearch;
+  root?: RootView;
+  onSetupComplete?: SetupComplete;
+}) {
+  const { t } = useTranslation();
+  const [provider, setProvider] = useState<string>(
+    setup.provider ?? suggestedProvider(root?.kind ?? setup.kind),
+  );
   const { includeAdult } = usePrivacy();
   const selectedProvider =
     !includeAdult && ["dmm", "wikidata"].includes(provider) ? "tmdb" : provider;
@@ -259,6 +355,11 @@ export function ProviderAuthSettings() {
       <h2 id="provider-auth-title" className="section-title">
         {t("providerAuthTitle")}
       </h2>
+      {root && (
+        <p className="mb-4 text-sm text-muted-foreground">
+          {t("setupForRoot", { name: root.name })}
+        </p>
+      )}
       <Label className="filter-field">
         <span>{t("providerAuthProvider")}</span>
         <Select
@@ -268,6 +369,8 @@ export function ProviderAuthSettings() {
           <option value="tmdb">TMDB</option>
           <option value="anilist">AniList</option>
           <option value="wikipedia.html">Wikipedia</option>
+          <option value="musicbrainz">MusicBrainz</option>
+          <option value="coverartarchive">Cover Art Archive</option>
           {includeAdult && (
             <>
               <option value="dmm">DMM / FANZA</option>
@@ -276,7 +379,23 @@ export function ProviderAuthSettings() {
           )}
         </Select>
       </Label>
-      <AuthEditor key={selectedProvider} providerId={selectedProvider} />
+      {["musicbrainz", "coverartarchive"].includes(selectedProvider) ? (
+        <PublicSourceEditor
+          key={selectedProvider}
+          providerId={selectedProvider}
+          setup={setup}
+          root={root}
+          onSetupComplete={onSetupComplete}
+        />
+      ) : (
+        <AuthEditor
+          key={selectedProvider}
+          providerId={selectedProvider}
+          setup={setup}
+          root={root}
+          onSetupComplete={onSetupComplete}
+        />
+      )}
     </section>
   );
 }

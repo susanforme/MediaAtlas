@@ -275,7 +275,7 @@ impl ScanService {
         &self,
         include_adult: bool,
     ) -> Result<Vec<ScanTaskView>, RepositoryError> {
-        let rows = sqlx::query("SELECT s.*,t.state,t.created_at,t.updated_at FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id JOIN library_roots r ON r.id=s.root_id WHERE (? OR ((r.kind IS NULL OR r.kind!='adult_video') AND NOT EXISTS(SELECT 1 FROM scan_candidates c WHERE c.task_id=s.task_id AND c.kind='adult_video'))) ORDER BY t.created_at DESC,t.id DESC LIMIT 200")
+        let rows = sqlx::query("SELECT s.*,t.state,t.created_at,t.updated_at,(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=s.task_id AND i.state='needs_review') actual_review_count,(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=s.task_id AND i.state='needs_review' AND i.reason='provider_unconfigured') unconfigured_count FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id JOIN library_roots r ON r.id=s.root_id WHERE (? OR ((r.kind IS NULL OR r.kind!='adult_video') AND NOT EXISTS(SELECT 1 FROM scan_candidates c WHERE c.task_id=s.task_id AND c.kind='adult_video'))) ORDER BY t.created_at DESC,t.rowid DESC LIMIT 200")
             .bind(include_adult).fetch_all(self.repo.pool()).await?;
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
@@ -541,7 +541,7 @@ impl ScanService {
     }
 
     async fn get_task(&self, id: Uuid) -> Result<ScanTaskView, RepositoryError> {
-        let row=sqlx::query("SELECT s.*,t.state,t.created_at,t.updated_at FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.task_id=?").bind(id.to_string()).fetch_optional(self.repo.pool()).await?.ok_or(RepositoryError::NotFound)?;
+        let row=sqlx::query("SELECT s.*,t.state,t.created_at,t.updated_at,(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=s.task_id AND i.state='needs_review') actual_review_count,(SELECT count(*) FROM library_refresh_items i WHERE i.task_id=s.task_id AND i.state='needs_review' AND i.reason='provider_unconfigured') unconfigured_count FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.task_id=?").bind(id.to_string()).fetch_optional(self.repo.pool()).await?.ok_or(RepositoryError::NotFound)?;
         task_from_row(&row)
     }
 
@@ -786,7 +786,8 @@ fn task_from_row(row: &SqliteRow) -> Result<ScanTaskView, RepositoryError> {
         mode: text(row, "mode")?,
         phase: text(row, "phase")?,
         matched_count: nonnegative(row, "matched_count")?,
-        review_count: nonnegative(row, "review_count")?,
+        review_count: nonnegative(row, "actual_review_count")?,
+        unconfigured_count: nonnegative(row, "unconfigured_count")?,
         metadata_failed_count: nonnegative(row, "metadata_failed_count")?,
         created_at: time(row, "created_at")?,
         updated_at: time(row, "updated_at")?,

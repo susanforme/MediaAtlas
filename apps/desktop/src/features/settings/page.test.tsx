@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
 import { SettingsPage } from "./page";
@@ -25,6 +25,13 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 vi.mock("./provider-auth", () => ({
   ProviderAuthSettings: () => <section aria-label="Authentication" />,
+}));
+vi.mock("../providers/pages", () => ({
+  ProvidersPage: () => <section aria-label="Provider management" />,
+  NetworkInspectorPage: () => <section aria-label="Network records" />,
+}));
+vi.mock("../maintenance/page", () => ({
+  MaintenancePage: () => <section aria-label="Diagnostics" />,
 }));
 beforeEach(async () => {
   await i18n.changeLanguage("en-US");
@@ -66,4 +73,46 @@ it("preserves the ordered review queue when returning from credentials", () => {
     "media-1",
     "media-2",
   ]);
+});
+
+it("hosts management pages as keyboard-accessible tabs without loading inactive panels", async () => {
+  const change = vi.fn();
+  render(<SettingsPage onTabChange={change} />);
+  const general = screen.getByRole("tab", { name: "General" });
+  expect(general).toHaveAttribute("tabindex", "0");
+  expect(
+    screen.queryByRole("region", { name: "Authentication" }),
+  ).not.toBeInTheDocument();
+  general.focus();
+  fireEvent.keyDown(general, { key: "ArrowRight" });
+  const auth = screen.getByRole("tab", { name: "Authentication" });
+  expect(auth).toHaveFocus();
+  expect(auth).toHaveAttribute("aria-selected", "true");
+  await screen.findByRole("region", { name: "Authentication" });
+  fireEvent.keyDown(auth, { key: "ArrowRight" });
+  await screen.findByRole("region", { name: "Provider management" });
+  expect(
+    screen.queryByRole("region", { name: "Authentication" }),
+  ).not.toBeInTheDocument();
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Data sources" }), {
+    key: "End",
+  });
+  await screen.findByRole("region", { name: "Diagnostics" });
+  expect(
+    screen.getByRole("tab", { name: "Connection diagnostics" }),
+  ).toHaveFocus();
+  expect(change.mock.calls.map(([tab]) => tab)).toEqual([
+    "auth",
+    "providers",
+    "diagnostics",
+  ]);
+  expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+});
+
+it("translates media settings independently of the library page bundle", async () => {
+  await i18n.changeLanguage("zh-CN");
+  render(<SettingsPage />);
+  expect(screen.getByRole("heading", { name: "媒体类型" })).toBeInTheDocument();
+  expect(screen.queryByText("kind")).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "网络检查器" })).toBeInTheDocument();
 });
