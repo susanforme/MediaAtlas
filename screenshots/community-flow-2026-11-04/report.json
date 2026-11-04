@@ -1,0 +1,23 @@
+{
+  "scope": "Actual Chromium UI; explicit synthetic IPC, metadata and labeled artwork; no native/live provider acceptance",
+  "page_errors": [],
+  "screenshots": {
+    "fixture-detail-configure-source-1648.png": "dff8f779447743ee8f95694f42fc6d50a2c9a51e59d743a2c4da5e180af1653d",
+    "fixture-detail-identifying-1648.png": "d39dc9d2bfedb902006a73ca96a7d4f38b43601beca8964eac23a1e47db4b092",
+    "fixture-quick-repair-filters-1648.png": "6fae145aadb5b1eb43234d819738570379223ef92c6b904d520383b2221fba29",
+    "fixture-quick-repair-filters-390.png": "6a4948ea61f6d20faa621b3813e105fc6ccb923d2580206a039446d05293d834",
+    "fixture-scan-recovery-cancelled-1648.png": "f7715bfc3e158d46e0f83a371b29c4a4155b7812bfdf4f02cbc409aed4dc1262",
+    "fixture-scan-recovery-failed-1648.png": "0e42b06522d374a097edd817ff4a47ac27cae1b05639c28e78768ec8e96a7fd7"
+  },
+  "date": "2026-11-04",
+  "source_commit": "3c6ba99",
+  "frontend_checks": {
+    "command": "pnpm check",
+    "test_files": 43,
+    "tests": 346,
+    "lint": "passed",
+    "typecheck": "passed",
+    "build": "passed"
+  },
+  "baseline_browser_regression": "desktop-library-wall-qa.py: passed, 26 screenshots / 9 scenarios; work/community-baseline"
+}
