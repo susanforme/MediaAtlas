@@ -44,6 +44,7 @@ vi.mock("../../api/adult", async (original) => ({
 }));
 vi.mock("../scraper/source-detail", () => ({
   LibraryVideoSourceDetail: () => null,
+  VideoSourceDetails: () => null,
 }));
 
 const card: MediaCard = {

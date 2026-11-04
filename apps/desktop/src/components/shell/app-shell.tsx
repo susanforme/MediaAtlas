@@ -40,23 +40,25 @@ function Sidebar({ chrome }: { chrome: WindowChrome }) {
         <span className="app-brand-name">MediaAtlas</span>
       </div>
       <nav className="app-nav" aria-label={t("local")}>
-        <LibraryNavigation />
-        <div className="app-nav-group">
-          <div className="app-nav-divider" />
+        <ul className="app-nav-list">
+          <LibraryNavigation />
+          <li className="app-nav-divider" aria-hidden="true" />
           {workEntries.map(([to, label, Icon]) => (
-            <Button asChild variant="ghost" key={to} className="app-nav-item">
-              <Link
-                to={to}
-                activeOptions={{ exact: true, includeSearch: false }}
-                activeProps={{ className: "active" }}
-                aria-label={t(label)}
-              >
-                <Icon size={20} aria-hidden="true" />
-                <span className="app-nav-label">{t(label)}</span>
-              </Link>
-            </Button>
+            <li key={to}>
+              <Button asChild variant="ghost" className="app-nav-item">
+                <Link
+                  to={to}
+                  activeOptions={{ exact: true, includeSearch: false }}
+                  activeProps={{ className: "active" }}
+                  aria-label={t(label)}
+                >
+                  <Icon size={20} aria-hidden="true" />
+                  <span className="app-nav-label">{t(label)}</span>
+                </Link>
+              </Button>
+            </li>
           ))}
-        </div>
+        </ul>
       </nav>
       <div className="app-sidebar-bottom">
         <Button asChild variant="ghost" className="app-nav-item">

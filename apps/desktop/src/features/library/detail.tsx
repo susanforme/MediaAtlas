@@ -13,6 +13,7 @@ import { usePrivacy } from "./context";
 import { DetailRecoveryAction } from "./detail-recovery-action";
 import { NativeOpen } from "./native-open";
 import { useLibraryActivity } from "./use-library-activity";
+import { VideoDetail } from "./video-detail";
 import "../scraper/translations";
 import "./library-status-translations";
 import {
@@ -64,6 +65,14 @@ export function MediaDetailPage({
   const data = detail.data;
   if (adult !== (data.media.kind === "adult_video"))
     return <Empty title={t("noResults")} />;
+  if (!adult && ["movie", "tv_series"].includes(data.media.kind))
+    return (
+      <VideoDetail
+        key={data.media.id}
+        detail={data}
+        sourceDetail={sourceDetail}
+      />
+    );
   return (
     <>
       <Button asChild variant="ghost">

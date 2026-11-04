@@ -149,7 +149,9 @@ def settings_tabs_qa():
             tab = page.get_by_role("tab", name=label, exact=True)
             tab.click()
             expect(tab).to_have_attribute("aria-selected", "true")
-            expect(page.get_by_role("tabpanel")).to_have_attribute("id", "settings-panel-" + value)
+            panel_id = tab.get_attribute("aria-controls")
+            assert panel_id, label
+            expect(page.get_by_role("tabpanel")).to_have_attribute("id", panel_id)
             expect(page.locator("main h1")).to_have_count(1)
             expect(page.locator("main h1")).to_have_text("设置")
             expect(page.get_by_role("alert")).to_have_count(0)
@@ -218,7 +220,8 @@ def main():
         expect(page).to_have_url(URL + "/library")
         library_ready(page)
         sidebar_routes = page.locator(".app-sidebar a").evaluate_all("links => links.map(link => link.getAttribute('href'))")
-        assert sidebar_routes == ["/library","/music","/roots","/tools","/tasks","/settings"], sidebar_routes
+        assert sidebar_routes == ["/library","/library?kind=movie","/library?kind=tv_series",
+                                  "/library?kind=anime","/music","/roots","/tools","/tasks","/settings"], sidebar_routes
         assert page.locator("video,audio,iframe,.home-hero").count() == 0
         assert page.locator(".poster-card button").count() == 0
         for box in page.locator(".poster-card .poster-image").evaluate_all("elements => elements.map(element => ({width:element.clientWidth,height:element.clientHeight}))"):
@@ -232,7 +235,7 @@ def main():
         screenshot(wall, "fixture-library-wall-1648.png")
         screenshot(wall, "fixture-library-wall-1648-full.png", full_page=True)
         wall.close()
-        scenarios.append("Root redirects to library; six navigation entries; actual poster links")
+        scenarios.append("Root redirects to library; nested media categories and workspace navigation; actual poster links")
 
         search = page.get_by_role("searchbox", name="搜索标题", exact=True)
         expect(search).to_have_count(1)

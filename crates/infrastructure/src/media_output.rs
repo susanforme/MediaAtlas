@@ -505,7 +505,7 @@ impl MediaOutputService {
             render_nfo(&item, &metadata, &ids)?
         };
         let mut diffs = vec![OutputFileDiff {
-            destination: parent.join(&nfo_name).to_string_lossy().into_owned(),
+            destination: parent.join(&nfo_name).to_string_lossy().replace('\\', "/"),
             kind: "nfo".into(),
             old_text,
             new_text: Some(nfo.clone()),
@@ -548,7 +548,7 @@ impl MediaOutputService {
                 let revised_name = format!("{name}.mediaatlas-{}.nfo", &content_hash[..12]);
                 let previous = read_optional(&dir, &revised_name, MAX_NFO)?;
                 diffs.push(OutputFileDiff {
-                    destination: parent.join(&revised_name).to_string_lossy().into_owned(),
+                    destination: parent.join(&revised_name).to_string_lossy().replace('\\', "/"),
                     kind: "nfo".into(),
                     old_text: previous
                         .as_ref()
@@ -614,7 +614,7 @@ impl MediaOutputService {
             let poster_name = format!("{name}-{suffix}.{extension}");
             let existing = read_optional(&dir, &poster_name, MAX_IMAGE)?;
             diffs.push(OutputFileDiff {
-                destination: parent.join(&poster_name).to_string_lossy().into_owned(),
+                destination: parent.join(&poster_name).to_string_lossy().replace('\\', "/"),
                 kind: kind.into(),
                 old_text: None,
                 new_text: None,
@@ -844,7 +844,7 @@ impl MediaOutputService {
         let owned = owned.into_iter().collect::<std::collections::HashSet<_>>();
         let prefix = parent
             .to_string_lossy()
-            .replace('\\', "\\\\")
+            .replace('\\', "/")
             .replace('%', "\\%")
             .replace('_', "\\_");
         let pattern = if prefix.is_empty() {
@@ -2431,6 +2431,21 @@ mod tests {
         )
         .unwrap();
         service.automatic_nfo(id, None, None).await.unwrap();
+        let destination: String = sqlx::query_scalar(
+            "SELECT json_extract(snapshot,'$.preview.files[0].destination') FROM output_previews WHERE media_item_id=?",
+        )
+        .bind(id.to_string())
+        .fetch_one(repo.pool())
+        .await
+        .unwrap();
+        assert_eq!(destination, "Show/tvshow.nfo");
+        let state: String =
+            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                .bind(id.to_string())
+                .fetch_one(repo.pool())
+                .await
+                .unwrap();
+        assert_eq!(state, "written");
         let output = std::fs::read_to_string(temp.path().join("media/Show/tvshow.nfo")).unwrap();
         assert!(output.contains("<tvshow>"));
         assert!(output.contains("A &amp; B"));
@@ -2443,40 +2458,53 @@ mod tests {
     }
     #[tokio::test]
     async fn automatic_series_nfo_rejects_mixed_show_directory() {
-        let (temp, repo, service, id) = library().await;
-        let mut show = repo.get_media(id).await.unwrap().unwrap();
-        show.kind = MediaKind::TvSeries;
-        repo.save_media(&show).await.unwrap();
-        let other = MediaItem {
-            id: Uuid::new_v4(),
-            kind: MediaKind::TvEpisode,
-            title: "Other show".into(),
-            ..show.clone()
-        };
-        repo.save_media(&other).await.unwrap();
-        let source = repo.list_files(id).await.unwrap().remove(0);
-        std::fs::write(
-            temp.path().join("media/OtherShow.S01E01.mkv"),
-            b"other series",
-        )
-        .unwrap();
-        repo.save_file(&mediaatlas_domain::MediaFile {
-            id: Uuid::new_v4(),
-            media_item_id: other.id,
-            relative_path: "OtherShow.S01E01.mkv".into(),
-            ..source
-        })
-        .await
-        .unwrap();
-        service.automatic_nfo(id, None, None).await.unwrap();
-        assert!(!temp.path().join("media/tvshow.nfo").exists());
-        let state: String =
-            sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
-                .bind(id.to_string())
-                .fetch_one(repo.pool())
-                .await
+        for parent in ["", "Collection/Show"] {
+            let (temp, repo, service, id) = library().await;
+            let mut show = repo.get_media(id).await.unwrap().unwrap();
+            show.kind = MediaKind::TvSeries;
+            repo.save_media(&show).await.unwrap();
+            let other = MediaItem {
+                id: Uuid::new_v4(),
+                kind: MediaKind::TvEpisode,
+                title: "Other show".into(),
+                ..show.clone()
+            };
+            repo.save_media(&other).await.unwrap();
+            let mut source = repo.list_files(id).await.unwrap().remove(0);
+            let directory = temp.path().join("media").join(parent);
+            if !parent.is_empty() {
+                std::fs::create_dir_all(&directory).unwrap();
+                std::fs::rename(
+                    temp.path().join("media/Example.mkv"),
+                    directory.join("Example.mkv"),
+                )
                 .unwrap();
-        assert_eq!(state, "failed");
+                source.relative_path = format!("{parent}/Example.mkv");
+                repo.save_file(&source).await.unwrap();
+            }
+            std::fs::write(directory.join("OtherShow.S01E01.mkv"), b"other series").unwrap();
+            repo.save_file(&mediaatlas_domain::MediaFile {
+                id: Uuid::new_v4(),
+                media_item_id: other.id,
+                relative_path: if parent.is_empty() {
+                    "OtherShow.S01E01.mkv".into()
+                } else {
+                    format!("{parent}/OtherShow.S01E01.mkv")
+                },
+                ..source
+            })
+            .await
+            .unwrap();
+            service.automatic_nfo(id, None, None).await.unwrap();
+            assert!(!directory.join("tvshow.nfo").exists());
+            let state: String =
+                sqlx::query_scalar("SELECT state FROM automatic_nfo_exports WHERE media_item_id=?")
+                    .bind(id.to_string())
+                    .fetch_one(repo.pool())
+                    .await
+                    .unwrap();
+            assert_eq!(state, "failed");
+        }
     }
     #[tokio::test]
     async fn automatic_nfo_preserves_a_late_external_sidecar_with_different_casing() {
@@ -2516,9 +2544,14 @@ mod tests {
             std::fs::read_to_string(temp.path().join("media/Example.NFO")).unwrap(),
             local
         );
-        if !cfg!(windows) {
-            assert!(!temp.path().join("media/Example.nfo").exists());
-        }
+        // Path lookup aliases casing on common APFS/NTFS volumes; inspect actual entries.
+        let mut nfo_names = std::fs::read_dir(temp.path().join("media"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.to_ascii_lowercase().ends_with(".nfo"))
+            .collect::<Vec<_>>();
+        nfo_names.sort();
+        assert_eq!(nfo_names, vec!["Example.NFO", "Other.nfo"]);
         assert!(temp.path().join("media/Other.nfo").exists());
         std::fs::remove_file(temp.path().join("media/Example.NFO")).unwrap();
         std::fs::remove_file(temp.path().join("media/Other.nfo")).unwrap();

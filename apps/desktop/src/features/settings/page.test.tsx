@@ -80,6 +80,10 @@ it("hosts management pages as keyboard-accessible tabs without loading inactive 
   render(<SettingsPage onTabChange={change} />);
   const general = screen.getByRole("tab", { name: "General" });
   expect(general).toHaveAttribute("tabindex", "0");
+  expect(general).toHaveAttribute(
+    "aria-controls",
+    screen.getByRole("tabpanel", { name: "General" }).id,
+  );
   expect(
     screen.queryByRole("region", { name: "Authentication" }),
   ).not.toBeInTheDocument();
@@ -88,6 +92,11 @@ it("hosts management pages as keyboard-accessible tabs without loading inactive 
   const auth = screen.getByRole("tab", { name: "Authentication" });
   expect(auth).toHaveFocus();
   expect(auth).toHaveAttribute("aria-selected", "true");
+  expect(auth).toHaveAttribute(
+    "aria-controls",
+    screen.getByRole("tabpanel", { name: "Authentication" }).id,
+  );
+  expect(screen.getAllByRole("tab", { selected: true })).toHaveLength(1);
   await screen.findByRole("region", { name: "Authentication" });
   fireEvent.keyDown(auth, { key: "ArrowRight" });
   await screen.findByRole("region", { name: "Provider management" });
@@ -107,6 +116,29 @@ it("hosts management pages as keyboard-accessible tabs without loading inactive 
     "diagnostics",
   ]);
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+});
+
+it("follows the tab supplied by route state and labels its active panel", async () => {
+  const view = render(<SettingsPage setup={{ tab: "network" }} />);
+  const network = screen.getByRole("tab", { name: "Network inspector" });
+  expect(network).toHaveAttribute("aria-selected", "true");
+  await screen.findByRole("region", { name: "Network records" });
+
+  view.rerender(<SettingsPage setup={{ tab: "diagnostics" }} />);
+  const diagnostics = screen.getByRole("tab", {
+    name: "Connection diagnostics",
+  });
+  expect(diagnostics).toHaveAttribute("aria-selected", "true");
+  expect(network).toHaveAttribute("aria-selected", "false");
+  const panel = screen.getByRole("tabpanel", {
+    name: "Connection diagnostics",
+  });
+  expect(diagnostics).toHaveAttribute("aria-controls", panel.id);
+  expect(panel).toHaveAttribute("aria-labelledby", diagnostics.id);
+  await screen.findByRole("region", { name: "Diagnostics" });
+  expect(
+    screen.queryByRole("region", { name: "Network records" }),
+  ).not.toBeInTheDocument();
 });
 
 it("translates media settings independently of the library page bundle", async () => {

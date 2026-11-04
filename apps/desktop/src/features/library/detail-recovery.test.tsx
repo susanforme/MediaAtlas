@@ -22,8 +22,12 @@ vi.mock("./context", () => ({
 vi.mock("./use-library-activity", () => ({ useLibraryActivity: vi.fn() }));
 vi.mock("../../api/library", () => ({ libraryApi: { detail: vi.fn() } }));
 vi.mock("../../api/adult", () => ({ adultApi: { getMedia: vi.fn() } }));
+vi.mock("../../api/scraper", () => ({
+  scraperApi: { mediaDetail: vi.fn().mockResolvedValue(null) },
+}));
 vi.mock("../scraper/source-detail", () => ({
   LibraryVideoSourceDetail: () => null,
+  VideoSourceDetails: () => null,
 }));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({

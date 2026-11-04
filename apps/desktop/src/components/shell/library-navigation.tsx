@@ -16,18 +16,19 @@ export function LibraryNavigation() {
   const { t } = useTranslation();
   const { includeAdult } = usePrivacy();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const inLibrary =
+    pathname === "/library" ||
+    pathname === "/music" ||
+    pathname.startsWith("/music/") ||
+    pathname.startsWith("/media/");
   return (
-    <div className="app-nav-group">
+    <li className="app-nav-group">
       <Button asChild variant="ghost" className="app-nav-item">
         <Link
           to="/library"
-          className={
-            pathname === "/music" || pathname.startsWith("/media/")
-              ? "active"
-              : undefined
-          }
-          search={{}}
-          activeOptions={{ includeSearch: false }}
+          data-section-active={inLibrary || undefined}
+          search={{ kind: undefined }}
+          activeOptions={{ includeSearch: true, explicitUndefined: true }}
           activeProps={{ className: "active" }}
           aria-label={t("library")}
         >
@@ -35,52 +36,54 @@ export function LibraryNavigation() {
           <span className="app-nav-label">{t("library")}</span>
         </Link>
       </Button>
-      <div className="app-nav-children">
+      <ul className="app-nav-children">
         {LIBRARY_CATEGORIES.filter(
           (kind) => kind !== "adult_video" || includeAdult,
         ).map((kind) => {
           if (kind === "music_release")
             return (
-              <Button
-                asChild
-                variant="ghost"
-                className="app-nav-item app-nav-child"
-                key={kind}
-              >
-                <Link
-                  to="/music"
-                  activeOptions={{ includeSearch: false }}
-                  activeProps={{ className: "active" }}
-                  aria-label={t("music")}
+              <li key={kind}>
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="app-nav-item app-nav-child"
                 >
-                  <Music2 size={17} aria-hidden="true" />
-                  <span className="app-nav-label">{t("music")}</span>
-                </Link>
-              </Button>
+                  <Link
+                    to="/music"
+                    activeOptions={{ includeSearch: false }}
+                    activeProps={{ className: "active" }}
+                    aria-label={t("music")}
+                  >
+                    <Music2 size={20} aria-hidden="true" />
+                    <span className="app-nav-label">{t("music")}</span>
+                  </Link>
+                </Button>
+              </li>
             );
           const Icon = icons[kind as keyof typeof icons];
           if (!Icon) return null;
           return (
-            <Button
-              asChild
-              variant="ghost"
-              className="app-nav-item app-nav-child"
-              key={kind}
-            >
-              <Link
-                to="/library"
-                search={{ kind }}
-                activeOptions={{ includeSearch: true }}
-                activeProps={{ className: "active" }}
-                aria-label={t(`kind_${kind}`)}
+            <li key={kind}>
+              <Button
+                asChild
+                variant="ghost"
+                className="app-nav-item app-nav-child"
               >
-                <Icon size={17} aria-hidden="true" />
-                <span className="app-nav-label">{t(`kind_${kind}`)}</span>
-              </Link>
-            </Button>
+                <Link
+                  to="/library"
+                  search={{ kind }}
+                  activeOptions={{ includeSearch: true }}
+                  activeProps={{ className: "active" }}
+                  aria-label={t(`kind_${kind}`)}
+                >
+                  <Icon size={20} aria-hidden="true" />
+                  <span className="app-nav-label">{t(`kind_${kind}`)}</span>
+                </Link>
+              </Button>
+            </li>
           );
         })}
-      </div>
-    </div>
+      </ul>
+    </li>
   );
 }

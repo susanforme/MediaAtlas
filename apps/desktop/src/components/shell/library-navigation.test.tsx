@@ -29,7 +29,9 @@ async function renderNavigation(entry: string) {
     component: () => (
       <>
         <nav aria-label="Library navigation">
-          <LibraryNavigation />
+          <ul>
+            <LibraryNavigation />
+          </ul>
         </nav>
         <Outlet />
       </>
@@ -46,9 +48,19 @@ async function renderNavigation(entry: string) {
     path: "/music",
     component: () => <h1>Music contents</h1>,
   });
+  const artist = createRoute({
+    getParentRoute: () => root,
+    path: "/music/artists/$id",
+    component: () => <h1>Artist details</h1>,
+  });
+  const media = createRoute({
+    getParentRoute: () => root,
+    path: "/media/$id",
+    component: () => <h1>Media details</h1>,
+  });
   const history = createMemoryHistory({ initialEntries: [entry] });
   const router = createRouter({
-    routeTree: root.addChildren([library, music]),
+    routeTree: root.addChildren([library, music, artist, media]),
     history,
     defaultPendingMs: 0,
     defaultPendingMinMs: 0,
@@ -66,8 +78,10 @@ function link(name: string) {
 it("keeps the parent as a real all-library link that clears the selected category", async () => {
   const { router } = await renderNavigation("/library?kind=movie&q=Arrival");
   expect(link("Media library")).toHaveAttribute("href", "/library");
-  expect(link("Media library")).toHaveAttribute("aria-current", "page");
+  expect(link("Media library")).not.toHaveAttribute("aria-current");
+  expect(link("Media library")).toHaveAttribute("data-section-active", "true");
   expect(link("Movie")).toHaveAttribute("aria-current", "page");
+  expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
   fireEvent.click(link("Media library"), { button: 0 });
   await waitFor(() => {
     expect(router.state.location.pathname).toBe("/library");
@@ -75,8 +89,26 @@ it("keeps the parent as a real all-library link that clears the selected categor
     expect(link("Movie")).not.toHaveAttribute("aria-current");
   });
   expect(link("Media library")).toHaveClass("active");
+  expect(link("Media library")).toHaveAttribute("aria-current", "page");
   expect(screen.queryByRole("button", { name: "Media library" })).toBeNull();
 });
+
+it("keeps the all-library entry current with non-category filters", async () => {
+  await renderNavigation("/library?q=night&sort=title_asc&page=2");
+  expect(link("Media library")).toHaveClass("active");
+  expect(link("Media library")).toHaveAttribute("aria-current", "page");
+  expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
+});
+
+it.each(["/media/movie-1", "/music/artists/artist-1"])(
+  "retains library section context on %s without marking its overview current",
+  async (entry) => {
+    await renderNavigation(entry);
+    expect(link("Media library")).toHaveAttribute("data-section-active", "true");
+    expect(link("Media library")).not.toHaveAttribute("aria-current");
+    expect(link("Media library")).not.toHaveClass("active");
+  },
+);
 
 it.each([
   ["Movie", "movie"],
@@ -92,7 +124,9 @@ it.each([
       expect(router.state.location.search.kind).toBe(kind);
       expect(link(name)).toHaveAttribute("aria-current", "page");
     });
-    expect(link("Media library")).toHaveClass("active");
+    expect(link("Media library")).toHaveAttribute("data-section-active", "true");
+    expect(link("Media library")).not.toHaveClass("active");
+    expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
     expect(link(name)).toHaveClass("active");
     for (const other of ["Movie", "TV series", "Anime"].filter(
       (item) => item !== name,
@@ -106,20 +140,23 @@ it.each([
   ["TV series", "tv_series"],
   ["Anime", "anime"],
 ] as const)(
-  "retains parent and %s active styling alongside query, sort and health filters",
+  "retains the library section and current %s alongside query, sort, health and pagination",
   async (name, kind) => {
     const { router } = await renderNavigation(
-      `/library?kind=${kind}&q=night&sort=title_asc&health=missing_poster`,
+      `/library?kind=${kind}&q=night&sort=title_asc&health=missing_poster&page=2`,
     );
     expect(router.state.location.search).toMatchObject({
       kind,
       q: "night",
       sort: "title_asc",
       health: "missing_poster",
+      page: 2,
     });
-    expect(link("Media library")).toHaveClass("active");
+    expect(link("Media library")).toHaveAttribute("data-section-active", "true");
+    expect(link("Media library")).not.toHaveAttribute("aria-current");
     expect(link(name)).toHaveClass("active");
     expect(link(name)).toHaveAttribute("aria-current", "page");
+    expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
   },
 );
 
@@ -137,7 +174,9 @@ it("uses the same category navigation and active state for opted-in adult media"
     expect(router.state.location.search.kind).toBe("adult_video");
     expect(link("Adult video")).toHaveClass("active");
   });
-  expect(link("Media library")).toHaveClass("active");
+  expect(link("Media library")).toHaveAttribute("data-section-active", "true");
+  expect(link("Media library")).not.toHaveAttribute("aria-current");
+  expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
 });
 
 it("keeps compact icon links named and sends music to its actual workspace", async () => {
@@ -152,5 +191,8 @@ it("keeps compact icon links named and sends music to its actual workspace", asy
     expect(link("Music")).toHaveAttribute("aria-current", "page");
   });
   expect(link("Media library")).not.toHaveAttribute("aria-current");
+  expect(link("Media library")).toHaveAttribute("data-section-active", "true");
+  expect(link("Media library")).not.toHaveClass("active");
   expect(link("Anime")).not.toHaveAttribute("aria-current");
+  expect(screen.getAllByRole("link", { current: "page" })).toHaveLength(1);
 });

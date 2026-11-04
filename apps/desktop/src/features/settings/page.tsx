@@ -1,10 +1,16 @@
 import "../scraper/translations";
 import { Link } from "@tanstack/react-router";
-import { lazy, Suspense, useRef, useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
 import "../adult/translations";
 import { Button } from "../../components/ui/button";
 import { usePrivacy } from "../library/context";
@@ -64,9 +70,6 @@ export function SettingsPage({
     setup.tab ??
     localTab ??
     (setup.from || setup.provider ? "auth" : "general");
-  const tabs = useRef<Partial<Record<SettingsTab, HTMLButtonElement | null>>>(
-    {},
-  );
   function changeTab(next: SettingsTab) {
     setLocalTab(next);
     onTabChange?.(next);
@@ -96,86 +99,61 @@ export function SettingsPage({
           </Button>
         )}
       </PageHeading>
-      <div
-        className="mb-6 flex flex-wrap gap-2"
-        role="tablist"
-        aria-label={t("settings")}
+      <Tabs
+        value={tab}
+        onValueChange={(value) => changeTab(value as SettingsTab)}
+        className="min-w-0"
       >
-        {SETTINGS_TABS.map((value, index) => (
-          <Button
-            key={value}
-            ref={(element) => {
-              tabs.current[value] = element;
-            }}
-            id={`settings-tab-${value}`}
-            role="tab"
-            aria-selected={tab === value}
-            aria-controls={`settings-panel-${value}`}
-            tabIndex={tab === value ? 0 : -1}
-            variant={tab === value ? "default" : "outline"}
-            onClick={() => changeTab(value)}
-            onKeyDown={(event) => {
-              const nextIndex =
-                event.key === "ArrowRight"
-                  ? (index + 1) % SETTINGS_TABS.length
-                  : event.key === "ArrowLeft"
-                    ? (index + SETTINGS_TABS.length - 1) % SETTINGS_TABS.length
-                    : event.key === "Home"
-                      ? 0
-                      : event.key === "End"
-                        ? SETTINGS_TABS.length - 1
-                        : -1;
-              if (nextIndex < 0) return;
-              event.preventDefault();
-              const next = SETTINGS_TABS[nextIndex];
-              changeTab(next);
-              tabs.current[next]?.focus();
-            }}
-          >
-            {t(`settingsTab_${value}`)}
-          </Button>
-        ))}
-      </div>
-      <div
-        id={`settings-panel-${tab}`}
-        role="tabpanel"
-        aria-labelledby={`settings-tab-${tab}`}
-      >
-        <Suspense fallback={<Loading />}>
-          {tab === "auth" ? (
-            <ProviderAuthSettings
-              setup={setup}
-              onSetupComplete={onSetupComplete}
-            />
-          ) : tab === "providers" ? (
-            <ProvidersPage embedded setup={setup} />
-          ) : tab === "network" ? (
-            <NetworkInspectorPage embedded />
-          ) : tab === "diagnostics" ? (
-            <MaintenancePage embedded />
-          ) : (
-            <div className="grid items-start gap-6 xl:grid-cols-2">
-              <div className="space-y-6">
-                <section className="panel">
-                  <Label className="filter-field">
-                    <span>{t("language")}</span>
-                    <Select
-                      value={i18n.resolvedLanguage ?? "zh-CN"}
-                      onChange={(event) =>
-                        void i18n.changeLanguage(event.target.value)
-                      }
-                    >
-                      <option value="zh-CN">简体中文</option>
-                      <option value="en-US">English (US)</option>
-                    </Select>
-                  </Label>
-                </section>
-                <ContentPreferences />
+        <div className="mb-6 overflow-x-auto pb-1">
+          <TabsList aria-label={t("settings")} className="w-max">
+            {SETTINGS_TABS.map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="shrink-0 whitespace-nowrap"
+              >
+                {t(`settingsTab_${value}`)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+        <TabsContent value={tab}>
+          <Suspense fallback={<Loading />}>
+            {tab === "auth" ? (
+              <ProviderAuthSettings
+                setup={setup}
+                onSetupComplete={onSetupComplete}
+              />
+            ) : tab === "providers" ? (
+              <ProvidersPage embedded setup={setup} />
+            ) : tab === "network" ? (
+              <NetworkInspectorPage embedded />
+            ) : tab === "diagnostics" ? (
+              <MaintenancePage embedded />
+            ) : (
+              <div className="grid items-start gap-6 xl:grid-cols-2">
+                <div className="space-y-6">
+                  <section className="panel">
+                    <Label className="filter-field">
+                      <span>{t("language")}</span>
+                      <Select
+                        value={i18n.resolvedLanguage ?? "zh-CN"}
+                        onChange={(event) =>
+                          void i18n.changeLanguage(event.target.value)
+                        }
+                      >
+                        <option value="zh-CN">简体中文</option>
+                        <option value="en-US">English (US)</option>
+                      </Select>
+                    </Label>
+                  </section>
+                  <ContentPreferences />
+                </div>
               </div>
-            </div>
-          )}
-        </Suspense>
-      </div>
+            )}
+          </Suspense>
+        </TabsContent>
+      </Tabs>
     </>
   );
 }
