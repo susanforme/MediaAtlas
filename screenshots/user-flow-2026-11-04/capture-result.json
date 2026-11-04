@@ -1,0 +1,25 @@
+{
+  "source": "f34862c",
+  "viewport": [1648, 928],
+  "timezone": "Asia/Shanghai",
+  "page_errors": [],
+  "native_open": "IPC request verified with fixture; OS application not launched; version dialog remains open after successful dispatch",
+  "screenshots": "actual current production frontend, synthetic transport",
+  "date_local": "2026-11-04",
+  "source_commit": "f34862c756002acf056fba3256f10ca73493db82",
+  "images": {
+    "01-first-open.png": "3b17156b90d852e1d5da8c4d48550836f1785b8dfb762a8789bbda8a8b6c6edc",
+    "02-choose-folder.png": "0dbe29aea367af44dd8aa77c4ed975aea2ca2feabfbe2063554233140a9989a8",
+    "03-background-library.png": "7022ddc55e13fe3abbafb48d79a35d13823b6f8bbecab49ff4d132dc8d524388",
+    "04-progress.png": "8b62c6ca3a27c3e4ec1cc29a65290b047b086afb4ff41d3dbb95272f678a264e",
+    "05-library-ready.png": "486ab1358c81418c6fa250dcf5e940167d9c01c95f32a2765e19a398b800f4f1",
+    "06-media-detail.png": "15d12911ef2aec8d2213afa95e946dfe5e62483efc8f20bbd03b8dbf6c71aed3",
+    "07-open-version.png": "092dbfa86d8af2336d35070928f04bcfbb010340e0fa40a722e87dc76a5f2808",
+    "08-source-not-configured.png": "ddb276fd716ebacc4a8a375111dc8038c352ce283a0c6841d8400d9ca62591af",
+    "09-save-credential.png": "98447afa48d4ed4df4b91305e152047ea577deefbf8c64a76d12f386fa012af7",
+    "09b-enable-source.png": "642f600b0da06d880417bc4ba4507fcf3208decae38b4b42afd75a25c4c374d7",
+    "10-correct-match.png": "736e40c314700b5fbac7808ac1a7b6daa623914606d5c96d7a69ae00a18a73f5",
+    "11-resource-category.png": "12ae91d2ed12908eed6ca62aa1d2902d78319c35a94a9e6921a1e11799e0d58e"
+  },
+  "limitations": "Production frontend + synthetic IPC; no native OS picker/player, media filesystem, or live metadata provider. Task completion is a supplied fixture state."
+}
