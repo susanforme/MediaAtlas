@@ -145,6 +145,73 @@ class PublishTests(unittest.TestCase):
                          ["gh", "release", "upload", self.tag, str(self.paths[0].resolve()),
                           "--repo", "owner/repo", "--clobber"])
 
+    def test_only_transient_upload_errors_can_be_retried(self):
+        github = publisher.GitHub("owner/repo")
+        for diagnostic in ["HTTP 500", "HTTP 502", "HTTP 429", "HTTP 422: Validation Failed\nReleaseAsset.name already exists"]:
+            with self.subTest(diagnostic=diagnostic), patch.object(publisher.subprocess, "run", return_value=SimpleNamespace(returncode=1, stderr=diagnostic)):
+                with self.assertRaises(publisher.RetryableUploadError):
+                    github.upload(self.tag, self.paths[0])
+        with patch.object(publisher.subprocess, "run", return_value=SimpleNamespace(returncode=1, stderr="HTTP 401: Bad credentials")):
+            with self.assertRaises(ValueError) as error:
+                github.upload(self.tag, self.paths[0])
+        self.assertNotIsInstance(error.exception, publisher.RetryableUploadError)
+
+    def test_transient_upload_failure_retries_then_verifies_complete_assets(self):
+        github = FakeGitHub(self.commit)
+        original = github.upload
+        calls = []
+        def flaky(tag, path):
+            calls.append(path.name)
+            if len(calls) == 1:
+                raise publisher.RetryableUploadError("HTTP 500")
+            original(tag, path)
+        with patch.object(github, "upload", side_effect=flaky), patch.object(publisher.time, "sleep") as sleep:
+            self.publish(github)
+        self.assertEqual(calls, [self.paths[0].name] + [path.name for path in self.paths])
+        sleep.assert_called_once_with(1)
+        self.assertFalse(github.release["draft"])
+
+    def test_upload_reported_failed_is_accepted_only_with_matching_remote_bytes(self):
+        for corrupt in [False, True]:
+            with self.subTest(corrupt=corrupt):
+                github = FakeGitHub(self.commit)
+                github.corrupt_digest = corrupt
+                original = github.upload
+                def uploaded_with_error(tag, path):
+                    original(tag, path)
+                    raise publisher.RetryableUploadError("ReleaseAsset.name already exists")
+                with patch.object(github, "upload", side_effect=uploaded_with_error) as upload, patch.object(publisher.time, "sleep"):
+                    if corrupt:
+                        with self.assertRaises(publisher.RetryableUploadError):
+                            self.publish(github)
+                        self.assertTrue(github.release["draft"])
+                        self.assertEqual(upload.call_count, 3)
+                    else:
+                        self.publish(github)
+                        self.assertFalse(github.release["draft"])
+                        self.assertEqual(upload.call_count, len(self.paths))
+
+    def test_exhausted_transient_uploads_leave_release_draft(self):
+        github = FakeGitHub(self.commit)
+        with patch.object(github, "upload", side_effect=publisher.RetryableUploadError("HTTP 500")) as upload, patch.object(publisher.time, "sleep") as sleep:
+            with self.assertRaises(publisher.RetryableUploadError):
+                self.publish(github)
+        self.assertEqual(upload.call_count, 3)
+        self.assertEqual([call.args for call in sleep.call_args_list], [(1,), (2,)])
+        self.assertTrue(github.release["draft"])
+
+    def test_tag_move_during_failed_upload_blocks_retries(self):
+        github = FakeGitHub(self.commit)
+        def moved(tag, path):
+            github.commit = "2" * 40
+            raise publisher.RetryableUploadError("HTTP 500")
+        with patch.object(github, "upload", side_effect=moved) as upload, patch.object(publisher.time, "sleep") as sleep:
+            with self.assertRaisesRegex(ValueError, "stale release run"):
+                self.publish(github)
+        upload.assert_called_once()
+        sleep.assert_not_called()
+        self.assertTrue(github.release["draft"])
+
     def test_unknown_old_assets_are_not_deleted_or_mixed(self):
         github = FakeGitHub(self.commit)
         github.extra_assets = [{"name": "unknown-old-package.zip"}]

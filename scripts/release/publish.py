@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import subprocess
 import tempfile
+import time
 from types import SimpleNamespace
 from urllib.parse import quote
 
@@ -19,6 +20,10 @@ SPEC = importlib.util.spec_from_file_location("release_tools", Path(__file__).wi
 release = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(release)
 require = release.require
+
+
+class RetryableUploadError(ValueError):
+    pass
 
 
 class GitHub:
@@ -89,8 +94,13 @@ class GitHub:
         # --clobber replaces one known asset. The entire release is already a
         # draft, so downloaders cannot see a mixture of old and new packages.
         result = subprocess.run(["gh", "release", "upload", tag, str(path.resolve()),
-                                 "--repo", self.repository, "--clobber"], check=False)
-        require(result.returncode == 0, "release upload failed; release remains a draft")
+                                 "--repo", self.repository, "--clobber"],
+                                check=False, text=True, capture_output=True)
+        if result.returncode:
+            transient = re.search(r"HTTP (?:5\d\d|408|429)\b|ReleaseAsset\.name already exists|i/o timeout|TLS handshake timeout|connection reset",
+                                  result.stderr)
+            error = RetryableUploadError if transient else ValueError
+            raise error(f"release upload failed; release remains a draft: {result.stderr.strip()}")
 
 
 def check_current(github, tag, commit):
@@ -116,6 +126,11 @@ def validate_assets(args):
     return sorted(args.assets.iterdir())
 
 
+def asset_matches(asset, path):
+    return (asset.get("state") == "uploaded" and asset.get("size") == path.stat().st_size
+            and asset.get("digest") == f"sha256:{release.sha256(path)}")
+
+
 def verify_remote_assets(github, identifier, paths):
     expected = {path.name: path for path in paths}
     values = github.assets(identifier)
@@ -123,8 +138,7 @@ def verify_remote_assets(github, identifier, paths):
             "incomplete or mixed remote release asset set; release remains a draft")
     for asset in values:
         path = expected[asset["name"]]
-        require(asset.get("state") == "uploaded" and asset.get("size") == path.stat().st_size
-                and asset.get("digest") == f"sha256:{release.sha256(path)}",
+        require(asset_matches(asset, path),
                 f"remote asset verification failed: {path.name}; release remains a draft")
 
 
@@ -148,12 +162,25 @@ def publish_verified(github, tag, commit, paths):
                                            "prerelease": True, "make_latest": "false"})
         identifier = existing["id"]
     for path in paths:
-        current = github.get_release_by_id(identifier)
-        require(current is not None and current["id"] == identifier and current.get("tag_name") == tag
-                and current["draft"] is True,
-                "release ownership/draft state changed during upload")
-        check_current(github, tag, commit)
-        github.upload(tag, path)
+        for attempt in range(3):
+            current = github.get_release_by_id(identifier)
+            require(current is not None and current["id"] == identifier and current.get("tag_name") == tag
+                    and current["draft"] is True,
+                    "release ownership/draft state changed during upload")
+            check_current(github, tag, commit)
+            try:
+                github.upload(tag, path)
+                break
+            except RetryableUploadError:
+                check_current(github, tag, commit)
+                matches = [asset for asset in github.assets(identifier) if asset.get("name") == path.name]
+                require(len(matches) <= 1, "ambiguous remote asset; release remains a draft")
+                # An upload can reach GitHub even when the client reports an error.
+                if matches and asset_matches(matches[0], path):
+                    break
+                if attempt == 2:
+                    raise
+                time.sleep(2 ** attempt)
     check_current(github, tag, commit)
     verify_remote_assets(github, identifier, paths)
     current = github.get_release_by_id(identifier)
