@@ -42,6 +42,15 @@ export function validateLibrarySearch(
   return out;
 }
 
+/** Automatic metadata task predicates are not part of the adult browse contract. */
+export function supportedLibraryHealth(
+  health: string | undefined,
+  adult: boolean,
+): string | undefined {
+  if (!health || (adult && health.startsWith("metadata_"))) return undefined;
+  return health;
+}
+
 export function libraryBrowseQuery(
   search: LibrarySearch,
   adult: boolean,
@@ -55,7 +64,7 @@ export function libraryBrowseQuery(
         ? null
         : (search.kind ?? null),
     query: search.q ?? null,
-    health: search.health ?? null,
+    health: supportedLibraryHealth(search.health, adult) ?? null,
     genre: search.genre ?? null,
     person: search.person ?? null,
     studio: search.studio ?? null,

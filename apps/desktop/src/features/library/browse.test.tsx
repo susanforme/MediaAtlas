@@ -9,18 +9,18 @@ import {
 import { type ComponentProps, useState } from "react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
+import { adultApi } from "../../api/adult";
 import { DesktopError } from "../../api/desktop";
 import { libraryApi, type MediaCard, type RootView } from "../../api/library";
 import { nativeOpenApi } from "../../api/organization";
 import i18n from "../../i18n";
 import { LibraryPage, type LibrarySearch } from "./browse";
 
-vi.mock("./context", () => ({
-  usePrivacy: () => ({
-    settings: { entry_visible: false, covers_visible: false },
-    includeAdult: false,
-  }),
+const privacy = vi.hoisted(() => ({
+  settings: { entry_visible: false, covers_visible: false },
+  includeAdult: false,
 }));
+vi.mock("./context", () => ({ usePrivacy: () => privacy }));
 vi.mock("@tanstack/react-router", () => ({
   Link: ({
     to,
@@ -61,6 +61,10 @@ vi.mock("../../api/library", async (original) => ({
     detail: vi.fn(),
   },
 }));
+vi.mock("../../api/adult", async (original) => ({
+  ...(await original<typeof import("../../api/adult")>()),
+  adultApi: { media: vi.fn(), roots: vi.fn() },
+}));
 vi.mock("../../api/organization", async (original) => ({
   ...(await original<typeof import("../../api/organization")>()),
   nativeOpenApi: { open: vi.fn() },
@@ -100,6 +104,7 @@ function ControlledLibrary({
   const [search, setSearch] = useState(initial);
   return (
     <LibraryPage
+      adult={search.kind === "adult_video"}
       search={search}
       onSearch={(next, replace) => {
         onSearch(next, replace);
@@ -125,6 +130,15 @@ function show(initial: LibrarySearch = {}) {
 }
 beforeEach(async () => {
   vi.clearAllMocks();
+  privacy.settings.entry_visible = false;
+  privacy.includeAdult = false;
+  vi.mocked(adultApi.roots).mockResolvedValue([
+    { ...root, kind: "adult_video" },
+  ]);
+  vi.mocked(adultApi.media).mockResolvedValue({
+    items: [{ ...card, media: { ...card.media, kind: "adult_video" } }],
+    next_cursor: null,
+  });
   await i18n.changeLanguage("en-US");
   vi.mocked(libraryApi.roots).mockResolvedValue([root]);
   vi.mocked(libraryApi.media).mockResolvedValue({
@@ -313,3 +327,249 @@ it("retains the actual folder and type filter for source recovery", async () => 
     "/settings?from=library&root=another-folder&kind=movie",
   );
 });
+
+it("uses server health shortcuts while retaining search scope and clearing only health for All", async () => {
+  const initial: LibrarySearch = {
+    root: root.id,
+    kind: "movie",
+    q: "Scoped search",
+    sort: "year_desc",
+    genre: "Drama",
+    cursor: "old-page",
+    page: 8,
+    view: "wall",
+  };
+  vi.mocked(libraryApi.media).mockImplementation(async (query) => ({
+    items: [
+      {
+        ...card,
+        media: {
+          ...card.media,
+          title:
+            query.health === "metadata_failed"
+              ? "Failed media from server"
+              : card.media.title,
+        },
+      },
+    ],
+    next_cursor: null,
+  }));
+  const { onSearch } = show(initial);
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const shortcuts = screen.getByRole("group", {
+    name: "Filter by review status",
+  });
+  expect(
+    within(shortcuts).getByRole("button", { name: "All" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const presets = [
+    ["Missing details", "incomplete_metadata"],
+    ["Needs review", "metadata_needs_review"],
+    ["Source not configured", "metadata_unconfigured"],
+    ["Metadata failed", "metadata_failed"],
+    ["Missing poster", "missing_poster"],
+  ] as const;
+  for (const [label, health] of presets) {
+    const button = within(shortcuts).getByRole("button", {
+      name: label,
+    });
+    button.focus();
+    fireEvent.click(button);
+    expect(onSearch).toHaveBeenLastCalledWith(
+      { ...initial, health, cursor: undefined, page: 1 },
+      undefined,
+    );
+    await waitFor(() =>
+      expect(libraryApi.media).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          health,
+          cursor: null,
+          root_id: root.id,
+          kind: "movie",
+          query: "Scoped search",
+          sort: "year_desc",
+          genre: "Drama",
+          include_adult: false,
+        }),
+      ),
+    );
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(button).toHaveFocus();
+    if (health === "metadata_failed") {
+      expect(
+        await screen.findByRole("link", {
+          name: "Details: Failed media from server",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByRole("link", { name: "Details: Synthetic film" }),
+      ).not.toBeInTheDocument();
+    }
+    const calls = onSearch.mock.calls.length;
+    fireEvent.click(button);
+    expect(onSearch).toHaveBeenCalledTimes(calls);
+  }
+  fireEvent.click(within(shortcuts).getByRole("button", { name: "All" }));
+  expect(onSearch).toHaveBeenLastCalledWith(
+    { ...initial, health: undefined, cursor: undefined, page: 1 },
+    undefined,
+  );
+  await waitFor(() =>
+    expect(libraryApi.media).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        health: null,
+        root_id: root.id,
+        kind: "movie",
+        query: "Scoped search",
+        sort: "year_desc",
+        genre: "Drama",
+        cursor: null,
+      }),
+    ),
+  );
+  expect(adultApi.media).not.toHaveBeenCalled();
+});
+
+it("keeps the advanced health selector and shortcuts on one effective query", async () => {
+  show({ health: "missing_nfo" });
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const shortcuts = screen.getByRole("group", {
+    name: "Filter by review status",
+  });
+  expect(
+    within(shortcuts).getByRole("button", { name: "All" }),
+  ).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  const health = screen.getByRole("combobox", { name: "Health" });
+  expect(health).toHaveValue("missing_nfo");
+  fireEvent.change(health, { target: { value: "missing_poster" } });
+  expect(
+    within(shortcuts).getByRole("button", {
+      name: "Missing poster",
+    }),
+  ).toHaveAttribute("aria-pressed", "true");
+  fireEvent.click(
+    within(shortcuts).getByRole("button", {
+      name: "Needs review",
+    }),
+  );
+  expect(health).toHaveValue("metadata_needs_review");
+  await waitFor(() =>
+    expect(libraryApi.media).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        health: "metadata_needs_review",
+        cursor: null,
+      }),
+    ),
+  );
+});
+
+it("exposes only supported adult shortcuts and clears private health when returning to ordinary media", async () => {
+  privacy.settings.entry_visible = true;
+  privacy.includeAdult = true;
+  show({ kind: "adult_video", root: root.id, cursor: "private-page", page: 3 });
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const shortcuts = screen.getByRole("group", {
+    name: "Filter by review status",
+  });
+  expect(
+    within(shortcuts)
+      .getAllByRole("button")
+      .map((button) => button.textContent),
+  ).toEqual(["All", "Missing details", "Missing poster"]);
+  expect(libraryApi.media).not.toHaveBeenCalled();
+  expect(libraryApi.roots).not.toHaveBeenCalled();
+  expect(libraryApi.facets).not.toHaveBeenCalled();
+  fireEvent.click(
+    within(shortcuts).getByRole("button", {
+      name: "Missing poster",
+    }),
+  );
+  await waitFor(() =>
+    expect(adultApi.media).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        kind: "adult_video",
+        root_id: root.id,
+        health: "missing_poster",
+        include_adult: true,
+        cursor: null,
+      }),
+    ),
+  );
+  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  expect(
+    within(screen.getByRole("combobox", { name: "Health" })).queryByRole(
+      "option",
+      { name: "Source not configured" },
+    ),
+  ).not.toBeInTheDocument();
+  for (const [query] of vi.mocked(adultApi.media).mock.calls)
+    expect(query.health?.startsWith("metadata_")).not.toBe(true);
+  fireEvent.change(screen.getByRole("combobox", { name: "Media type" }), {
+    target: { value: "movie" },
+  });
+  await waitFor(() =>
+    expect(libraryApi.media).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        kind: "movie",
+        include_adult: false,
+        root_id: null,
+        health: null,
+        cursor: null,
+      }),
+    ),
+  );
+});
+
+it.each([
+  "metadata_pending",
+  "metadata_needs_review",
+  "metadata_unconfigured",
+  "metadata_failed",
+])(
+  "ignores unsupported adult metadata health from a manual URL: %s",
+  async (health) => {
+    privacy.settings.entry_visible = true;
+    privacy.includeAdult = true;
+    const { onSearch } = show({
+      kind: "adult_video",
+      root: root.id,
+      health,
+      cursor: "manual-private-page",
+      page: 2,
+    });
+    await screen.findByRole("link", { name: "Details: Synthetic film" });
+    expect(adultApi.media).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        include_adult: true,
+        kind: "adult_video",
+        health: null,
+      }),
+    );
+    const shortcuts = screen.getByRole("group", {
+      name: "Filter by review status",
+    });
+    const all = within(shortcuts).getByRole("button", { name: "All" });
+    expect(all).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+    expect(screen.getByRole("combobox", { name: "Health" })).toHaveValue("");
+    fireEvent.click(all);
+    expect(onSearch).toHaveBeenLastCalledWith(
+      {
+        kind: "adult_video",
+        root: root.id,
+        health: undefined,
+        cursor: undefined,
+        page: 1,
+      },
+      undefined,
+    );
+    await waitFor(() =>
+      expect(adultApi.media).toHaveBeenLastCalledWith(
+        expect.objectContaining({ health: null, cursor: null }),
+      ),
+    );
+    expect(libraryApi.media).not.toHaveBeenCalled();
+    expect(libraryApi.facets).not.toHaveBeenCalled();
+  },
+);

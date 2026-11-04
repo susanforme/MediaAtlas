@@ -9,6 +9,7 @@ import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
 import { Button } from "../../components/ui/button";
 import { usePrivacy } from "./context";
+import { DetailRecoveryAction } from "./detail-recovery-action";
 import { NativeOpen } from "./native-open";
 import { useLibraryActivity } from "./use-library-activity";
 import "../scraper/translations";
@@ -78,27 +79,7 @@ export function MediaDetailPage({
         description={`${t(`kind_${data.media.kind}`)} · ${data.media.year ?? t("unknownYear")}`}
       >
         <NativeOpen files={data.files} adult={adult} />
-        {["movie", "tv_series", "anime", "adult_video"].includes(
-          data.media.kind,
-        ) &&
-          !data.health.includes("metadata_pending") && (
-            <Button asChild variant="outline">
-              <Link
-                to={adult ? "/tools" : "/scraper"}
-                search={
-                  adult
-                    ? { kind: "adult_video", media: data.media.id }
-                    : { media: data.media.id }
-                }
-              >
-                {t(
-                  data.health.includes("incomplete_metadata")
-                    ? "libraryIdentify"
-                    : "libraryCorrectMatch",
-                )}
-              </Link>
-            </Button>
-          )}
+        <DetailRecoveryAction detail={data} />
         <Button asChild variant="ghost">
           <Link
             to="/tools"
@@ -123,7 +104,11 @@ export function MediaDetailPage({
             />
           </div>
           <div className="mt-4">
-            <HealthBadges health={data.health} />
+            <HealthBadges
+              health={data.health.filter(
+                (health) => health !== "metadata_pending",
+              )}
+            />
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
             {t("updated")} {date(data.media.updated_at)}

@@ -14,6 +14,7 @@ import { AutomaticScanResult } from "./automatic-scan-result";
 import { refreshIsRunning, refreshResultTitle } from "./library-activity-model";
 import "./library-status-translations";
 import { isActiveScanTask } from "./library-model";
+import { ScanRecovery } from "./scan-recovery";
 import { useScannerPreview } from "./use-scanner-preview";
 
 export {
@@ -147,11 +148,13 @@ export function TasksPage() {
                   </span>
                 ))}
               </div>
-              {task.error_code && (
-                <p className="mt-3 text-sm" role="alert">
-                  {t("scanError")}
-                </p>
-              )}
+              <ScanRecovery
+                task={task}
+                adult={roots.data.some(
+                  (root) =>
+                    root.id === task.root_id && root.kind === "adult_video",
+                )}
+              />
             </article>
           ))}
         </div>
@@ -324,11 +327,12 @@ export function ScannerPage({
                     </Button>
                   )}
                 </div>
-                {task.error_code && (
-                  <p role="alert" className="mt-3">
-                    {t("scanError")}
-                  </p>
-                )}
+                <ScanRecovery
+                  task={task}
+                  adult={selectedAdult}
+                  onRetry={() => rootId && start.mutate(rootId)}
+                  retryDisabled={!canStart || start.isPending}
+                />
               </div>
               {cancel.isError && <ErrorNotice error={cancel.error} />}
               {task.mode === "automatic" ? (

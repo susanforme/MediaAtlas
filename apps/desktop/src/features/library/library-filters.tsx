@@ -10,8 +10,9 @@ import type {
 import { Button } from "../../components/ui/button";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
-import type { LibrarySearch } from "./browse-model";
+import { type LibrarySearch, supportedLibraryHealth } from "./browse-model";
 import { HEALTH, LIBRARY_CATEGORIES } from "./library-model";
+import { libraryQuickFilters } from "./library-quick-filters";
 import { useFormat } from "./shared";
 import "./browse-translations";
 import "./library-status-translations";
@@ -75,9 +76,14 @@ export function LibraryFilters({
 }) {
   const { t } = useTranslation();
   const advancedId = useId();
+  const quickFilters = libraryQuickFilters(adult);
+  const health = supportedLibraryHealth(search.health, adult);
+  const quickHealth = quickFilters.some(
+    (shortcut) => shortcut.health === health,
+  );
   const advancedCount = [
     search.root,
-    search.health,
+    quickHealth ? undefined : health,
     search.genre,
     search.person,
     search.studio,
@@ -85,6 +91,7 @@ export function LibraryFilters({
   ].filter(Boolean).length;
   const filtered = Boolean(
     advancedCount ||
+      health ||
       search.q ||
       search.kind ||
       (search.sort && search.sort !== "updated_desc"),
@@ -180,6 +187,26 @@ export function LibraryFilters({
           </Button>
         </fieldset>
       </div>
+      <fieldset
+        className="mt-2 flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain px-1 py-1"
+        aria-label={t("libraryQuickFilters")}
+      >
+        {quickFilters.map((shortcut) => (
+          <Button
+            key={shortcut.health ?? "all"}
+            size="sm"
+            variant={health === shortcut.health ? "secondary" : "ghost"}
+            className="h-8 shrink-0 rounded-full px-3 text-xs"
+            aria-pressed={health === shortcut.health}
+            onClick={() => {
+              if ((search.health || undefined) !== shortcut.health)
+                filter({ health: shortcut.health });
+            }}
+          >
+            {t(shortcut.label)}
+          </Button>
+        ))}
+      </fieldset>
       {advanced && (
         <section
           id={advancedId}
@@ -211,7 +238,7 @@ export function LibraryFilters({
           <Label className="filter-field">
             <span>{t("health")}</span>
             <Select
-              value={search.health ?? ""}
+              value={health ?? ""}
               onChange={(event) =>
                 filter({ health: event.target.value || undefined })
               }

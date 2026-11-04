@@ -133,3 +133,35 @@ it("keeps a source setup prompt visible in the library after the worker stops", 
   view.unmount();
   client.clear();
 });
+
+it("opens only the actionable review and failure sets in the original folder", async () => {
+  vi.mocked(libraryApi.tasks).mockResolvedValue([
+    {
+      ...task,
+      review_count: 3,
+      unconfigured_count: 1,
+      metadata_failed_count: 2,
+    },
+  ]);
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <Activity />
+    </QueryClientProvider>,
+  );
+  const review = await screen.findByRole("link", { name: "处理未识别媒体" });
+  expect(JSON.parse(review.getAttribute("data-search") ?? "{}")).toEqual({
+    root: "folder",
+    health: "metadata_needs_review",
+  });
+  const failed = screen.getByRole("link", { name: "查看资料获取失败的媒体" });
+  expect(JSON.parse(failed.getAttribute("data-search") ?? "{}")).toEqual({
+    root: "folder",
+    health: "metadata_failed",
+  });
+  expect(
+    screen.getByRole("link", { name: "配置来源并继续" }),
+  ).toBeInTheDocument();
+});

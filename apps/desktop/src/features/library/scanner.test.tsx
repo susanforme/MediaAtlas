@@ -15,8 +15,10 @@ import { DesktopError } from "../../api/desktop";
 import { libraryApi, type RootView, type ScanTask } from "../../api/library";
 import i18n from "../../i18n";
 import { PrivacyProvider } from "./context";
-import { ScannerPage } from "./scanner";
+import { ScannerPage, TasksPage } from "./scanner";
 import type { ScannerSearch } from "./scanner-navigation";
+
+vi.mock("../providers/pages", () => ({ ProviderTasks: () => null }));
 
 const privacy = vi.hoisted(() => ({ visible: false, allowed: true }));
 vi.mock("@tanstack/react-router", () => ({
@@ -436,5 +438,84 @@ describe("Fixture scan review", () => {
     expect(adultApi.tasks).not.toHaveBeenCalled();
     expect(libraryApi.preview).not.toHaveBeenCalled();
     expect(libraryApi.confirm).not.toHaveBeenCalled();
+  });
+  it.each(["invalid_root", "invalid_exclude_pattern", "local_file_unreadable"])(
+    "offers directory management for %s without exposing a raw error",
+    async (error_code) => {
+      vi.mocked(libraryApi.tasks).mockResolvedValue([
+        { ...task, state: "failed", error_code },
+      ]);
+      show();
+      expect(
+        await screen.findByRole("link", { name: "Manage directories" }),
+      ).toHaveAttribute("href", "/roots");
+      expect(screen.getByRole("alert")).not.toHaveTextContent(error_code);
+      expect(libraryApi.sync).not.toHaveBeenCalled();
+    },
+  );
+
+  it("restarts a stopped directory update explicitly while preserving indexed content", async () => {
+    vi.mocked(libraryApi.tasks).mockResolvedValue([
+      { ...task, mode: "automatic", state: "cancelled", imported_count: 2 },
+    ]);
+    show();
+    expect(
+      await screen.findByText(
+        "The update stopped. Already indexed content and saved metadata are retained. Update the directory again to process unfinished items.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Update directory again" }),
+    );
+    await waitFor(() =>
+      expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith(root.id),
+    );
+    expect(libraryApi.confirm).not.toHaveBeenCalled();
+  });
+
+  it("shows safe recovery and preserves adult scope without exposing arbitrary error details", async () => {
+    privacy.visible = true;
+    const error_code = "private/path/token=secret";
+    vi.mocked(libraryApi.tasks).mockResolvedValue([]);
+    vi.mocked(adultApi.tasks).mockResolvedValue([
+      { ...task, mode: "automatic", state: "failed", error_code },
+    ]);
+    show({ root: root.id, task: task.id, kind: "adult_video" });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The directory update did not finish.",
+    );
+    expect(document.body).not.toHaveTextContent(error_code);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Update directory again" }),
+    );
+    await waitFor(() =>
+      expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith(root.id),
+    );
+  });
+
+  it("uses the same recovery instructions and real retry destination in task history", async () => {
+    vi.mocked(libraryApi.tasks).mockResolvedValue([
+      { ...task, state: "failed", error_code: "files_changed" },
+    ]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={client}>
+          <TasksPage />
+        </QueryClientProvider>
+      </I18nextProvider>,
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Some files changed during the scan and have not been added.",
+    );
+    const retry = screen.getByRole("link", { name: "View and update again" });
+    expect(retry).toHaveAttribute("href", "/scanner");
+    expect(retry).toHaveAttribute(
+      "data-search",
+      JSON.stringify({ root: root.id, task: task.id }),
+    );
+    expect(libraryApi.sync).not.toHaveBeenCalled();
   });
 });

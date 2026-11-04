@@ -109,9 +109,25 @@ export function LibraryActivity({
           <Button asChild variant="outline" size="sm">
             <Link
               to="/tools"
-              search={visibleTasks.length === 1 ? { root: task.root_id } : {}}
+              search={{
+                ...(visibleTasks.length === 1 ? { root: task.root_id } : {}),
+                health: "metadata_needs_review",
+              }}
             >
               {t("libraryRefreshReviewAction")}
+            </Link>
+          </Button>
+        )}
+        {!running && incomplete.failed > 0 && (
+          <Button asChild variant="outline" size="sm">
+            <Link
+              to="/tools"
+              search={{
+                ...(visibleTasks.length === 1 ? { root: task.root_id } : {}),
+                health: "metadata_failed",
+              }}
+            >
+              {t("libraryRefreshFailedAction")}
             </Link>
           </Button>
         )}
