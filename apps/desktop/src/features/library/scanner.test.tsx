@@ -5,7 +5,6 @@ import {
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { type ComponentProps, useState } from "react";
 import { I18nextProvider } from "react-i18next";
@@ -226,8 +225,8 @@ describe("Fixture scan review", () => {
       root: root.id,
       task: task.id,
     });
-    const options = within(screen.getByLabelText("Recent scans")).getAllByRole(
-      "option",
+    const options = selectOptions(
+      screen.getByRole("combobox", { name: "Recent scans" }),
     );
     expect(options[0]).toHaveTextContent(root.name);
     expect(options[0]).not.toHaveTextContent(task.id);

@@ -256,9 +256,11 @@ function clickFirstEnabledCommit(name: string | RegExp) {
 
 async function searchAndChoose() {
   const view = show();
-  selectOptions(screen.getByLabelText("Local media item"));
+  const localItem = screen.getByRole("combobox", { name: "Local media item" });
+  await waitFor(() => expect(localItem).toBeEnabled());
+  selectOptions(localItem);
   await screen.findByRole("option", { name: "Local film · 2024" });
-  chooseSelectOption(screen.getByLabelText("Local media item"), "media-1");
+  chooseSelectOption(localItem, "media-1");
   await waitFor(() =>
     expect(screen.getByLabelText("Title")).toHaveValue("Local film"),
   );

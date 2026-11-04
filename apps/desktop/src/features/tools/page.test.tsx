@@ -151,10 +151,15 @@ beforeEach(async () => {
 });
 it("defaults to Preserve, shows every attachment and requires explicit plan confirmation", async () => {
   show(<OrganizationPanel mediaId="media" />);
-  selectOptions(screen.getByLabelText("Destination root"));
+  selectOptions(screen.getByRole("combobox", { name: "Destination root" }));
   await screen.findByRole("option", { name: "Target" });
-  expect(screen.getByLabelText("Strategy")).toHaveValue("preserve");
-  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
+  expect(screen.getByRole("combobox", { name: "Strategy" })).toHaveValue(
+    "preserve",
+  );
+  chooseSelectOption(
+    screen.getByRole("combobox", { name: "Destination root" }),
+    "root",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await screen.findByText("source/Part1.en.srt → target/Part1.en.srt");
   expect(api.execute).not.toHaveBeenCalled();
@@ -179,9 +184,12 @@ it("blocks conflicts and discards a preview when naming inputs change", async ()
     files: [{ ...plan.files[0], conflict: "destination_exists" }],
   });
   show(<OrganizationPanel mediaId="media" />);
-  selectOptions(screen.getByLabelText("Destination root"));
+  selectOptions(screen.getByRole("combobox", { name: "Destination root" }));
   await screen.findByRole("option", { name: "Target" });
-  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
+  chooseSelectOption(
+    screen.getByRole("combobox", { name: "Destination root" }),
+    "root",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await screen.findByText("Conflict: destination_exists");
   expect(
@@ -252,14 +260,19 @@ it("freezes target and other planning actions while Preview or rollback Preview 
     }),
   );
   show(<OrganizationPanel mediaId="media" />);
-  selectOptions(screen.getByLabelText("Destination root"));
+  selectOptions(screen.getByRole("combobox", { name: "Destination root" }));
   await screen.findByRole("option", { name: "Target" });
-  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
+  chooseSelectOption(
+    screen.getByRole("combobox", { name: "Destination root" }),
+    "root",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await waitFor(() => expect(api.preview).toHaveBeenCalled());
-  expect(screen.getByLabelText("Destination root")).toBeDisabled();
+  expect(
+    screen.getByRole("combobox", { name: "Destination root" }),
+  ).toBeDisabled();
   expect(screen.getByLabelText("Naming template")).toBeDisabled();
-  expect(screen.getByLabelText("Strategy")).toBeDisabled();
+  expect(screen.getByRole("combobox", { name: "Strategy" })).toBeDisabled();
   expect(
     screen.getByRole("button", { name: "Preview rollback" }),
   ).toBeDisabled();
@@ -273,7 +286,9 @@ it("freezes target and other planning actions while Preview or rollback Preview 
   );
   fireEvent.click(screen.getByRole("button", { name: "Preview rollback" }));
   await waitFor(() => expect(api.rollbackPreview).toHaveBeenCalledWith("plan"));
-  expect(screen.getByLabelText("Destination root")).toBeDisabled();
+  expect(
+    screen.getByRole("combobox", { name: "Destination root" }),
+  ).toBeDisabled();
   expect(
     screen.getByRole("button", { name: "Preview organization" }),
   ).toBeDisabled();
@@ -296,9 +311,12 @@ it("discards a late Preview response after the tools view closes", async () => {
     }),
   );
   const view = show(<OrganizationPanel mediaId="media" />);
-  selectOptions(screen.getByLabelText("Destination root"));
+  selectOptions(screen.getByRole("combobox", { name: "Destination root" }));
   await screen.findByRole("option", { name: "Target" });
-  chooseSelectOption(screen.getByLabelText("Destination root"), "root");
+  chooseSelectOption(
+    screen.getByRole("combobox", { name: "Destination root" }),
+    "root",
+  );
   fireEvent.click(screen.getByRole("button", { name: "Preview organization" }));
   await waitFor(() => expect(api.preview).toHaveBeenCalled());
   view.unmount();
