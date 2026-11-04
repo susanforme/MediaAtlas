@@ -1177,8 +1177,14 @@ mod tests {
         sqlx::query("INSERT INTO scan_sessions(task_id,root_id,root_snapshot_json,mode,phase) VALUES(?,?,?,'automatic','metadata')")
             .bind(task_id.to_string()).bind(s.root.id.to_string()).bind(serde_json::json!({"root":s.root,"exclude_patterns":[]}).to_string()).execute(s.repo.pool()).await.unwrap();
         let file = s.repo.list_files(s.media.id).await.unwrap().remove(0);
+        let normalized: String =
+            sqlx::query_scalar("SELECT normalized_relative_path FROM media_files WHERE id=?")
+                .bind(file.id.to_string())
+                .fetch_one(s.repo.pool())
+                .await
+                .unwrap();
         sqlx::query("INSERT INTO scan_candidates(id,task_id,root_id,kind,relative_path,normalized_relative_path,payload_json,status,existing_media_id) VALUES(?,?,?,'adult_video',?,?,'{}','imported',?)")
-            .bind(Uuid::new_v4().to_string()).bind(task_id.to_string()).bind(s.root.id.to_string()).bind(&file.relative_path).bind(&file.relative_path).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
+            .bind(Uuid::new_v4().to_string()).bind(task_id.to_string()).bind(s.root.id.to_string()).bind(&file.relative_path).bind(&normalized).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
         sqlx::query("INSERT INTO library_refresh_items(task_id,media_item_id,state,updated_at) VALUES(?,?,'pending',?)")
             .bind(task_id.to_string()).bind(s.media.id.to_string()).bind(now).execute(s.repo.pool()).await.unwrap();
         sqlx::query("INSERT INTO metadata_values(id,media_item_id,field_key,locale,value_json,provider_id,is_user_modified,is_locked) VALUES(?,?,'catalog_number','','\"SYN-001\"','local',0,0)")
@@ -1197,11 +1203,14 @@ mod tests {
     ) -> (
         tokio::task::JoinHandle<()>,
         Arc<std::sync::atomic::AtomicBool>,
+        Arc<tokio::sync::Notify>,
     ) {
         use crate::provider_auth::{AuthSaveInput, ProviderAuthService};
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
         let started = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let detail_started = started.clone();
+        let response_gate = Arc::new(tokio::sync::Notify::new());
+        let release_detail = response_gate.clone();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
@@ -1211,7 +1220,7 @@ mod tests {
                 if String::from_utf8_lossy(&bytes[..count]).contains("cid=") {
                     detail_started.store(true, std::sync::atomic::Ordering::Release);
                     if slow_detail {
-                        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                        release_detail.notified().await;
                     }
                 }
                 let body=serde_json::json!({"result":{"status":200,"items":[{"content_id":"syn00001","product_id":"SYN-001","title":"Synthetic automatic work","date":"2026-01-01","volume":"90","iteminfo":{"maker":[{"id":1,"name":"Synthetic Studio"}]}}]}}).to_string();
@@ -1259,12 +1268,44 @@ mod tests {
             s._dir.path().join("adult-cache"),
         )
         .with_auth_service(auth);
-        (server, started)
+        (server, started, response_gate)
+    }
+    #[tokio::test]
+    async fn automatic_context_uses_stored_normalized_file_identity() {
+        let s = setup().await;
+        // Reproduce Windows' case-folded database identity on every host while
+        // retaining the source filename's original spelling.
+        let file = s.repo.list_files(s.media.id).await.unwrap().remove(0);
+        let normalized = mediaatlas_domain::normalize_relative_path(
+            &file.relative_path,
+            mediaatlas_domain::PathStyle::Windows,
+        )
+        .unwrap();
+        assert_ne!(normalized, file.relative_path);
+        sqlx::query("UPDATE media_files SET normalized_relative_path=? WHERE id=?")
+            .bind(&normalized)
+            .bind(file.id.to_string())
+            .execute(s.repo.pool())
+            .await
+            .unwrap();
+        let context = automatic_context(&s, crate::media_output::AdultOutputAccess::new()).await;
+        let mut tx = s.repo.pool().begin().await.unwrap();
+        context.validate_tx(&mut tx, s.media.id).await.unwrap();
+        tx.rollback().await.unwrap();
+        // The guard must continue rejecting a candidate for a different file.
+        sqlx::query("UPDATE scan_candidates SET normalized_relative_path='different.mkv' WHERE task_id=?")
+            .bind(context.task_id.to_string()).execute(s.repo.pool()).await.unwrap();
+        let mut tx = s.repo.pool().begin().await.unwrap();
+        assert!(matches!(
+            context.validate_tx(&mut tx, s.media.id).await,
+            Err(RepositoryError::Conflict)
+        ));
+        tx.rollback().await.unwrap();
     }
     #[tokio::test]
     async fn automatic_adult_catalog_enrichment_preserves_fields_and_never_writes_sidecars() {
         let mut s = setup().await;
-        let (server, _) = automatic_mock(&mut s, false).await;
+        let (server, _, _) = automatic_mock(&mut s, false).await;
         let access = crate::media_output::AdultOutputAccess::new();
         let context = automatic_context(&s, access.clone()).await;
         let protected = local_value(
@@ -1315,7 +1356,7 @@ mod tests {
     async fn automatic_adult_cancel_or_revocation_during_detail_prevents_publication() {
         for revoke in [false, true] {
             let mut s = setup().await;
-            let (server, started) = automatic_mock(&mut s, true).await;
+            let (server, started, response_gate) = automatic_mock(&mut s, true).await;
             let access = crate::media_output::AdultOutputAccess::new();
             let context = automatic_context(&s, access.clone()).await;
             let cancel = context.cancel.clone();
@@ -1335,6 +1376,7 @@ mod tests {
             } else {
                 cancel.cancel();
             }
+            response_gate.notify_one();
             assert!(operation.await.unwrap().is_err());
             let count: i64 = sqlx::query_scalar("SELECT count(*) FROM adult_metadata_sources")
                 .fetch_one(s.repo.pool())
@@ -1373,7 +1415,7 @@ mod tests {
     #[tokio::test]
     async fn adult_directory_refresh_indexes_and_identifies_without_manual_import() {
         let mut s = setup().await;
-        let (server, _) = automatic_mock(&mut s, false).await;
+        let (server, _, _) = automatic_mock(&mut s, false).await;
         let access = crate::media_output::AdultOutputAccess::new();
         let scans = crate::scan_service::ScanService::new(s.repo.clone());
         let original = std::fs::read(s._dir.path().join("SYN-001-CD1.mkv")).unwrap();
@@ -1480,7 +1522,7 @@ mod tests {
     #[tokio::test]
     async fn locking_adult_directory_refresh_cancels_late_network_work() {
         let mut s = setup().await;
-        let (server, started) = automatic_mock(&mut s, true).await;
+        let (server, started, response_gate) = automatic_mock(&mut s, true).await;
         let access = crate::media_output::AdultOutputAccess::new();
         let scans = crate::scan_service::ScanService::new(s.repo.clone());
         let task = scans
@@ -1496,6 +1538,7 @@ mod tests {
         .unwrap();
         access.revoke();
         let finished = settle_adult_scan(&scans, task.id).await;
+        response_gate.notify_one();
         assert_eq!(finished.state, TaskState::Cancelled);
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT count(*) FROM adult_metadata_sources")

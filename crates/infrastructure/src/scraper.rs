@@ -1654,6 +1654,12 @@ mod tests {
     async fn gallery_fixture(
         s: &Setup,
     ) -> (Uuid, tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>) {
+        gallery_fixture_with_response_gate(s, None).await
+    }
+    async fn gallery_fixture_with_response_gate(
+        s: &Setup,
+        response_gate: Option<Arc<tokio::sync::Notify>>,
+    ) -> (Uuid, tokio::task::JoinHandle<()>, Arc<tokio::sync::Notify>) {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let started = Arc::new(tokio::sync::Notify::new());
@@ -1664,11 +1670,16 @@ mod tests {
                     return;
                 };
                 let signal = signal.clone();
+                let response_gate = response_gate.clone();
                 tokio::spawn(async move {
                     let mut b = [0; 2048];
                     let _ = stream.read(&mut b).await;
                     signal.notify_one();
-                    tokio::time::sleep(Duration::from_millis(400)).await;
+                    if let Some(gate) = response_gate {
+                        gate.notified().await;
+                    } else {
+                        tokio::time::sleep(Duration::from_millis(400)).await;
+                    }
                     let image = image::DynamicImage::new_rgb8(2, 2);
                     let mut bytes = std::io::Cursor::new(Vec::new());
                     image.write_to(&mut bytes, image::ImageFormat::Png).unwrap();
@@ -1776,16 +1787,30 @@ mod tests {
     #[tokio::test]
     async fn concurrent_gallery_requests_share_cancellation_and_never_apply_library_changes() {
         let s = setup().await;
-        let (run, server, started) = gallery_fixture(&s).await;
+        // Exercise two actual in-flight downloads. The default image limit is
+        // one, which queues the second request before it can reach the server.
+        let mut config = s.providers.config("tmdb").await.unwrap();
+        config.image_concurrency = 2;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        let response_gate = Arc::new(tokio::sync::Notify::new());
+        let (run, server, started) =
+            gallery_fixture_with_response_gate(&s, Some(response_gate.clone())).await;
         let first = s.service.clone();
         let a = tokio::spawn(async move { first.artwork_preview(run, 0, 0).await });
-        started.notified().await;
+        tokio::time::timeout(Duration::from_secs(2), started.notified())
+            .await
+            .expect("first artwork request must reach the server before cancellation");
         let second = s.service.clone();
         let b = tokio::spawn(async move { second.artwork_preview(run, 0, 1).await });
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        // A scheduler delay does not prove that both operations reached the
+        // network. Hold both responses until cancellation has been observed.
+        tokio::time::timeout(Duration::from_secs(2), started.notified())
+            .await
+            .expect("second artwork request must reach the server before cancellation");
         assert!(s.providers.cancel(run).await.unwrap());
         assert!(a.await.unwrap().is_err());
         assert!(b.await.unwrap().is_err());
+        response_gate.notify_waiters();
         assert!(s.repo.list_artworks(s.media.id).await.unwrap().is_empty());
         let records = s.providers.snapshot().await.unwrap().requests;
         assert_eq!(
