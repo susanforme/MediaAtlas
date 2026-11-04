@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Select } from "../../components/ui/select";
 import { ErrorNotice } from "../library/shared";
 import { validateToolsSearch } from "../tools/search";
 import type { ReviewSession } from "./use-review-queue";
@@ -19,6 +21,11 @@ export function PersistentQueueNavigation({
   const queue = review.query.data;
   if (!queue || !review.selected) return null;
   const selected = review.selected;
+  const index = queue.items.findIndex(
+    (item) => item.media_id === selected.media_id,
+  );
+  const previous = queue.items[index - 1];
+  const next = queue.items[index + 1];
   const counts = Object.fromEntries(
     ["pending", "confirmed", "deferred", "failed"].map((state) => [
       state,
@@ -58,27 +65,53 @@ export function PersistentQueueNavigation({
       <p aria-live="polite" className="text-sm">
         {t("reviewSummary", { count: queue.items.length, ...counts })}
       </p>
-      <div className="flex flex-wrap gap-2">
-        {queue.items.map((item) => (
-          <Button
-            key={item.media_id}
-            variant={
-              item.media_id === selected.media_id ? "default" : "outline"
-            }
-            size="sm"
-            disabled={busy || !onNavigate}
-            aria-current={
-              item.media_id === selected.media_id ? "step" : undefined
-            }
-            aria-label={t("reviewSelect", {
-              index: item.position + 1,
-              state: t(`reviewState_${item.state}`),
-            })}
-            onClick={() => void choose(item.media_id)}
-          >
-            {item.position + 1} · {t(`reviewState_${item.state}`)}
-          </Button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || !onNavigate || !previous}
+          onClick={() => previous && void choose(previous.media_id)}
+        >
+          {t("reviewPrevious")}
+        </Button>
+        <Select
+          className="h-9 w-auto max-w-full flex-1 sm:flex-none sm:min-w-48"
+          aria-label={t("reviewItemPicker")}
+          value={selected.media_id}
+          disabled={busy || !onNavigate}
+          onChange={(event) => void choose(event.target.value)}
+        >
+          {queue.items.map((item) => (
+            <option key={item.media_id} value={item.media_id}>
+              {t("reviewPosition", {
+                index: item.position + 1,
+                count: queue.items.length,
+              })}
+            </option>
+          ))}
+        </Select>
+        <Badge
+          role="status"
+          variant={
+            selected.state === "failed"
+              ? "destructive"
+              : selected.state === "confirmed"
+                ? "default"
+                : selected.state === "deferred"
+                  ? "secondary"
+                  : "outline"
+          }
+        >
+          {t(`reviewState_${selected.state}`)}
+        </Badge>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={busy || !onNavigate || !next}
+          onClick={() => next && void choose(next.media_id)}
+        >
+          {t("reviewNext")}
+        </Button>
       </div>
       <div className="flex flex-wrap gap-2">
         {selected.state === "pending" &&

@@ -1,14 +1,16 @@
 {
   "date": "2026-11-04",
   "mode": "real Chromium + synthetic IPC only",
-  "source_commit": "9d6326435190d8c3131d82b36681bdb6d66189d4",
-  "worktree_diff_sha256": "352f361ca56f827c98d4180a999bbad4c6cd1b1a5ce09d5caf1b0242c7ed5879",
+  "source_commit": "226b1b91fbe3d238573d40c05522c1b6db580d17",
+  "worktree_diff_sha256": "b793cb167a67e811917c107cd8c966dae328a328a1e866f3084675275335b851",
   "queue_source_sha256": {
+    "apps/desktop/src/components/ui/badge.tsx": "5b972a827e247b317ccfad4c316f38c54a652b54a144ffa03d8e95713e18781a",
     "apps/desktop/src/api/review-queue.ts": "82df9d3173d6cc9a7e301c01736b728138483903aed86535200583163e7bf428",
     "apps/desktop/src/features/scraper/use-review-queue.ts": "88978f6b14117abac5345d4d173ec4c1acf28047dc1d393bd4593cd9552ebc3e",
     "apps/desktop/src/features/scraper/queue-navigation.tsx": "6bd872a59335388dac144f5e9cb4c0292be82d1fa3bfadefe500aa68f0b94c25",
-    "apps/desktop/src/features/scraper/review-queue-translations.ts": "e4edb04feaf088d4dc1b56f787298581c3c698936695ef5742a925364c0e24fc",
-    "apps/desktop/src/features/scraper/persistent-queue-navigation.tsx": "b75d85ccb964d659add5112d0c0fc1a5cee5295bbd451cd38374aebcd7c014b7",
+    "apps/desktop/src/features/scraper/review-queue-translations.ts": "095f6b19663f2ed71c4677307501d49bd7e5b380f2905b5f6f7d97679d48cc85",
+    "apps/desktop/src/features/scraper/persistent-queue-navigation.test.tsx": "4284de7f6ec8393c0753f62facc6319ec2988dc331b7099b067b82be6dbdcc93",
+    "apps/desktop/src/features/scraper/persistent-queue-navigation.tsx": "130645ef55211d440ef7c0b263d0be16b64eafcf0ac9e43f6f49fdc9e5efe268",
     "apps/desktop/src/features/scraper/review-queue-launcher.tsx": "e1cc9811e553ca34e9a04c6f75608baa6742ae02fcb1905ea728ba6c2f50678a",
     "apps/desktop/src/features/scraper/page.tsx": "0f0f103a9c3d0b1b5ef1052cf219d8bac1d720481975f12907393c565fb6b050",
     "apps/desktop/src/features/scraper/use-scraper.ts": "e81425a60e4d04bc0050609ac33178f6491525257515cf859f97c56c1ccb410a",
@@ -17,31 +19,43 @@
     "apps/desktop/src/features/tools/ordinary-candidates.tsx": "5a901edae7d18fdda10a9c58a82eb99dc74a9046dcaf2a2aba75e8451fa2ebb8",
     "apps/desktop/src/features/settings/page.tsx": "8be51b69155556a0f1e481297f57cc4c91071c92c9e23a2dc29995f01b2ca3b4",
     "apps/desktop/src/features/providers/pages.tsx": "16e1a15c0f86e02cbda359e26042b9811b2c6601b3ab6b251e59194f8d85e6f8",
-    "crates/infrastructure/src/review_queue.rs": "4dd1e90519937d32ba82a4e0f9f279738f34080a868401dd63f306fbfddbe177",
-    "crates/infrastructure/src/review_queue/tests.rs": "4b9169def49f12c9b1783cb97b6c0b0118f81e7e7d3340fe0438696c26049e88",
+    "crates/infrastructure/src/review_queue.rs": "95a7bff00e02e26e1358269fea9368f0de1d3a29c414eeab75f71fe1c7c64b70",
+    "crates/infrastructure/src/review_queue/tests.rs": "d80eae1482466336a237fc3393e4f1f5e4eb0750b4e3dd3683ce87221ea4f1e1",
     "crates/application/src/review_queue.rs": "82b4aac943b321fd1517d4f25cc706fdbdd53928bc01f335fa36e5e3257f635d",
-    "scripts/desktop-review-queue-qa.py": "72ad9afe90b1282bc970d696afa8cd7e294febadc491836a21ef6dd9fc02ec36"
+    "scripts/desktop-review-queue-qa.py": "ef4503c80677b75e7f1314482ec2c3153e6c73e383d75b63ed9216872a2f13ca"
   },
-  "checks": {
-    "frontend": "pnpm check: 46 files / 397 tests, typecheck, lint, production build passed",
-    "rust": "cargo test --locked: 343 passed",
-    "clippy": "cargo clippy --all-targets --locked -- -D warnings: passed",
-    "format": "cargo fmt --all -- --check: passed",
-    "licenses": "1001 dependencies / 1625 notice references verified"
-  },
+  "checks": [
+    "create session and defer persist across actual browser reload without writes",
+    "manual credential configuration returns to same persistent session and media",
+    "search failure persists and reload does not retry or write",
+    "failed item requires explicit recheck and a separate search; successful retry does not confirm",
+    "explicit confirmation uses preview then checkpoint then confirm then proven ledger update; no file execution",
+    "return restores original server filters and sort",
+    "expired checkpoint requires explicit recheck and never replays confirmation",
+    "disabled directory and removed media block continuation",
+    "32 items use a non-interactive shared Badge and compact navigation rather than status buttons",
+    "cross-page 32-item bound rejects whole overflowing page addition without truncation",
+    "390×844 no page overflow, reduced motion and keyboard defer without writes"
+  ],
   "limits": [
     "No native Tauri, real provider, keyring or filesystem execution",
-    "Browser fixture validates command ordering only; Rust service proof/persistence is separate"
+    "Browser fixture validates command ordering only; Rust service proof/persistence is separate",
+    "This status UI change did not re-run Rust tests or native package checks"
   ],
   "screenshots": {
     "fixture-confirmed-proof-order-1648.png": "9c194ac1196965e8f6f365f2a40f154621e1840eaea15cd4e1bd4b04f552261c",
-    "fixture-created-session-1648.png": "29f9f9f059fca64a01516e96f83ce42ece95a28b64ca03255f9c65a26ddd94e6",
-    "fixture-disabled-root-1648.png": "a71a2384014114756b454060e64c7724d9ffe1052e4bafd377033c86d4582008",
-    "fixture-explicit-failure-retry-1648.png": "a47441675cc15ed923576ea500dcad53a69ade8cc06290096d19b60da3eaa1d3",
-    "fixture-keyboard-narrow-390.png": "140311a9508b71bca4467d80660801e18e4d51be560e6b9c6c94ef784ba5b2fb",
-    "fixture-persisted-failure-1648.png": "fbab3b8d7ed97a44d8224c33d55e26c282b35f974e93aa8e479efc8ba4f211af",
-    "fixture-restored-session-1648.png": "f5cd8a5ff93d2e895e3aa78c6f91d62b463b6affd1afe8b2a04fb9301cfb746c",
-    "fixture-settings-return-1648.png": "f5cd8a5ff93d2e895e3aa78c6f91d62b463b6affd1afe8b2a04fb9301cfb746c"
+    "fixture-created-session-1648.png": "a92bb1ff814651b781ab59f746bea3e98adafbc0739cc10356c3b34d84b01ba1",
+    "fixture-disabled-root-1648.png": "278da74d9f018ac96866a2aaa6c42a6470611bdeb27251ebb3ced4f7406a033f",
+    "fixture-explicit-failure-retry-1648.png": "541fd6a595db1c693149fb7d6136a5a9c3d36302ff7d939a3ce9506ac197abc1",
+    "fixture-keyboard-narrow-390.png": "f534cbc1d7709be3c9fee72335396d01b78ee2b36eea27c66e7bdff4ee0e2325",
+    "fixture-persisted-failure-1648.png": "c259b0ff1c720e1b8d0b2652d9a09d066a59d3becf9d386dffb72077ab80e543",
+    "fixture-restored-session-1648.png": "668df254d47d0eeab749b2714fc38c68232726b6b4eb96d5cbb7265abc3f4035",
+    "fixture-settings-return-1648.png": "668df254d47d0eeab749b2714fc38c68232726b6b4eb96d5cbb7265abc3f4035"
   },
-  "implementation_commit": "c81e6ecc9b612dd6ae10ca67fa9f5791d1209d34"
+  "frontend_checks": {
+    "command": "pnpm check",
+    "test_files": 47,
+    "tests": 401,
+    "status": "passed"
+  }
 }

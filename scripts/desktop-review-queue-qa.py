@@ -225,6 +225,11 @@ def main():
         expect(page.get_by_label("影片名称", exact=True)).to_have_value("QA 核对媒体 01")
         assert snapshot(page)["queues"][0]["context"] == filters
         no_writes(page)
+        badge = page.locator('[data-slot="badge"]')
+        expect(badge).to_have_count(1)
+        expect(badge).to_have_text("待核对")
+        assert badge.evaluate("el => el.tagName === 'SPAN' && !el.hasAttribute('tabindex')")
+        expect(page.get_by_role("button", name=re.compile(r"\d+.*待核对"))).to_have_count(0)
         capture(page, "fixture-created-session-1648.png")
         page.get_by_role("button", name="暂缓此项", exact=True).click()
         wait_state(page, 0, "deferred")
@@ -333,6 +338,11 @@ def main():
         bounded.get_by_role("button", name="刮削所选", exact=True).click()
         bounded.wait_for_function("__reviewFixture.snapshot().queues[0]?.items.length===32")
         assert len([c for c in snapshot(bounded)["calls"] if c["cmd"] == "review_queue_create"]) == 1
+        expect(bounded.get_by_role("combobox", name="当前条目", exact=True)).to_be_visible()
+        expect(bounded.get_by_role("combobox", name="当前条目", exact=True).get_by_role("option")).to_have_count(32)
+        expect(bounded.locator('[data-slot="badge"]')).to_have_count(1)
+        expect(bounded.get_by_role("button", name=re.compile(r"\d+.*待核对"))).to_have_count(0)
+        checks.append("32 items use a non-interactive shared Badge and compact navigation rather than status buttons")
         no_writes(bounded)
         checks.append("cross-page 32-item bound rejects whole overflowing page addition without truncation")
 
@@ -355,7 +365,7 @@ def main():
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "worktree_diff_sha256": hashlib.sha256(subprocess.check_output(["git", "diff", "HEAD"], cwd=ROOT)).hexdigest(),
         "queue_source_sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-                                for pattern in ["apps/desktop/src/api/review-queue.ts", "apps/desktop/src/features/scraper/*queue*.ts*", "apps/desktop/src/features/scraper/page.tsx", "apps/desktop/src/features/scraper/use-scraper.ts", "apps/desktop/src/features/scraper/recovery-*.tsx", "apps/desktop/src/features/tools/ordinary-candidates.tsx", "apps/desktop/src/features/settings/page.tsx", "apps/desktop/src/features/providers/pages.tsx", "crates/infrastructure/src/review_queue*.rs", "crates/infrastructure/src/review_queue/*.rs", "crates/application/src/review_queue.rs", "scripts/desktop-review-queue-qa.py"]
+                                for pattern in ["apps/desktop/src/components/ui/badge.tsx","apps/desktop/src/api/review-queue.ts", "apps/desktop/src/features/scraper/*queue*.ts*", "apps/desktop/src/features/scraper/page.tsx", "apps/desktop/src/features/scraper/use-scraper.ts", "apps/desktop/src/features/scraper/recovery-*.tsx", "apps/desktop/src/features/tools/ordinary-candidates.tsx", "apps/desktop/src/features/settings/page.tsx", "apps/desktop/src/features/providers/pages.tsx", "crates/infrastructure/src/review_queue*.rs", "crates/infrastructure/src/review_queue/*.rs", "crates/application/src/review_queue.rs", "scripts/desktop-review-queue-qa.py"]
                                 for path in ROOT.glob(pattern) if path.is_file()},
         "checks": checks,
         "limits": ["No native Tauri, real provider, keyring or filesystem execution", "Browser fixture validates command ordering only; Rust service proof/persistence is separate"],

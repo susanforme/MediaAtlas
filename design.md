@@ -12,6 +12,8 @@
 - 所有业务交互控件使用本仓库 shadcn 共享层 `components/ui/`。先补缺失组件，再在页面使用；页面不直接写原生 button/input/select/textarea 等交互控件，不使用 `window.confirm` / `window.alert`。语义链接通过共享 Button 的组合入口呈现；保留无障碍 label 和原有受控事件契约。
 - 遵守 `AGENTS.md` 与 `apps/desktop/src/AGENTS.md`：薄路由、feature 页面、业务组件、hook 状态边界和纯逻辑分离。文案沿用双语 i18next，删除重复说明。
 
+- 状态使用共享 shadcn `Badge` 等非交互展示组件，不把“待核对/已确认/失败”等状态渲染成按钮。队列用紧凑位置与导航控件切换条目，不平铺每项状态按钮。
+
 ## 视觉实施与验收
 
 - 电影式近黑界面；克制紫色强调；约 228px 固定侧栏，底部设置；约 68px 悬浮工具栏。不制造无效历史、窗口或通知按钮。
