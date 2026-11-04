@@ -1,3 +1,5 @@
+> 本轮社区证据、异常处理分流与后续优先级见 [Emby 与成熟刮削工具流程改进](emby-scraper-workflow.md)。
+
 > 2026-11-04：默认入口改为媒体库海报墙，概览页删除。目录以内容类型、名称和可视化选文件夹为主，高级字段折叠；来源缺失不能标记资料获取成功。配置入口串接凭据保存、明确启用和继续更新。交互参考 [Jellyfin Libraries](https://jellyfin.org/docs/general/server/libraries/) 的类型/可视化目录选择与添加后进度，以及 [Emby Library Setup](https://emby.media/support/articles/Library-Setup.html) 的类型、名称、路径及高级设置分层；不引入其播放器或服务端功能。
 
 # 自动媒体库与首屏加载
