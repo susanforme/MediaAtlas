@@ -51,7 +51,15 @@ export function AutomaticScanResult({
             <Button asChild>
               <Link
                 to="/settings"
-                search={{ from: "library", root: task.root_id, ...scope }}
+                search={{
+                  from: "library",
+                  root: task.root_id,
+                  ...scope,
+                  return: {
+                    to: "library",
+                    search: { root: task.root_id, ...scope },
+                  },
+                }}
               >
                 {t("libraryRefreshConfigureAction")}
               </Link>

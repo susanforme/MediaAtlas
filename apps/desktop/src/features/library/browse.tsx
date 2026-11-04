@@ -1,11 +1,10 @@
 import { Link } from "@tanstack/react-router";
-import { Plus } from "lucide-react";
-import { useLayoutEffect, useState } from "react";
+import { Plus, Search } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
 import {
   Table,
   TableHeader,
@@ -25,6 +24,47 @@ import { NativeOpen } from "./native-open";
 import { Empty, ErrorNotice, HealthBadges, Loading, Pager } from "./shared";
 
 export { type LibrarySearch, validateLibrarySearch } from "./browse-model";
+
+function LibrarySearchForm({
+  search,
+  onSearch,
+}: {
+  search: LibrarySearch;
+  onSearch: (patch: LibrarySearch) => void;
+}) {
+  const { t } = useTranslation();
+  const form = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    form.current?.reset();
+  }, [search]);
+  return (
+    <form
+      ref={form}
+      role="search"
+      aria-label={t("search")}
+      className="library-search"
+      onSubmit={(event) => {
+        event.preventDefault();
+        const query = new FormData(event.currentTarget).get("q");
+        onSearch({
+          q: typeof query === "string" ? query.trim() || undefined : undefined,
+        });
+      }}
+    >
+      <Search className="app-search-icon" size={19} aria-hidden="true" />
+      <Input
+        type="search"
+        name="q"
+        aria-label={t("search")}
+        placeholder={t("shellSearchPlaceholder")}
+        defaultValue={search.q ?? ""}
+      />
+      <Button type="submit" variant="ghost" size="icon" aria-label={t("search")}>
+        <Search size={17} aria-hidden="true" />
+      </Button>
+    </form>
+  );
+}
 
 export function LibraryPage({
   search,
@@ -55,17 +95,7 @@ export function LibraryPage({
     setToolbarSearch(document.getElementById("library-toolbar-search"));
   }, []);
   const searchInput = (
-    <Label className="filter-field library-search">
-      <span className={toolbarSearch ? "sr-only" : undefined}>
-        {t("search")}
-      </span>
-      <Input
-        type="search"
-        placeholder={t("search")}
-        value={search.q ?? ""}
-        onChange={(event) => filter({ q: event.target.value || undefined })}
-      />
-    </Label>
+    <LibrarySearchForm search={search} onSearch={filter} />
   );
   const searchField = toolbarSearch
     ? createPortal(searchInput, toolbarSearch)
@@ -98,7 +128,7 @@ export function LibraryPage({
       </div>
       {!adult && (
         <div className="library-background-activity">
-          <LibraryActivity activity={activity} />
+          <LibraryActivity activity={activity} search={search} />
         </div>
       )}
       {media.isSuccess &&

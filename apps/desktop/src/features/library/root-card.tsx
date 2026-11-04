@@ -15,6 +15,7 @@ import type { RootView, ScanTask } from "../../api/library";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { validateProviderSetupSearch } from "../settings/setup-search";
 import { useFormat } from "./shared";
 
 export function RootCard({
@@ -42,15 +43,36 @@ export function RootCard({
     ["waiting_for_user", "failed", "cancelled", "interrupted"].includes(
       task.state,
     );
+  const indexed =
+    task?.mode === "automatic" &&
+    (task.phase === "metadata" || task.phase === "complete");
+  const needsSourceSetup =
+    task?.mode === "automatic" && (task.unconfigured_count ?? 0) > 0;
   const status = !root.enabled
     ? "disabled"
-    : active
-      ? `autoPhase_${task.phase ?? "scan"}`
-      : attention
-        ? "rootNeedsAttention"
-        : task?.state === "succeeded" || root.last_scan_at
-          ? "rootUpToDate"
-          : "neverScanned";
+    : indexed
+      ? "rootLocalIndexed"
+      : active
+        ? `autoPhase_${task.phase ?? "scan"}`
+        : attention
+          ? "rootNeedsAttention"
+          : task?.state === "succeeded" || root.last_scan_at
+            ? "rootUpToDate"
+            : "neverScanned";
+  const metadataStatus =
+    task?.mode === "automatic"
+      ? indexed && ["failed", "cancelled", "interrupted"].includes(task.state)
+        ? `state_${task.state}`
+        : active && task.phase === "metadata"
+          ? "autoPhase_metadata"
+          : needsSourceSetup
+            ? "rootMetadataNotFetched"
+            : (task.metadata_failed_count ?? 0) > 0
+              ? "rootMetadataFailed"
+              : (task.review_count ?? 0) > 0
+                ? "rootMetadataReview"
+                : undefined
+      : undefined;
   const Icon =
     root.kind === "movie"
       ? Film
@@ -64,10 +86,13 @@ export function RootCard({
   const scope =
     root.kind === "adult_video" ? { kind: "adult_video" as const } : {};
   return (
-    <Card asChild>
+    <Card
+      asChild
+      className="rounded-none border-0 bg-transparent p-0 shadow-none sm:p-0"
+    >
       <article className="root-card">
-        <div className="flex items-start gap-3">
-          <div className="rounded-xl bg-primary/10 p-3 text-primary">
+        <div className="root-card-main">
+          <div className="root-card-icon">
             <Icon size={22} aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
@@ -82,19 +107,21 @@ export function RootCard({
                 </Link>
               </Button>
             </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="root-card-path">{root.path}</p>
+            <p className="root-card-meta">
               {root.kind ? t(`kind_${root.kind}`) : t("mixed")}
+              {" · "}
+              {t("lastScan")}{" "}
+              {root.last_scan_at ? date(root.last_scan_at) : t("neverScanned")}
             </p>
           </div>
-          <Badge variant="secondary">
-            {t(status)}
-          </Badge>
         </div>
-        <p className="root-card-path">{root.path}</p>
-        <p className="mt-3 text-xs text-muted-foreground">
-          {t("lastScan")}:{" "}
-          {root.last_scan_at ? date(root.last_scan_at) : t("neverScanned")}
-        </p>
+        <div className="root-card-status">
+          <Badge variant="secondary">{t(status)}</Badge>
+          {metadataStatus && (
+            <Badge variant="secondary">{t(metadataStatus)}</Badge>
+          )}
+        </div>
         <div className="root-card-actions">
           {root.enabled && (
             <Button
@@ -105,6 +132,22 @@ export function RootCard({
             >
               <RefreshCw size={15} aria-hidden="true" />
               {t(refreshing || active ? "rootUpdating" : "autoRefreshLibrary")}
+            </Button>
+          )}
+          {root.enabled && needsSourceSetup && (
+            <Button asChild size="sm" variant="outline">
+              <Link
+                to="/settings"
+                search={validateProviderSetupSearch({
+                  from: "library",
+                  root: root.id,
+                  kind: root.kind,
+                  provider: root.metadata_providers?.[0],
+                  return: { to: "roots" },
+                })}
+              >
+                {t("autoConfigureSources")}
+              </Link>
             </Button>
           )}
           {attention && (

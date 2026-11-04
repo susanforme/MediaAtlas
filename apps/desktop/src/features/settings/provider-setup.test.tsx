@@ -280,6 +280,30 @@ it("keeps the ordinary authentication save separate from enablement and folder u
   expect(libraryApi.sync).not.toHaveBeenCalled();
 });
 
+it("submits the contextual primary workflow with Enter instead of silently stopping after credential save", async () => {
+  const view = show();
+  await enter();
+  fireEvent.submit(screen.getByLabelText("Credential").closest("form")!);
+  await waitFor(() =>
+    expect(view.complete).toHaveBeenCalledWith(folder.id, task.id, "movie"),
+  );
+  expect(events).toEqual(["save", "enable", "verify", "sync"]);
+});
+
+it("does not offer combined saving and enablement in ordinary authentication settings", async () => {
+  show({ provider: "tmdb" });
+  fireEvent.change(await screen.findByLabelText("Credential"), {
+    target: { value: "synthetic-test-secret" },
+  });
+  expect(
+    screen.queryByRole("button", { name: "Save and enable source" }),
+  ).not.toBeInTheDocument();
+  fireEvent.submit(screen.getByLabelText("Credential").closest("form")!);
+  await waitFor(() => expect(providerAuthApi.save).toHaveBeenCalledTimes(1));
+  expect(providerApi.setEnabled).not.toHaveBeenCalled();
+  expect(libraryApi.sync).not.toHaveBeenCalled();
+});
+
 it("does not promise or start a folder update without a specific root", async () => {
   const view = show({ from: "library", kind: "movie", provider: "tmdb" });
   await enter();

@@ -41,6 +41,7 @@ export function detailRecovery(
         kind,
         provider: suggestedProvider(kind),
         tab: "auth",
+        return: { to: "media", media: detail.media.id },
       }),
     };
   }

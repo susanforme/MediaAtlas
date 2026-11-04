@@ -569,27 +569,28 @@ it("opens the system chooser once from the add route, preserving the requested m
   expect(providerAuthApi.status).not.toHaveBeenCalled();
 });
 
-it("saves the chosen directory before source setup and does not claim metadata has been fetched", async () => {
+it("keeps source choices in the draft and cancels without saving or configuring the directory", async () => {
   vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
   const provider = source("tmdb");
   provider.config.enabled = false;
-  vi.mocked(providerApi.snapshot).mockResolvedValue({ schema_version: 1, providers: [provider], tasks: [], requests: [] });
-  const onConfigureSource = vi.fn();
-  show({ initialAdd: true, onConfigureSource });
+  vi.mocked(providerApi.snapshot).mockResolvedValue({
+    schema_version: 1,
+    providers: [provider],
+    tasks: [],
+    requests: [],
+  });
+  show({ initialAdd: true });
   await screen.findByText("/media/Movies");
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Save and configure TMDB" }),
-  );
-  await waitFor(() =>
-    expect(onConfigureSource).toHaveBeenCalledWith({
-      root: "fixture-root",
-      kind: "movie",
-      provider: "tmdb",
-    }),
-  );
-  expect(libraryApi.saveRoot).toHaveBeenCalledExactlyOnceWith(
-    expect.objectContaining({ path: "/media/Movies" }),
-  );
+  const sourceChoice = await screen.findByRole("checkbox", { name: "TMDB" });
+  expect(sourceChoice).toBeChecked();
+  expect(screen.getByText("Disabled")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: /Save and configure/ }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(sourceChoice);
+  expect(sourceChoice).not.toBeChecked();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
   expect(libraryApi.sync).not.toHaveBeenCalled();
   expect(
     screen.queryByText("Metadata sources configured"),
@@ -598,9 +599,21 @@ it("saves the chosen directory before source setup and does not claim metadata h
 
 it("allows local indexing with an unconfigured source and labels only the background start", async () => {
   vi.mocked(pickDirectory).mockResolvedValue("/media/Movies");
+  const provider = source("tmdb");
+  provider.config.enabled = false;
+  vi.mocked(providerApi.snapshot).mockResolvedValue({
+    schema_version: 1,
+    providers: [provider],
+    tasks: [],
+    requests: [],
+  });
   show({ initialAdd: true });
   await screen.findByText("/media/Movies");
-  await screen.findByRole("checkbox", { name: "tmdb" });
+  await screen.findByRole("checkbox", { name: "TMDB" });
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+  expect(
+    screen.getByRole("button", { name: "Add to library" }),
+  ).toBeEnabled();
   fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
   await waitFor(() =>
     expect(toast.success).toHaveBeenCalledExactlyOnceWith(
@@ -613,6 +626,86 @@ it("allows local indexing with an unconfigured source and labels only the backgr
   expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root");
   expect(screen.queryByText("Scan complete")).not.toBeInTheDocument();
 });
+
+it("separates completed local indexing from missing metadata and offers setup for the saved directory", async () => {
+  vi.mocked(libraryApi.roots).mockResolvedValue([
+    {
+      id: "fixture-root",
+      name: "Films",
+      path: "/media/Movies",
+      path_style: "posix",
+      kind: "movie",
+      metadata_providers: ["tmdb"],
+      enabled: true,
+      exclude_patterns: [],
+      created_at: time,
+      updated_at: time,
+      last_scan_at: time,
+    },
+  ]);
+  vi.mocked(libraryApi.tasks).mockResolvedValue([
+    {
+      ...scanTask,
+      mode: "automatic",
+      phase: "complete",
+      state: "waiting_for_user",
+      imported_count: 2,
+      matched_count: 0,
+      review_count: 2,
+      unconfigured_count: 2,
+      metadata_failed_count: 0,
+    },
+  ]);
+  show();
+  expect(await screen.findByText("Local media indexed")).toBeInTheDocument();
+  expect(screen.getByText("Metadata not fetched")).toBeInTheDocument();
+  expect(
+    screen.getByRole("link", { name: "Configure metadata sources" }),
+  ).toHaveAttribute("href", "/settings");
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+  expect(libraryApi.sync).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["cancelled", "Cancelled"],
+  ["interrupted", "Interrupted"],
+  ["failed", "Failed"],
+] as const)(
+  "keeps the %s update outcome visible after local indexing",
+  async (state, label) => {
+    vi.mocked(libraryApi.roots).mockResolvedValue([
+      {
+        id: "fixture-root",
+        name: "Films",
+        path: "/media/Movies",
+        path_style: "posix",
+        kind: "movie",
+        enabled: true,
+        exclude_patterns: [],
+        created_at: time,
+        updated_at: time,
+        last_scan_at: time,
+      },
+    ]);
+    vi.mocked(libraryApi.tasks).mockResolvedValue([
+      {
+        ...scanTask,
+        mode: "automatic",
+        phase: "metadata",
+        state,
+        imported_count: 2,
+        matched_count: 0,
+        review_count: 0,
+        unconfigured_count: 0,
+        metadata_failed_count: 0,
+      },
+    ]);
+    show();
+    expect(await screen.findByText("Local media indexed")).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "View results" })).toBeInTheDocument();
+  },
+);
 
 it("accepts one configured catalog source and keeps the other optional", async () => {
   scope.visible = true;

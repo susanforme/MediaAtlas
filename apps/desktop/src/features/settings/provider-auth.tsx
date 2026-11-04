@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RootView } from "../../api/library";
 import type { AuthMethod, AuthStorage } from "../../api/provider-auth";
@@ -55,6 +55,7 @@ function PublicSourceEditor({
 }
 function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
   const { t } = useTranslation();
+  const formId = useId();
   const workflow = useProviderSetup(providerId, setup, root, onSetupComplete);
   const {
     method,
@@ -155,10 +156,17 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
         {t("providerAuthRefresh")}
       </Button>
       <form
+        id={formId}
         className="mt-4 space-y-4"
         onSubmit={(event) => {
-          if (workflow.phase) event.preventDefault();
-          else void save(event);
+          if (working || setup.from) {
+            event.preventDefault();
+            if (!working && setup.from)
+              void workflow.run(
+                status.data.configured,
+                secret.trim() ? () => saveCredential(false) : undefined,
+              );
+          } else void save(event);
         }}
         noValidate
       >
@@ -260,7 +268,9 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
         )}
         <div className="flex flex-wrap gap-3">
           <Button
-            type="submit"
+            type={setup.from ? "button" : "submit"}
+            variant={setup.from ? "outline" : "default"}
+            onClick={setup.from ? () => void saveCredential() : undefined}
             disabled={
               working ||
               !secret.trim() ||
@@ -282,18 +292,26 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
           </Button>
         </div>
       </form>
-      <SourceSetupActions
-        workflow={workflow}
-        setup={setup}
-        credentialReady={status.data.configured}
-        saveCredential={secret.trim() ? () => saveCredential(false) : undefined}
-        disabled={
-          pending !== null ||
-          (Boolean(secret.trim()) &&
-            method === "affiliate" &&
-            !affiliate.trim())
-        }
-      />
+      {(setup.from || status.data.configured) && (
+        <SourceSetupActions
+          workflow={workflow}
+          setup={setup}
+          formId={setup.from ? formId : undefined}
+          credentialReady={status.data.configured}
+          saveCredential={
+            setup.from && secret.trim()
+              ? () => saveCredential(false)
+              : undefined
+          }
+          disabled={
+            pending !== null ||
+            (!setup.from && Boolean(secret.trim())) ||
+            (Boolean(secret.trim()) &&
+              method === "affiliate" &&
+              !affiliate.trim())
+          }
+        />
+      )}
       {outcome && (
         <Alert asChild variant="destructive">
           <p className="mt-4" role="alert">

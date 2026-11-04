@@ -300,6 +300,8 @@ it("mounts the single library search in the toolbar before data arrives and pres
   expect(screen.getByRole("searchbox")).toBe(input);
   expect(input).toHaveFocus();
   fireEvent.change(input, { target: { value: "Changed query" } });
+  expect(onSearch).not.toHaveBeenCalled();
+  fireEvent.submit(screen.getByRole("search"));
   expect(onSearch).toHaveBeenCalledWith({
     q: "Changed query",
     cursor: undefined,

@@ -20,6 +20,7 @@ import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import {
   type ProviderSetupSearch,
   SETTINGS_TABS,
+  setupReturnLocation,
   type SettingsTab,
   type SetupComplete,
 } from "./setup-search";
@@ -80,24 +81,18 @@ export function SettingsPage({
   return (
     <>
       <PageHeading title={t("settings")}>
-        {setup.from === "scraper" && (
+        {setup.from && (
           <Button asChild variant="outline">
-            <Link
-              to="/scraper"
-              search={{
-                media: setup.media,
-                queue: setup.queue,
-                session: setup.session,
-              }}
-            >
-              {t("scraperReturn")}
-            </Link>
-          </Button>
-        )}
-        {setup.from === "library" && (
-          <Button asChild variant="outline">
-            <Link to="/roots" search={{ kind: setup.kind }}>
-              {t("setupReturnLibrary")}
+            <Link {...setupReturnLocation(setup)}>
+              {t(
+                setup.from === "scraper"
+                  ? "scraperReturn"
+                  : setup.return?.to === "roots"
+                    ? "setupReturnRoots"
+                    : setup.return?.to === "media"
+                      ? "setupReturnMedia"
+                      : "setupReturnLibrary",
+              )}
             </Link>
           </Button>
         )}
@@ -120,7 +115,12 @@ export function SettingsPage({
             ))}
           </TabsList>
         </div>
-        <TabsContent value={tab}>
+        <TabsContent
+          value={tab}
+          className={
+            tab === "general" || tab === "auth" ? "max-w-[720px]" : undefined
+          }
+        >
           <Suspense fallback={<Loading />}>
             {tab === "auth" ? (
               <ProviderAuthSettings
@@ -134,7 +134,7 @@ export function SettingsPage({
             ) : tab === "diagnostics" ? (
               <MaintenancePage embedded />
             ) : (
-              <div className="grid items-start gap-6 xl:grid-cols-2">
+              <div>
                 <div className="space-y-6">
                   <Card asChild>
                     <section>

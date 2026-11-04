@@ -15,6 +15,7 @@ import { Loading } from "./features/library/shared";
 import {
   SETUP_KINDS,
   type SetupKind,
+  setupReturnLocation,
   validateProviderSetupSearch,
 } from "./features/settings/setup-search";
 import "./features/scraper/navigation";
@@ -171,12 +172,6 @@ const rootsRoute = createRoute({
     const search = rootsRoute.useSearch();
     return (
       <RootsPage
-        onConfigureSource={(value) =>
-          void navigate({
-            to: "/settings",
-            search: validateProviderSetupSearch({ from: "library", ...value }),
-          })
-        }
         initialKind={search.kind}
         initialAdd={search.add}
         adult={search.kind === "adult_video"}
@@ -305,19 +300,9 @@ const settingsRoute = createRoute({
         onTabChange={(tab) =>
           void navigate({ search: { ...search, tab }, replace: true })
         }
-        onSetupComplete={(root, _task, kind) => {
-          if (root) void navigate({ to: "/library", search: { root, kind } });
-          else if (search.from === "scraper")
-            void navigate({
-              to: "/scraper",
-              search: {
-                media: search.media,
-                queue: search.queue,
-                session: search.session,
-              },
-            });
-          else void navigate({ to: "/library", search: { kind } });
-        }}
+        onSetupComplete={(root, _task, kind) =>
+          void navigate(setupReturnLocation({ ...search, root, kind }))
+        }
         returnToScraper={search.from === "scraper"}
         returnMediaId={search.media}
         returnQueue={search.queue}
@@ -326,6 +311,9 @@ const settingsRoute = createRoute({
   },
 });
 const router = createRouter({
+  scrollRestoration: true,
+  getScrollRestorationKey: (location) => location.href,
+  scrollToTopSelectors: ["#app-main-scroll"],
   defaultPendingComponent: Loading,
   defaultPendingMs: 0,
   defaultPendingMinMs: 0,

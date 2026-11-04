@@ -259,9 +259,12 @@ it("keeps local adult searches and images separate from ordinary APIs", async ()
   expect(adultApi.recent).not.toHaveBeenCalled();
   expect(libraryApi.media).not.toHaveBeenCalled();
   expect(libraryApi.tasks).not.toHaveBeenCalled();
+  const calls = vi.mocked(adultApi.media).mock.calls.length;
   fireEvent.change(screen.getByRole("searchbox", { name: "Search titles" }), {
     target: { value: "SYNTHETIC" },
   });
+  expect(adultApi.media).toHaveBeenCalledTimes(calls);
+  fireEvent.submit(screen.getByRole("search"));
   await waitFor(() =>
     expect(adultApi.media).toHaveBeenLastCalledWith(
       expect.objectContaining({

@@ -94,15 +94,27 @@
   flex: 1 1 200px;
   max-width: 360px;
 }
-.library-control-row > .library-search > span {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
+.library-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
 }
-.library-control-row > .library-search input {
+.library-search [data-slot="input"] {
+  padding-inline: 43px 44px;
+}
+.library-control-row > .library-search [data-slot="input"] {
   height: 36px;
+}
+.library-control-row > .library-search > [data-slot="button"] {
+  width: 32px;
+  height: 32px;
+}
+.library-search > [data-slot="button"] {
+  position: absolute;
+  right: 2px;
+  border-radius: 50%;
 }
 .library-filter-count {
   display: inline-flex;

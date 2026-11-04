@@ -71,7 +71,11 @@ it("shows missing source setup instead of scrape success after local indexing", 
   expect(setup).toHaveAttribute("href", "/settings");
   expect(setup).toHaveAttribute(
     "data-search",
-    JSON.stringify({ from: "library", root: "folder" }),
+    JSON.stringify({
+      from: "library",
+      root: "folder",
+      return: { to: "library", search: { root: "folder" } },
+    }),
   );
   const unconfigured = screen.getByText("等待来源配置").parentElement;
   expect(unconfigured).not.toBeNull();
@@ -94,7 +98,15 @@ it("preserves the explicit adult type when opening source configuration", () => 
   render(<AutomaticScanResult task={task} adult />);
   expect(screen.getByRole("link", { name: "配置来源并继续" })).toHaveAttribute(
     "data-search",
-    JSON.stringify({ from: "library", root: "folder", kind: "adult_video" }),
+    JSON.stringify({
+      from: "library",
+      root: "folder",
+      kind: "adult_video",
+      return: {
+        to: "library",
+        search: { root: "folder", kind: "adult_video" },
+      },
+    }),
   );
 });
 

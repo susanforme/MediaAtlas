@@ -75,7 +75,7 @@ export function useLibraryBrowse(
     allowed,
     reset: () => {
       setHistory([undefined]);
-      onSearch({ view: search.view });
+      onSearch({ root: search.root, kind: search.kind, view: search.view });
     },
     activity,
     adultAvailable: settings.entry_visible,

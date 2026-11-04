@@ -1,3 +1,4 @@
+import { type LibrarySearch, validateLibrarySearch } from "../library/browse-model";
 import {
   type ScraperSearch,
   validateScraperReturnSearch,
@@ -30,12 +31,17 @@ export const SETTINGS_TABS = [
   "diagnostics",
 ] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
+export type SetupReturn =
+  | { to: "library"; search: LibrarySearch }
+  | { to: "roots" }
+  | { to: "media"; media: string };
 export interface ProviderSetupSearch extends ScraperSearch {
   from?: "scraper" | "library";
   root?: string;
   kind?: SetupKind;
   provider?: SetupProvider;
   tab?: SettingsTab;
+  return?: SetupReturn;
 }
 function id(value: unknown): value is string {
   return (
@@ -69,10 +75,61 @@ export function validateProviderSetupSearch(
   const tab = SETTINGS_TABS.includes(value.tab as SettingsTab)
     ? (value.tab as SettingsTab)
     : undefined;
+  const destination = value.return;
+  let origin: SetupReturn | undefined;
+  if (
+    value.from === "library" &&
+    destination &&
+    typeof destination === "object" &&
+    !Array.isArray(destination)
+  ) {
+    const candidate = destination as Record<string, unknown>;
+    if (candidate.to === "roots") origin = { to: "roots" };
+    if (candidate.to === "media" && id(candidate.media))
+      origin = { to: "media", media: candidate.media };
+    if (
+      candidate.to === "library" &&
+      candidate.search &&
+      typeof candidate.search === "object" &&
+      !Array.isArray(candidate.search)
+    ) {
+      const search = validateLibrarySearch(
+        candidate.search as Record<string, unknown>,
+      );
+      if ((search.kind === "adult_video") === (value.kind === "adult_video"))
+        origin = { to: "library", search };
+    }
+  }
   return {
     ...from,
     ...(provider ? { provider } : {}),
     ...(tab ? { tab } : {}),
+    ...(origin ? { return: origin } : {}),
+  };
+}
+
+/** Only fixed app routes can resume a source setup workflow. */
+export function setupReturnLocation(setup: ProviderSetupSearch) {
+  if (setup.from === "scraper")
+    return {
+      to: "/scraper" as const,
+      search: { media: setup.media, queue: setup.queue, session: setup.session },
+    };
+  if (setup.return?.to === "roots")
+    return { to: "/roots" as const, search: { kind: setup.kind } };
+  if (setup.return?.to === "media")
+    return {
+      to: "/media/$mediaId" as const,
+      params: { mediaId: setup.return.media },
+      search:
+        setup.kind === "adult_video" ? { kind: "adult_video" as const } : {},
+    };
+  return {
+    to: "/library" as const,
+    search:
+      setup.return?.to === "library"
+        ? setup.return.search
+        : { root: setup.root, kind: setup.kind },
   };
 }
 export function suggestedProvider(kind?: string | null): SetupProvider {

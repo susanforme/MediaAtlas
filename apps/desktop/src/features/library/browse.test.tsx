@@ -41,6 +41,7 @@ vi.mock("@tanstack/react-router", () => ({
     return (
       <a
         {...props}
+        data-search={JSON.stringify(search)}
         href={`${to.replace("$mediaId", params?.mediaId ?? "")}${query ? `?${query}` : ""}`}
         onClick={(event) => {
           event.preventDefault();
@@ -180,6 +181,66 @@ it("defaults to a keyboard-focusable full poster details link without launching 
   expect(nativeOpenApi.open).not.toHaveBeenCalled();
   expect(libraryApi.detail).not.toHaveBeenCalled();
 });
+it("submits library search explicitly without losing scope and clears drafts with filters", async () => {
+  const initial: LibrarySearch = {
+    root: root.id,
+    kind: "movie",
+    q: "Initial query",
+    health: "missing_poster",
+    sort: "year_desc",
+    cursor: "old-page",
+    page: 4,
+    view: "wall",
+  };
+  const { onSearch } = show(initial);
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const input = screen.getByRole("searchbox", { name: "Search titles" });
+  const calls = vi.mocked(libraryApi.media).mock.calls.length;
+  input.focus();
+  fireEvent.change(input, { target: { value: "  Changed query  " } });
+  expect(onSearch).not.toHaveBeenCalled();
+  expect(libraryApi.media).toHaveBeenCalledTimes(calls);
+  fireEvent.submit(screen.getByRole("search"));
+  expect(onSearch).toHaveBeenLastCalledWith(
+    { ...initial, q: "Changed query", cursor: undefined, page: 1 },
+    undefined,
+  );
+  await waitFor(() =>
+    expect(libraryApi.media).toHaveBeenLastCalledWith(expect.objectContaining({
+      query: "Changed query", root_id: root.id, kind: "movie",
+      health: "missing_poster", sort: "year_desc", cursor: null,
+    })),
+  );
+  expect(input).toHaveFocus();
+  expect(input).toHaveValue("Changed query");
+  fireEvent.change(input, { target: { value: "Unsubmitted draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  expect(onSearch).toHaveBeenLastCalledWith(
+    { root: root.id, kind: "movie", view: "wall" },
+    undefined,
+  );
+  expect(input).toHaveValue("");
+  expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
+});
+it("discards an unsubmitted search draft when the media scope changes", async () => {
+  const { onSearch } = show({ q: "Applied query", kind: "movie" });
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const input = screen.getByRole("searchbox");
+  fireEvent.change(input, { target: { value: "Unsubmitted draft" } });
+  chooseSelectOption(screen.getByRole("combobox", { name: "Media type" }), "anime");
+  expect(onSearch).toHaveBeenLastCalledWith(expect.objectContaining({
+    kind: "anime", q: "Applied query", cursor: undefined, page: 1,
+  }), undefined);
+  expect(input).toHaveValue("Applied query");
+});
+it("clears an unsubmitted draft even when the applied query was empty", async () => {
+  show({ health: "missing_poster", root: root.id, kind: "movie" });
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const input = screen.getByRole("searchbox");
+  fireEvent.change(input, { target: { value: "Unsubmitted draft" } });
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  expect(input).toHaveValue("");
+});
 it("keeps detailed filters collapsed while preserving server filtering and resetting an obsolete cursor", async () => {
   const { onSearch } = show({ page: 4, cursor: "synthetic-old-cursor" });
   await screen.findByRole("link", { name: "Details: Synthetic film" });
@@ -233,7 +294,7 @@ it("keeps detailed filters collapsed while preserving server filtering and reset
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
   await waitFor(() =>
     expect(libraryApi.media).toHaveBeenLastCalledWith(
-      expect.objectContaining({ root_id: null, genre: null, cursor: null }),
+      expect.objectContaining({ root_id: root.id, genre: null, cursor: null }),
     ),
   );
 });
@@ -284,9 +345,12 @@ it("offers source recovery for persisted unconfigured cards even without task hi
     next_cursor: null,
   });
   show();
-  expect(
-    await screen.findByRole("link", { name: "Configure source and continue" }),
-  ).toHaveAttribute("href", "/settings?from=library&root=synthetic-folder");
+  const configure = await screen.findByRole("link", { name: "Configure source and continue" });
+  expect(JSON.parse(configure.getAttribute("data-search") ?? "{}")).toEqual({
+    from: "library",
+    root: root.id,
+    return: { to: "library", search: {} },
+  });
   expect(libraryApi.detail).not.toHaveBeenCalled();
 });
 
@@ -300,9 +364,11 @@ it("does not promise a folder retry when multiple folders leave the source scope
     next_cursor: null,
   });
   show();
-  expect(
-    await screen.findByRole("link", { name: "Configure source" }),
-  ).toHaveAttribute("href", "/settings?from=library");
+  const configure = await screen.findByRole("link", { name: "Configure source" });
+  expect(JSON.parse(configure.getAttribute("data-search") ?? "{}")).toEqual({
+    from: "library",
+    return: { to: "library", search: {} },
+  });
   expect(
     screen.queryByRole("link", { name: "Configure source and continue" }),
   ).not.toBeInTheDocument();
@@ -317,16 +383,19 @@ it("retains the actual folder and type filter for source recovery", async () => 
     items: [{ ...card, health: ["metadata_unconfigured"] }],
     next_cursor: null,
   });
-  show({ root: "another-folder", kind: "movie" });
-  expect(
-    await screen.findByRole("link", { name: "Configure source and continue" }),
-  ).toHaveAttribute(
-    "href",
-    "/settings?from=library&root=another-folder&kind=movie",
-  );
+  const initial: LibrarySearch = {
+    root: "another-folder", kind: "movie", q: "Scoped search", health: "metadata_unconfigured",
+    sort: "year_desc", cursor: "previous-page", page: 3, view: "list",
+  };
+  show(initial);
+  const configure = await screen.findByRole("link", { name: "Configure source and continue" });
+  expect(JSON.parse(configure.getAttribute("data-search") ?? "{}")).toEqual({
+    from: "library", root: "another-folder", kind: "movie",
+    return: { to: "library", search: initial },
+  });
 });
 
-it("uses server health shortcuts while retaining search scope and clearing only health for All", async () => {
+it("uses one disclosed health selector while retaining scope and resetting pagination", async () => {
   const initial: LibrarySearch = {
     root: root.id,
     kind: "movie",
@@ -354,25 +423,21 @@ it("uses server health shortcuts while retaining search scope and clearing only 
   }));
   const { onSearch } = show(initial);
   await screen.findByRole("link", { name: "Details: Synthetic film" });
-  const shortcuts = screen.getByRole("group", {
-    name: "Filter by review status",
-  });
-  expect(
-    within(shortcuts).getByRole("button", { name: "All" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  const presets = [
-    ["Missing details", "incomplete_metadata"],
-    ["Needs review", "metadata_needs_review"],
-    ["Source not configured", "metadata_unconfigured"],
-    ["Metadata failed", "metadata_failed"],
-    ["Missing poster", "missing_poster"],
+  expect(screen.queryByRole("combobox", { name: "Health" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("group", { name: "Filter by review status" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  const control = screen.getByRole("combobox", { name: "Health" });
+  expect(control).toHaveValue("");
+  const healthStates = [
+    "incomplete_metadata",
+    "metadata_needs_review",
+    "metadata_unconfigured",
+    "metadata_failed",
+    "missing_poster",
   ] as const;
-  for (const [label, health] of presets) {
-    const button = within(shortcuts).getByRole("button", {
-      name: label,
-    });
-    button.focus();
-    fireEvent.click(button);
+  for (const health of healthStates) {
+    control.focus();
+    chooseSelectOption(control, health);
     expect(onSearch).toHaveBeenLastCalledWith(
       { ...initial, health, cursor: undefined, page: 1 },
       undefined,
@@ -391,8 +456,8 @@ it("uses server health shortcuts while retaining search scope and clearing only 
         }),
       ),
     );
-    expect(button).toHaveAttribute("aria-pressed", "true");
-    expect(button).toHaveFocus();
+    expect(control).toHaveValue(health);
+    expect(control).toHaveFocus();
     if (health === "metadata_failed") {
       expect(
         await screen.findByRole("link", {
@@ -404,10 +469,10 @@ it("uses server health shortcuts while retaining search scope and clearing only 
       ).not.toBeInTheDocument();
     }
     const calls = onSearch.mock.calls.length;
-    fireEvent.click(button);
+    chooseSelectOption(control, health);
     expect(onSearch).toHaveBeenCalledTimes(calls);
   }
-  fireEvent.click(within(shortcuts).getByRole("button", { name: "All" }));
+  chooseSelectOption(control, "");
   expect(onSearch).toHaveBeenLastCalledWith(
     { ...initial, health: undefined, cursor: undefined, page: 1 },
     undefined,
@@ -428,29 +493,18 @@ it("uses server health shortcuts while retaining search scope and clearing only 
   expect(adultApi.media).not.toHaveBeenCalled();
 });
 
-it("keeps the advanced health selector and shortcuts on one effective query", async () => {
+it("keeps active maintenance filters visible in the collapsed filter count", async () => {
   show({ health: "missing_nfo" });
   await screen.findByRole("link", { name: "Details: Synthetic film" });
-  const shortcuts = screen.getByRole("group", {
-    name: "Filter by review status",
-  });
-  expect(
-    within(shortcuts).getByRole("button", { name: "All" }),
-  ).toHaveAttribute("aria-pressed", "false");
-  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  const toggle = screen.getByRole("button", { name: /^Filters/ });
+  expect(within(toggle).getByText("1")).toBeInTheDocument();
+  expect(toggle).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(toggle);
   const health = screen.getByRole("combobox", { name: "Health" });
   expect(health).toHaveValue("missing_nfo");
   chooseSelectOption(health, "missing_poster");
-  expect(
-    within(shortcuts).getByRole("button", {
-      name: "Missing poster",
-    }),
-  ).toHaveAttribute("aria-pressed", "true");
-  fireEvent.click(
-    within(shortcuts).getByRole("button", {
-      name: "Needs review",
-    }),
-  );
+  expect(health).toHaveValue("missing_poster");
+  chooseSelectOption(health, "metadata_needs_review");
   expect(health).toHaveValue("metadata_needs_review");
   await waitFor(() =>
     expect(libraryApi.media).toHaveBeenLastCalledWith(
@@ -460,29 +514,25 @@ it("keeps the advanced health selector and shortcuts on one effective query", as
       }),
     ),
   );
+  fireEvent.click(toggle);
+  expect(within(toggle).getByText("1")).toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Health" })).not.toBeInTheDocument();
 });
 
-it("exposes only supported adult shortcuts and clears private health when returning to ordinary media", async () => {
+it("exposes only supported adult health options and clears private health when returning to ordinary media", async () => {
   privacy.settings.entry_visible = true;
   privacy.includeAdult = true;
   show({ kind: "adult_video", root: root.id, cursor: "private-page", page: 3 });
   await screen.findByRole("link", { name: "Details: Synthetic film" });
-  const shortcuts = screen.getByRole("group", {
-    name: "Filter by review status",
-  });
-  expect(
-    within(shortcuts)
-      .getAllByRole("button")
-      .map((button) => button.textContent),
-  ).toEqual(["All", "Missing details", "Missing poster"]);
+  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  const control = screen.getByRole("combobox", { name: "Health" });
+  const options = selectOptions(control);
+  for (const option of options)
+    expect((option as HTMLButtonElement).value.startsWith("metadata_")).toBe(false);
   expect(libraryApi.media).not.toHaveBeenCalled();
   expect(libraryApi.roots).not.toHaveBeenCalled();
   expect(libraryApi.facets).not.toHaveBeenCalled();
-  fireEvent.click(
-    within(shortcuts).getByRole("button", {
-      name: "Missing poster",
-    }),
-  );
+  chooseSelectOption(control, "missing_poster");
   await waitFor(() =>
     expect(adultApi.media).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -494,9 +544,6 @@ it("exposes only supported adult shortcuts and clears private health when return
       }),
     ),
   );
-  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
-  const options = selectOptions(screen.getByRole("combobox", { name: "Health" }));
-  expect(options.map((option) => option.textContent)).not.toContain("Source not configured");
   for (const [query] of vi.mocked(adultApi.media).mock.calls)
     expect(query.health?.startsWith("metadata_")).not.toBe(true);
   chooseSelectOption(screen.getByRole("combobox", { name: "Media type" }), "movie");
@@ -538,21 +585,14 @@ it.each([
         health: null,
       }),
     );
-    const shortcuts = screen.getByRole("group", {
-      name: "Filter by review status",
-    });
-    const all = within(shortcuts).getByRole("button", { name: "All" });
-    expect(all).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
     expect(screen.getByRole("combobox", { name: "Health" })).toHaveValue("");
-    fireEvent.click(all);
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(onSearch).toHaveBeenLastCalledWith(
       {
         kind: "adult_video",
         root: root.id,
-        health: undefined,
-        cursor: undefined,
-        page: 1,
+        view: undefined,
       },
       undefined,
     );

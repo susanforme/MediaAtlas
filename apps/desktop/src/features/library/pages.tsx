@@ -11,7 +11,7 @@ import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { RootCard } from "./root-card";
-import { automaticRootSources, type RootProviderId } from "./root-source-model";
+import { automaticRootSources } from "./root-source-model";
 import { RootSourceReadiness } from "./root-source-readiness";
 import type { ScannerSearch } from "./scanner-navigation";
 import { useRootActivity } from "./use-root-activity";
@@ -28,16 +28,10 @@ export function RootsPage({
   onNavigateScan,
   initialAdd = false,
   initialKind,
-  onConfigureSource,
 }: {
   adult?: boolean;
   initialAdd?: boolean;
   initialKind?: MediaKind;
-  onConfigureSource?: (search: {
-    root: string;
-    kind?: MediaKind;
-    provider: RootProviderId;
-  }) => void;
   onScan?: (rootId: string, taskId?: string) => void;
   onNavigateScan?: (search: ScannerSearch) => void;
   onTypeChange?: (adult: boolean) => void;
@@ -61,7 +55,6 @@ export function RootsPage({
     deletion,
     edit,
     add,
-    persist,
     submit,
     closeEditor,
     changeName,
@@ -93,16 +86,6 @@ export function RootsPage({
   );
   const working = operation !== null;
   const activity = useRootActivity(roots.data, adultAvailable);
-  function configureSource(provider: RootProviderId) {
-    if (!onConfigureSource) return;
-    void persist(false, (root) =>
-      onConfigureSource({
-        root: root.id,
-        ...(root.kind ? { kind: root.kind } : {}),
-        provider,
-      }),
-    );
-  }
   return (
     <>
       <PageHeading title={t("roots")}>
@@ -188,7 +171,6 @@ export function RootsPage({
               disabled={working || picking}
               value={form.metadata_providers ?? null}
               onValueChange={(metadata_providers) => setForm({ ...form, metadata_providers })}
-              onConfigure={onConfigureSource ? configureSource : undefined}
             />
             <Button
               variant="ghost"

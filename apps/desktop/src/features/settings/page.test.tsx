@@ -58,6 +58,28 @@ it("returns to the originating media without accepting an arbitrary destination"
     screen.getByRole("link", { name: "Return to scraper" }),
   ).toHaveAttribute("href", "/scraper?media=media-1");
 });
+
+it("returns to the originating library query instead of sending browsing users to folders", () => {
+  const search = {
+    root: "folder-1",
+    q: "Solaris",
+    page: 3,
+    cursor: "page-3",
+    view: "list" as const,
+  };
+  render(
+    <SettingsPage
+      setup={{ from: "library", return: { to: "library", search } }}
+    />,
+  );
+  const link = screen.getByRole("link", { name: "Return to library" });
+  const url = new URL(link.getAttribute("href") ?? "", "https://example.test");
+  expect(url.pathname).toBe("/library");
+  expect(url.searchParams.get("root")).toBe("folder-1");
+  expect(url.searchParams.get("q")).toBe("Solaris");
+  expect(url.searchParams.get("cursor")).toBe("page-3");
+  expect(url.searchParams.get("view")).toBe("list");
+});
 it("provides a fixed anonymous scraper return and hides it outside the workflow", () => {
   const view = render(<SettingsPage returnToScraper />);
   expect(

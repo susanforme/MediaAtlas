@@ -212,10 +212,7 @@ export function useRootEditor(
       JSON.stringify(normalizeRootInput(form, excludes)) ===
         JSON.stringify(rootInputFromView(savedRoot)),
   );
-  async function persist(
-    scanAfter: boolean,
-    onSaved?: (root: RootView) => void,
-  ) {
+  async function persist(scanAfter: boolean) {
     if (operationLock.current || pickerLock.current || !permitted.current)
       return;
     const input = normalizedForm();
@@ -249,7 +246,6 @@ export function useRootEditor(
         setCompleted({ root });
         toast.success(t("rootSaved"));
         setForm(null);
-        onSaved?.(root);
       }
     } catch {
       // Mutations expose only the repository's typed, redacted errors.
@@ -285,7 +281,6 @@ export function useRootEditor(
     edit,
     add,
     submit,
-    persist,
     closeEditor,
     changeName,
     changePath,

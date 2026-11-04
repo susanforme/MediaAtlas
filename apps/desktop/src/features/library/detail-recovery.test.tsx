@@ -36,10 +36,20 @@ vi.mock("@tanstack/react-router", () => ({
     children,
   }: {
     to: string;
-    search?: Record<string, string>;
+    search?: Record<string, unknown>;
     children: ReactNode;
   }) => (
-    <a href={`${to}?${new URLSearchParams(search).toString()}`}>{children}</a>
+    <a
+      data-search={JSON.stringify(search)}
+      href={`${to}?${new URLSearchParams(
+        Object.entries(search ?? {}).map(([key, value]) => [
+          key,
+          typeof value === "string" ? value : JSON.stringify(value),
+        ]),
+      ).toString()}`}
+    >
+      {children}
+    </a>
   ),
 }));
 
@@ -101,7 +111,7 @@ function setupSearch(label: string) {
     "https://mediaatlas.test",
   );
   expect(url.pathname).toBe("/settings");
-  return Object.fromEntries(url.searchParams);
+  return JSON.parse(link.getAttribute("data-search") ?? "{}");
 }
 
 beforeEach(async () => {
@@ -122,6 +132,7 @@ it("offers source setup for the unique file root instead of an unusable identifi
     kind: "movie",
     provider: "tmdb",
     tab: "auth",
+    return: { to: "media", media: "local-item" },
   });
   expect(
     screen.queryByRole("link", { name: /Identify media|Correct match/ }),
@@ -207,7 +218,13 @@ it("validates file root IDs before allowing a resume promise", () => {
     detailRecovery(fixture(["metadata_unconfigured"], ["/unsafe/root"])),
   ).toEqual({
     action: "configure",
-    search: { from: "library", kind: "movie", provider: "tmdb", tab: "auth" },
+    search: {
+      from: "library",
+      kind: "movie",
+      provider: "tmdb",
+      tab: "auth",
+      return: { to: "media", media: "local-item" },
+    },
   });
 });
 

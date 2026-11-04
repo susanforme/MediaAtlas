@@ -10,7 +10,7 @@ import {
   Sun,
   Wrench,
 } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { NfoOpenListener } from "../../features/nfo/page";
 import { setTheme, useTheme } from "../../lib/theme";
@@ -95,10 +95,15 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
   const theme = useTheme();
   const pathname = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  function submit(event: FormEvent) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void navigate({ to: "/library", search: { q: query.trim() || undefined } });
+    const query = new FormData(event.currentTarget).get("q");
+    void navigate({
+      to: "/library",
+      search: {
+        q: typeof query === "string" ? query.trim() || undefined : undefined,
+      },
+    });
   }
   return (
     <header
@@ -113,16 +118,19 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
         />
       ) : (
         <form
+          key={pathname}
+          role="search"
+          aria-label={t("search")}
           className="app-toolbar-search"
           onSubmit={submit}
           data-tauri-drag-region="false"
         >
           <Search className="app-search-icon" size={19} aria-hidden="true" />
           <Input
+            type="search"
+            name="q"
             aria-label={t("search")}
             placeholder={t("shellSearchPlaceholder")}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
           />
           <Button
             type="submit"
@@ -155,14 +163,8 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
 
 export function AppShell() {
   const { i18n } = useTranslation();
-  const pathname = useLocation({ select: (location) => location.pathname });
-  const main = useRef<HTMLDivElement>(null);
   const chrome = useWindowChrome();
   useTaskEvents();
-  useEffect(() => {
-    // Route changes start at the content top; in-page field edits keep position.
-    if (pathname && main.current) main.current.scrollTop = 0;
-  }, [pathname]);
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";
   }, [i18n.resolvedLanguage]);
@@ -173,7 +175,7 @@ export function AppShell() {
     >
       <Sidebar chrome={chrome} />
       <NfoOpenListener />
-      <div className="app-main" ref={main}>
+      <div className="app-main" id="app-main-scroll">
         <Toolbar chrome={chrome} />
         <main className="app-content">
           <Outlet />

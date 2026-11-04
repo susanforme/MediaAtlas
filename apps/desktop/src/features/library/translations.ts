@@ -9,7 +9,7 @@ const values = {
     rootSourceMoveDown: "降低 {{source}} 优先级",
     rootSourcesLocalFirst: "可先添加本地媒体",
     rootSourcesMissingHelp:
-      "可先收录本地文件，待配置来源后再补全资料。配置前会保存当前目录。",
+      "来源未配置时仍可添加本地媒体，添加后可配置来源并继续更新。",
     rootSourcesCatalogHelp:
       "自动匹配使用编号对应的来源；未识别或来源不匹配时保留待处理状态。",
     rootLocalTagsOnly:
@@ -20,11 +20,14 @@ const values = {
     rootSource_credentials: "缺少可用凭据",
     rootSource_unavailable: "尚不可用",
     rootSource_error: "检查失败",
-    rootConfigureSource: "保存并配置 {{source}}",
     rootNeedsAttention: "需处理",
     rootUpToDate: "扫描完成",
     rootUpdating: "更新中…",
     rootReviewUpdate: "查看结果",
+    rootLocalIndexed: "本地已收录",
+    rootMetadataNotFetched: "资料未获取",
+    rootMetadataFailed: "资料获取失败",
+    rootMetadataReview: "资料待核对",
 
     autoRootAdd: "添加到媒体库",
     autoRootSave: "保存并更新媒体库",
@@ -87,7 +90,7 @@ const values = {
     rootSourceMoveDown: "Move {{source}} down",
     rootSourcesLocalFirst: "Local media can be added now",
     rootSourcesMissingHelp:
-      "You can add local files now and fetch metadata after source setup. Your directory will be saved before opening settings.",
+      "Local media can be added without a configured source. Configure a source after adding to continue updating.",
     rootSourcesCatalogHelp:
       "Automatic matching uses the source for each catalog number. Unrecognized or unsupported numbers remain available for review.",
     rootLocalTagsOnly:
@@ -98,11 +101,14 @@ const values = {
     rootSource_credentials: "Credentials needed",
     rootSource_unavailable: "Unavailable",
     rootSource_error: "Check failed",
-    rootConfigureSource: "Save and configure {{source}}",
     rootNeedsAttention: "Needs attention",
     rootUpToDate: "Scan complete",
     rootUpdating: "Updating…",
     rootReviewUpdate: "View results",
+    rootLocalIndexed: "Local media indexed",
+    rootMetadataNotFetched: "Metadata not fetched",
+    rootMetadataFailed: "Metadata request failed",
+    rootMetadataReview: "Metadata needs review",
 
     autoRootAdd: "Add to library",
     autoRootSave: "Save and update library",

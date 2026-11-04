@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Alert } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { ErrorNotice } from "../library/shared";
 import type { ProviderSetupSearch } from "./setup-search";
@@ -11,12 +12,14 @@ export function SourceSetupActions({
   setup,
   credentialReady,
   saveCredential,
+  formId,
   disabled = false,
 }: {
   workflow: ReturnType<typeof useProviderSetup>;
   setup: ProviderSetupSearch;
   credentialReady: boolean;
   saveCredential?: () => Promise<boolean>;
+  formId?: string;
   disabled?: boolean;
 }) {
   const { t } = useTranslation();
@@ -65,25 +68,34 @@ export function SourceSetupActions({
           </Button>
         </div>
       ) : (
-        <>
-          <p className="text-sm text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant="secondary">
             {t(
               workflow.provider?.config.enabled
                 ? "setupProviderEnabled"
                 : "setupProviderDisabled",
             )}
-          </p>
-          <Button
-            disabled={
-              disabled ||
-              workflow.phase !== null ||
-              (!credentialReady && !saveCredential)
-            }
-            onClick={() => void workflow.run(credentialReady, saveCredential)}
-          >
-            {t(action)}
-          </Button>
-        </>
+          </Badge>
+          {(setup.from || !workflow.provider?.config.enabled) && (
+            <Button
+              type={formId ? "submit" : "button"}
+              form={formId}
+              variant={setup.from ? "default" : "outline"}
+              disabled={
+                disabled ||
+                workflow.phase !== null ||
+                (!credentialReady && !saveCredential)
+              }
+              onClick={
+                formId
+                  ? undefined
+                  : () => void workflow.run(credentialReady, saveCredential)
+              }
+            >
+              {t(action)}
+            </Button>
+          )}
+        </div>
       )}
       {workflow.failurePhase && (
         <Alert asChild variant="destructive">

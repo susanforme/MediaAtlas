@@ -31,7 +31,12 @@ export function LibrarySourceRecovery({
         <Button asChild size="sm">
           <Link
             to="/settings"
-            search={validateProviderSetupSearch({ from: "library", root, kind })}
+            search={validateProviderSetupSearch({
+              from: "library",
+              root,
+              kind,
+              return: { to: "library", search },
+            })}
           >
             {t(
               root

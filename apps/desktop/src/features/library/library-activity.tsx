@@ -2,14 +2,18 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
+import { validateProviderSetupSearch } from "../settings/setup-search";
+import type { LibrarySearch } from "./browse-model";
 import { refreshCounts } from "./library-activity-model";
 import type { useLibraryActivity } from "./use-library-activity";
 import "./library-status-translations";
 
 export function LibraryActivity({
   activity,
+  search,
 }: {
   activity: ReturnType<typeof useLibraryActivity>;
+  search?: LibrarySearch;
 }) {
   const { t } = useTranslation();
   const task = activity.active[0] ?? activity.attention[0];
@@ -93,10 +97,11 @@ export function LibraryActivity({
             <Button asChild size="sm">
               <Link
                 to="/settings"
-                search={{
+                search={validateProviderSetupSearch({
                   from: "library",
                   ...(visibleTasks.length === 1 ? { root: task.root_id } : {}),
-                }}
+                  ...(search ? { return: { to: "library", search } } : {}),
+                })}
               >
                 {t(
                   visibleTasks.length === 1
