@@ -1,6 +1,9 @@
 import { useTranslation } from "react-i18next";
 import { DesktopError } from "../../api/desktop";
+import { Alert } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Empty as EmptyState } from "../../components/ui/empty";
 
 export { ALL_KINDS, HEALTH, ROOT_KINDS } from "./library-model";
 export function ErrorNotice({
@@ -20,25 +23,27 @@ export function ErrorNotice({
         ? `error_${error.envelope.code}`
         : "operationFailed";
   return (
-    <div role="alert" className="notice error-notice">
-      <p className="font-medium">
-        {desktop
-          ? t("desktopRequired")
-          : t(key, {
-              defaultValue:
-                error instanceof DesktopError && error.envelope
-                  ? t(`providerFailure_${error.envelope.code}`, {
-                      defaultValue: t("operationFailed"),
-                    })
-                  : t("operationFailed"),
-            })}
-      </p>
-      {retry && !desktop && (
-        <Button className="mt-3" variant="outline" size="sm" onClick={retry}>
-          {t("retry")}
-        </Button>
-      )}
-    </div>
+    <Alert asChild variant="destructive">
+      <div role="alert">
+        <p className="font-medium">
+          {desktop
+            ? t("desktopRequired")
+            : t(key, {
+                defaultValue:
+                  error instanceof DesktopError && error.envelope
+                    ? t(`providerFailure_${error.envelope.code}`, {
+                        defaultValue: t("operationFailed"),
+                      })
+                    : t("operationFailed"),
+              })}
+        </p>
+        {retry && !desktop && (
+          <Button className="mt-3" variant="outline" size="sm" onClick={retry}>
+            {t("retry")}
+          </Button>
+        )}
+      </div>
+    </Alert>
   );
 }
 export function Loading() {
@@ -51,12 +56,12 @@ export function Loading() {
 }
 export function Empty({ title, body }: { title: string; body?: string }) {
   return (
-    <div className="empty-state">
+    <EmptyState>
       <h2 className="text-lg font-semibold">{title}</h2>
       {body && (
         <p className="mt-2 max-w-xl text-sm text-muted-foreground">{body}</p>
       )}
-    </div>
+    </EmptyState>
   );
 }
 export function PageHeading({
@@ -125,9 +130,9 @@ export function HealthBadges({ health }: { health: string[] }) {
   return (
     <div className="flex flex-wrap gap-1">
       {health.map((key) => (
-        <span key={key} className="badge">
+        <Badge variant="secondary" key={key}>
           {t(`health_${key}`, { defaultValue: t("incompleteMetadata") })}
-        </span>
+        </Badge>
       ))}
     </div>
   );

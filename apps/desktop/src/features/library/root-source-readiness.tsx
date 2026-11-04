@@ -6,6 +6,7 @@ import type { MediaKind } from "../../api/library";
 import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import {
   automaticRootSources,
   type RootProviderId,
@@ -93,85 +94,87 @@ export function RootSourceReadiness({
     : rows.every((row) => row.state === "configured");
   const checking = rows.some((row) => row.state === "checking");
   return (
-    <section className="root-source-check" aria-label={t("rootSourceCheck")}>
-      <div className="flex items-start gap-3">
-        {ready ? (
-          <CheckCircle2
-            className="mt-0.5 shrink-0 text-primary"
-            size={18}
-            aria-hidden="true"
-          />
-        ) : (
-          <CircleAlert
-            className="mt-0.5 shrink-0 text-muted-foreground"
-            size={18}
-            aria-hidden="true"
-          />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium" role="status">
-            {t(
-              checking
-                ? "rootSourcesChecking"
-                : ready
-                  ? "rootSourcesConfigured"
-                  : "rootSourcesLocalFirst",
+    <Card asChild className="bg-muted">
+      <section className="root-source-check" aria-label={t("rootSourceCheck")}>
+        <div className="flex items-start gap-3">
+          {ready ? (
+            <CheckCircle2
+              className="mt-0.5 shrink-0 text-primary"
+              size={18}
+              aria-hidden="true"
+            />
+          ) : (
+            <CircleAlert
+              className="mt-0.5 shrink-0 text-muted-foreground"
+              size={18}
+              aria-hidden="true"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium" role="status">
+              {t(
+                checking
+                  ? "rootSourcesChecking"
+                  : ready
+                    ? "rootSourcesConfigured"
+                    : "rootSourcesLocalFirst",
+              )}
+            </p>
+            {!ready && !checking && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("rootSourcesMissingHelp")}
+              </p>
             )}
-          </p>
-          {!ready && !checking && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("rootSourcesMissingHelp")}
-            </p>
-          )}
-          {adult && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              {t("rootSourcesCatalogHelp")}
-            </p>
-          )}
-          <ul className="mt-3 space-y-2">
-            {rows.map((row) => (
-              <li
-                className="flex flex-wrap items-center justify-between gap-2 text-sm"
-                key={row.id}
-              >
-                <span>
-                  {row.name}
-                  <span className="ml-2 text-muted-foreground">
-                    {t(`rootSource_${row.state}`)}
+            {adult && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                {t("rootSourcesCatalogHelp")}
+              </p>
+            )}
+            <ul className="mt-3 space-y-2">
+              {rows.map((row) => (
+                <li
+                  className="flex flex-wrap items-center justify-between gap-2 text-sm"
+                  key={row.id}
+                >
+                  <span>
+                    {row.name}
+                    <span className="ml-2 text-muted-foreground">
+                      {t(`rootSource_${row.state}`)}
+                    </span>
                   </span>
-                </span>
-                {row.state === "error" ? (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={disabled}
-                    onClick={() => {
-                      void snapshot.refetch();
-                      for (const item of auth)
-                        if (item.isError) void item.refetch();
-                    }}
-                  >
-                    {t("retry")}
-                  </Button>
-                ) : (
-                  row.state !== "configured" &&
-                  row.state !== "checking" &&
-                  onConfigure && (
+                  {row.state === "error" ? (
                     <Button
                       size="sm"
                       variant="outline"
-                      disabled={disabled || !permitted}
-                      onClick={() => onConfigure(row.id)}
+                      disabled={disabled}
+                      onClick={() => {
+                        void snapshot.refetch();
+                        for (const item of auth)
+                          if (item.isError) void item.refetch();
+                      }}
                     >
-                      {t("rootConfigureSource", { source: row.name })}
+                      {t("retry")}
                     </Button>
-                  )
-                )}
-              </li>
-            ))}
-          </ul>
+                  ) : (
+                    row.state !== "configured" &&
+                    row.state !== "checking" &&
+                    onConfigure && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={disabled || !permitted}
+                        onClick={() => onConfigure(row.id)}
+                      >
+                        {t("rootConfigureSource", { source: row.name })}
+                      </Button>
+                    )
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+    </Card>
   );
 }

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
+import { initializeTheme, THEME_STORAGE_KEY } from "../../lib/theme";
 import { SettingsPage } from "./page";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -34,7 +35,21 @@ vi.mock("../maintenance/page", () => ({
   MaintenancePage: () => <section aria-label="Diagnostics" />,
 }));
 beforeEach(async () => {
+  localStorage.removeItem(THEME_STORAGE_KEY);
+  initializeTheme();
   await i18n.changeLanguage("en-US");
+});
+it("switches appearance immediately and restores the saved theme", () => {
+  const view = render(<SettingsPage />);
+  const theme = screen.getByRole("combobox", { name: "Theme" });
+  expect(theme).toHaveValue("dark");
+  fireEvent.change(theme, { target: { value: "light" } });
+  expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  expect(localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
+  view.unmount();
+  initializeTheme();
+  render(<SettingsPage />);
+  expect(screen.getByRole("combobox", { name: "Theme" })).toHaveValue("light");
 });
 it("returns to the originating media without accepting an arbitrary destination", () => {
   render(<SettingsPage returnToScraper returnMediaId="media-1" />);

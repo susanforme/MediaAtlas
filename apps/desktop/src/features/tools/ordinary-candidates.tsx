@@ -8,11 +8,21 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "../../components/ui/table";
 import { Empty, ErrorNotice, HealthBadges, Loading } from "../library/shared";
 import { ReviewQueueLauncher } from "../scraper/review-queue-launcher";
 import { MAX_SCRAPE_QUEUE } from "../scraper/search";
@@ -58,116 +68,118 @@ export function OrdinaryCandidates({
   }, [someSelected, allSelected]);
   return (
     <section className="min-w-0 space-y-5">
-      <div className="panel space-y-4">
-        <div className="filter-grid">
-          <Label className="filter-field">
-            <span>{t("toolsSearch")}</span>
-            <Input
-              type="search"
-              maxLength={256}
-              value={browser.search.q ?? ""}
-              onChange={(event) =>
-                browser.filter({ q: event.target.value || undefined })
-              }
-            />
-          </Label>
-          <Label className="filter-field">
-            <span>{t("root")}</span>
-            <Select
-              value={browser.search.root ?? ""}
-              onChange={(event) =>
-                browser.filter({ root: event.target.value || undefined })
-              }
-            >
-              <option value="">{t("allRoots")}</option>
-              {browser.roots.data
-                ?.filter((root) =>
-                  browser.adult
-                    ? root.kind === "adult_video"
-                    : root.kind !== "adult_video",
-                )
-                .map((root) => (
-                  <option key={root.id} value={root.id}>
-                    {root.name}
+      <Card asChild>
+        <div className="space-y-4">
+          <div className="filter-grid">
+            <Label className="filter-field">
+              <span>{t("toolsSearch")}</span>
+              <Input
+                type="search"
+                maxLength={256}
+                value={browser.search.q ?? ""}
+                onChange={(event) =>
+                  browser.filter({ q: event.target.value || undefined })
+                }
+              />
+            </Label>
+            <Label className="filter-field">
+              <span>{t("root")}</span>
+              <Select
+                value={browser.search.root ?? ""}
+                onChange={(event) =>
+                  browser.filter({ root: event.target.value || undefined })
+                }
+              >
+                <option value="">{t("allRoots")}</option>
+                {browser.roots.data
+                  ?.filter((root) =>
+                    browser.adult
+                      ? root.kind === "adult_video"
+                      : root.kind !== "adult_video",
+                  )
+                  .map((root) => (
+                    <option key={root.id} value={root.id}>
+                      {root.name}
+                    </option>
+                  ))}
+              </Select>
+            </Label>
+            <Label className="filter-field">
+              <span>{t("type")}</span>
+              <Select
+                value={browser.search.kind ?? ""}
+                onChange={(event) =>
+                  browser.filter({
+                    kind: (event.target.value ||
+                      undefined) as ToolsRouteSearch["kind"],
+                  })
+                }
+              >
+                <option value="">{t("allKinds")}</option>
+                {[
+                  ...TOOLS_KINDS,
+                  ...(browser.adultEnabled || browser.adult
+                    ? ["adult_video"]
+                    : []),
+                ].map((kind) => (
+                  <option
+                    key={kind}
+                    value={kind}
+                    disabled={kind === "adult_video" && !browser.adultEnabled}
+                  >
+                    {t(`kind_${kind}`)}
                   </option>
                 ))}
-            </Select>
-          </Label>
-          <Label className="filter-field">
-            <span>{t("type")}</span>
-            <Select
-              value={browser.search.kind ?? ""}
-              onChange={(event) =>
-                browser.filter({
-                  kind: (event.target.value ||
-                    undefined) as ToolsRouteSearch["kind"],
-                })
-              }
-            >
-              <option value="">{t("allKinds")}</option>
-              {[
-                ...TOOLS_KINDS,
-                ...(browser.adultEnabled || browser.adult
-                  ? ["adult_video"]
-                  : []),
-              ].map((kind) => (
-                <option
-                  key={kind}
-                  value={kind}
-                  disabled={kind === "adult_video" && !browser.adultEnabled}
-                >
-                  {t(`kind_${kind}`)}
-                </option>
-              ))}
-            </Select>
-          </Label>
-          <Label className="filter-field">
-            <span>{t("health")}</span>
-            <Select
-              value={browser.search.health ?? ""}
-              onChange={(event) =>
-                browser.filter({
-                  health: (event.target.value ||
-                    undefined) as ToolsRouteSearch["health"],
-                })
-              }
-            >
-              <option value="">{t("allHealth")}</option>
-              {TOOLS_HEALTH.map((health) => (
-                <option key={health} value={health}>
-                  {t(`health_${health}`)}
-                </option>
-              ))}
-            </Select>
-          </Label>
-          <Label className="filter-field">
-            <span>{t("sort")}</span>
-            <Select
-              value={browser.search.sort ?? "updated_desc"}
-              onChange={(event) =>
-                browser.filter({
-                  sort: event.target.value as ToolsRouteSearch["sort"],
-                })
-              }
-            >
-              {TOOLS_SORTS.map((sort) => (
-                <option key={sort} value={sort}>
-                  {t(`sort_${sort}`)}
-                </option>
-              ))}
-            </Select>
-          </Label>
+              </Select>
+            </Label>
+            <Label className="filter-field">
+              <span>{t("health")}</span>
+              <Select
+                value={browser.search.health ?? ""}
+                onChange={(event) =>
+                  browser.filter({
+                    health: (event.target.value ||
+                      undefined) as ToolsRouteSearch["health"],
+                  })
+                }
+              >
+                <option value="">{t("allHealth")}</option>
+                {TOOLS_HEALTH.map((health) => (
+                  <option key={health} value={health}>
+                    {t(`health_${health}`)}
+                  </option>
+                ))}
+              </Select>
+            </Label>
+            <Label className="filter-field">
+              <span>{t("sort")}</span>
+              <Select
+                value={browser.search.sort ?? "updated_desc"}
+                onChange={(event) =>
+                  browser.filter({
+                    sort: event.target.value as ToolsRouteSearch["sort"],
+                  })
+                }
+              >
+                {TOOLS_SORTS.map((sort) => (
+                  <option key={sort} value={sort}>
+                    {t(`sort_${sort}`)}
+                  </option>
+                ))}
+              </Select>
+            </Label>
+          </div>
+          <Button variant="ghost" size="sm" onClick={browser.clearFilters}>
+            {t("clearFilters")}
+          </Button>
+          {browser.roots.isError && (
+            <ErrorNotice
+              error={browser.roots.error}
+              retry={() => void browser.roots.refetch()}
+            />
+          )}
         </div>
-        <Button variant="ghost" size="sm" onClick={browser.clearFilters}>
-          {t("clearFilters")}
-        </Button>
-        {browser.roots.isError && (
-          <ErrorNotice
-            error={browser.roots.error}
-            retry={() => void browser.roots.refetch()}
-          />
-        )}
-      </div>
+      </Card>
       {!browser.adult && (
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -202,9 +214,11 @@ export function OrdinaryCandidates({
             {t("toolsBatchHelp", { limit: MAX_SCRAPE_QUEUE })}
           </p>
           {browser.limitReached && (
-            <p role="alert" className="notice">
-              {t("toolsSelectionLimit", { limit: MAX_SCRAPE_QUEUE })}
-            </p>
+            <Alert asChild>
+              <p role="alert">
+                {t("toolsSelectionLimit", { limit: MAX_SCRAPE_QUEUE })}
+              </p>
+            </Alert>
           )}
           {showSelection && browser.selected.length > 0 && (
             <ul id={selectionId} className="flex flex-wrap gap-2">
@@ -247,90 +261,88 @@ export function OrdinaryCandidates({
       ) : browser.media.data.items.length === 0 ? (
         <Empty title={t("noResults")} />
       ) : (
-        <div className="table-wrap">
-          <table className="min-w-[620px]">
-            <thead>
-              <tr>
+        <Table className="min-w-[620px]">
+          <TableHeader>
+            <TableRow>
+              {!browser.adult && (
+                <TableHead>
+                  <Checkbox
+                    ref={selectPage}
+                    checked={allSelected}
+                    disabled={eligible.length === 0}
+                    aria-label={t("toolsSelectPage")}
+                    onChange={(event) =>
+                      browser.select(eligible, event.target.checked)
+                    }
+                  />
+                </TableHead>
+              )}
+              <TableHead>{t("titleLabel")}</TableHead>
+              <TableHead>{t("year")}</TableHead>
+              <TableHead>{t("type")}</TableHead>
+              <TableHead>{t("health")}</TableHead>
+              <TableHead>{t("toolsView")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {browser.media.data.items.map((card) => (
+              <TableRow
+                key={card.media.id}
+                className={
+                  browser.search.media === card.media.id
+                    ? "bg-primary/5"
+                    : undefined
+                }
+              >
                 {!browser.adult && (
-                  <th>
+                  <TableCell>
                     <Checkbox
-                      ref={selectPage}
-                      checked={allSelected}
-                      disabled={eligible.length === 0}
-                      aria-label={t("toolsSelectPage")}
+                      checked={selectedIds.includes(card.media.id)}
+                      disabled={!isSelectableCandidate(card)}
+                      aria-label={t("toolsSelectForScrape", {
+                        title: card.media.title,
+                      })}
                       onChange={(event) =>
-                        browser.select(eligible, event.target.checked)
+                        browser.select([card], event.target.checked)
                       }
                     />
-                  </th>
+                  </TableCell>
                 )}
-                <th>{t("titleLabel")}</th>
-                <th>{t("year")}</th>
-                <th>{t("type")}</th>
-                <th>{t("health")}</th>
-                <th>{t("toolsView")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {browser.media.data.items.map((card) => (
-                <tr
-                  key={card.media.id}
-                  className={
-                    browser.search.media === card.media.id
-                      ? "bg-primary/5"
-                      : undefined
-                  }
-                >
-                  {!browser.adult && (
-                    <td>
-                      <Checkbox
-                        checked={selectedIds.includes(card.media.id)}
-                        disabled={!isSelectableCandidate(card)}
-                        aria-label={t("toolsSelectForScrape", {
-                          title: card.media.title,
-                        })}
-                        onChange={(event) =>
-                          browser.select([card], event.target.checked)
-                        }
-                      />
-                    </td>
+                <TableCell className="font-medium">{card.media.title}</TableCell>
+                <TableCell>{card.media.year ?? t("unknownYear")}</TableCell>
+                <TableCell>{t(`kind_${card.media.kind}`)}</TableCell>
+                <TableCell>
+                  {card.health.length ? (
+                    <HealthBadges health={card.health} />
+                  ) : (
+                    t("none")
                   )}
-                  <td className="font-medium">{card.media.title}</td>
-                  <td>{card.media.year ?? t("unknownYear")}</td>
-                  <td>{t(`kind_${card.media.kind}`)}</td>
-                  <td>
-                    {card.health.length ? (
-                      <HealthBadges health={card.health} />
-                    ) : (
-                      t("none")
-                    )}
-                  </td>
-                  <td>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      aria-label={
-                        browser.adult
-                          ? `${t("scraperThisMedia")}: ${card.media.title}`
-                          : t("toolsViewResource", { title: card.media.title })
-                      }
-                      onClick={() => browser.view(card.media.id)}
-                    >
-                      {t(browser.adult ? "scraperThisMedia" : "toolsView")}
+                </TableCell>
+                <TableCell>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    aria-label={
+                      browser.adult
+                        ? `${t("scraperThisMedia")}: ${card.media.title}`
+                        : t("toolsViewResource", { title: card.media.title })
+                    }
+                    onClick={() => browser.view(card.media.id)}
+                  >
+                    {t(browser.adult ? "scraperThisMedia" : "toolsView")}
+                  </Button>
+                  {!browser.adult && isSelectableCandidate(card) ? (
+                    <Button asChild variant="ghost" size="sm">
+                      <Link to="/scraper" search={{ media: card.media.id }}>
+                        {t("scraperThisMedia")}
+                      </Link>
                     </Button>
-                    {!browser.adult && isSelectableCandidate(card) ? (
-                      <Button asChild variant="ghost" size="sm">
-                        <Link to="/scraper" search={{ media: card.media.id }}>
-                          {t("scraperThisMedia")}
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                  ) : null}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button

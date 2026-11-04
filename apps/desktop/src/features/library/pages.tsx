@@ -3,6 +3,7 @@ import { ChevronDown, FolderOpen } from "lucide-react";
 import { useId, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { MediaKind } from "../../api/library";
+import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Dialog, DialogContent, DialogTitle } from "../../components/ui/dialog";
 import { Input } from "../../components/ui/input";
@@ -114,161 +115,163 @@ export function RootsPage({
         </Button>
       </PageHeading>
       {form && (
-        <form className="root-editor space-y-5" onSubmit={submit} noValidate>
-          <h2 className="section-title">{t(form.id ? "edit" : "addRoot")}</h2>
-          <div className="root-path-picker">
-            <Button
-              variant="outline"
-              disabled={
-                working ||
-                picking ||
-                (form.kind === "adult_video" && !adultAvailable)
-              }
-              onClick={() => void chooseDirectory()}
-            >
-              <FolderOpen size={18} aria-hidden="true" />
-              {t(
-                picking
-                  ? "rootChoosingDirectory"
-                  : form.path
-                    ? "rootChangeDirectory"
-                    : "rootChooseDirectory",
-              )}
-            </Button>
-            <p
-              className="min-w-0 break-all text-sm text-muted-foreground"
-              aria-live="polite"
-            >
-              {form.path || t("rootNoDirectory")}
-            </p>
-          </div>
-          {pickerError !== undefined && <ErrorNotice error={pickerError} />}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Label className="filter-field">
-              <span>{t("rootName")}</span>
-              <Input
-                value={form.name}
-                disabled={working}
-                onChange={(event) => changeName(event.target.value)}
-                required
-              />
-            </Label>
-            <Label className="filter-field">
-              <span>{t("rootType")}</span>
-              <Select
-                disabled={working}
-                value={form.kind ?? "mixed"}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    kind:
-                      event.target.value === "mixed"
-                        ? null
-                        : (event.target.value as MediaKind),
-                  })
+        <Card asChild>
+          <form className="root-editor space-y-5" onSubmit={submit} noValidate>
+            <h2 className="section-title">{t(form.id ? "edit" : "addRoot")}</h2>
+            <div className="root-path-picker">
+              <Button
+                variant="outline"
+                disabled={
+                  working ||
+                  picking ||
+                  (form.kind === "adult_video" && !adultAvailable)
                 }
+                onClick={() => void chooseDirectory()}
               >
-                {ROOT_KINDS.filter(
-                  (kind) => adultVisible || kind !== "adult_video",
-                ).map((kind) => (
-                  <option value={kind} key={kind}>
-                    {t(`kind_${kind}`)}
-                  </option>
-                ))}
-                <option value="mixed">{t("mixed")}</option>
-              </Select>
-            </Label>
-          </div>
-          <RootSourceReadiness
-            kind={form.kind}
-            adultAvailable={adultAvailable}
-            disabled={working || picking}
-            onConfigure={onConfigureSource ? configureSource : undefined}
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-expanded={advanced}
-            aria-controls={advancedId}
-            onClick={() => setAdvanced(!advanced)}
-          >
-            {t("rootAdvanced")}
-            <ChevronDown size={16} aria-hidden="true" />
-          </Button>
-          {advanced && (
-            <div
-              id={advancedId}
-              className="space-y-4 border-t border-border pt-4"
-            >
+                <FolderOpen size={18} aria-hidden="true" />
+                {t(
+                  picking
+                    ? "rootChoosingDirectory"
+                    : form.path
+                      ? "rootChangeDirectory"
+                      : "rootChooseDirectory",
+                )}
+              </Button>
+              <p
+                className="min-w-0 break-all text-sm text-muted-foreground"
+                aria-live="polite"
+              >
+                {form.path || t("rootNoDirectory")}
+              </p>
+            </div>
+            {pickerError !== undefined && <ErrorNotice error={pickerError} />}
+            <div className="grid gap-4 sm:grid-cols-2">
               <Label className="filter-field">
-                <span>{t("rootPath")}</span>
+                <span>{t("rootName")}</span>
                 <Input
-                  value={form.path}
-                  disabled={working || picking}
-                  onChange={(event) => changePath(event.target.value)}
-                  placeholder={t("rootManualPath")}
+                  value={form.name}
+                  disabled={working}
+                  onChange={(event) => changeName(event.target.value)}
                   required
                 />
               </Label>
               <Label className="filter-field">
-                <span>{t("excludePatterns")}</span>
-                <Textarea
-                  value={excludes}
+                <span>{t("rootType")}</span>
+                <Select
                   disabled={working}
-                  onChange={(event) => setExcludes(event.target.value)}
-                  placeholder={t("excludeHelp")}
-                  rows={3}
-                />
-              </Label>
-              <Label className="flex items-center gap-2">
-                <Checkbox
-                  checked={form.enabled}
-                  disabled={working}
+                  value={form.kind ?? "mixed"}
                   onChange={(event) =>
-                    setForm({ ...form, enabled: event.target.checked })
+                    setForm({
+                      ...form,
+                      kind:
+                        event.target.value === "mixed"
+                          ? null
+                          : (event.target.value as MediaKind),
+                    })
                   }
-                />
-                {t("enabled")}
+                >
+                  {ROOT_KINDS.filter(
+                    (kind) => adultVisible || kind !== "adult_video",
+                  ).map((kind) => (
+                    <option value={kind} key={kind}>
+                      {t(`kind_${kind}`)}
+                    </option>
+                  ))}
+                  <option value="mixed">{t("mixed")}</option>
+                </Select>
               </Label>
             </div>
-          )}
-          {validation && <p role="alert">{t("invalidRoot")}</p>}
-          {save.isError && <ErrorNotice error={save.error} />}
-          {scan.isError && savedRoot && (
-            <div className="space-y-3">
-              <p role="status" className="text-sm">
-                {t("autoRootSavedFailed")}
-              </p>
-              <ErrorNotice error={scan.error} />
-            </div>
-          )}
-          <div className="flex flex-wrap gap-3">
+            <RootSourceReadiness
+              kind={form.kind}
+              adultAvailable={adultAvailable}
+              disabled={working || picking}
+              onConfigure={onConfigureSource ? configureSource : undefined}
+            />
             <Button
-              type="submit"
-              variant="default"
-              disabled={
-                working ||
-                picking ||
-                (form.kind === "adult_video" && !adultAvailable)
-              }
+              variant="ghost"
+              size="sm"
+              aria-expanded={advanced}
+              aria-controls={advancedId}
+              onClick={() => setAdvanced(!advanced)}
             >
-              {t(
-                working
-                  ? "saving"
-                  : form.enabled
-                    ? scan.isError && savedVersion
-                      ? "autoRootRetry"
-                      : form.id
-                        ? "autoRootSave"
-                        : "autoRootAdd"
-                    : "save",
-              )}
+              {t("rootAdvanced")}
+              <ChevronDown size={16} aria-hidden="true" />
             </Button>
-            <Button variant="ghost" disabled={working} onClick={closeEditor}>
-              {t("cancel")}
-            </Button>
-          </div>
-        </form>
+            {advanced && (
+              <div
+                id={advancedId}
+                className="space-y-4 border-t border-border pt-4"
+              >
+                <Label className="filter-field">
+                  <span>{t("rootPath")}</span>
+                  <Input
+                    value={form.path}
+                    disabled={working || picking}
+                    onChange={(event) => changePath(event.target.value)}
+                    placeholder={t("rootManualPath")}
+                    required
+                  />
+                </Label>
+                <Label className="filter-field">
+                  <span>{t("excludePatterns")}</span>
+                  <Textarea
+                    value={excludes}
+                    disabled={working}
+                    onChange={(event) => setExcludes(event.target.value)}
+                    placeholder={t("excludeHelp")}
+                    rows={3}
+                  />
+                </Label>
+                <Label className="flex items-center gap-2">
+                  <Checkbox
+                    checked={form.enabled}
+                    disabled={working}
+                    onChange={(event) =>
+                      setForm({ ...form, enabled: event.target.checked })
+                    }
+                  />
+                  {t("enabled")}
+                </Label>
+              </div>
+            )}
+            {validation && <p role="alert">{t("invalidRoot")}</p>}
+            {save.isError && <ErrorNotice error={save.error} />}
+            {scan.isError && savedRoot && (
+              <div className="space-y-3">
+                <p role="status" className="text-sm">
+                  {t("autoRootSavedFailed")}
+                </p>
+                <ErrorNotice error={scan.error} />
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              <Button
+                type="submit"
+                variant="default"
+                disabled={
+                  working ||
+                  picking ||
+                  (form.kind === "adult_video" && !adultAvailable)
+                }
+              >
+                {t(
+                  working
+                    ? "saving"
+                    : form.enabled
+                      ? scan.isError && savedVersion
+                        ? "autoRootRetry"
+                        : form.id
+                          ? "autoRootSave"
+                          : "autoRootAdd"
+                      : "save",
+                )}
+              </Button>
+              <Button variant="ghost" disabled={working} onClick={closeEditor}>
+                {t("cancel")}
+              </Button>
+            </div>
+          </form>
+        </Card>
       )}
       {completed?.task && (
         <div className="mb-6 flex flex-wrap items-center gap-3">

@@ -68,7 +68,7 @@
   color: var(--color-foreground);
 }
 .video-detail-rating svg {
-  color: #f1c74e;
+  color: var(--rating);
 }
 .video-detail-rating > span {
   color: var(--color-muted-foreground);
@@ -157,8 +157,6 @@
 }
 .video-detail-status {
   padding: 20px;
-  border-radius: 16px;
-  background: var(--color-surface);
 }
 .video-detail-status h2 {
   font-size: 16px;
@@ -229,8 +227,6 @@
   gap: 16px;
   padding: 20px;
   margin-bottom: 12px;
-  border-radius: 14px;
-  background: var(--color-surface);
 }
 .video-detail-files > li > svg {
   flex-shrink: 0;
@@ -307,8 +303,6 @@
   gap: 18px;
   padding: 18px;
   margin-top: 8px;
-  border-radius: 12px;
-  background: var(--color-surface);
 }
 .video-episode-number {
   color: var(--color-ring);
@@ -332,8 +326,6 @@
 .video-detail-cast > li,
 .video-detail-artwork > li {
   padding: 16px;
-  border-radius: 10px;
-  background: var(--color-surface);
 }
 .video-detail-metadata > div {
   padding-block: 16px;

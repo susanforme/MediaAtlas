@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { MediaCard, RootView } from "../../api/library";
+import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { validateProviderSetupSearch } from "../settings/setup-search";
 import type { LibrarySearch } from "./browse-model";
@@ -24,20 +25,22 @@ export function LibrarySourceRecovery({
   const root = search.root ?? (roots.length === 1 ? roots[0].id : undefined);
   const kind = adult ? "adult_video" : search.kind;
   return (
-    <section className="notice mb-6 flex flex-wrap items-center justify-between gap-4">
-      <p role="status">{t("libraryRefreshUnconfigured")}</p>
-      <Button asChild size="sm">
-        <Link
-          to="/settings"
-          search={validateProviderSetupSearch({ from: "library", root, kind })}
-        >
-          {t(
-            root
-              ? "libraryRefreshConfigureAction"
-              : "libraryRefreshConfigureOnly",
-          )}
-        </Link>
-      </Button>
-    </section>
+    <Alert asChild>
+      <section className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <p role="status">{t("libraryRefreshUnconfigured")}</p>
+        <Button asChild size="sm">
+          <Link
+            to="/settings"
+            search={validateProviderSetupSearch({ from: "library", root, kind })}
+          >
+            {t(
+              root
+                ? "libraryRefreshConfigureAction"
+                : "libraryRefreshConfigureOnly",
+            )}
+          </Link>
+        </Button>
+      </section>
+    </Alert>
   );
 }

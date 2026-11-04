@@ -1,3 +1,4 @@
+import { Card } from "../../components/ui/card";
 import { MediaArtwork } from "./media-artwork";
 import "./library.css";
 import { useQuery } from "@tanstack/react-query";
@@ -98,7 +99,6 @@ export function MediaDetailPage({
                 ? { kind: "adult_video", media: data.media.id }
                 : { media: data.media.id }
             }
-            className="action-link"
           >
             {t("videoTools")}
           </Link>
@@ -138,148 +138,159 @@ export function MediaDetailPage({
           )}
           {(data.health.includes("missing_nfo") ||
             data.health.includes("nfo_output_failed")) && (
-            <section
-              className="panel space-y-3"
-              aria-label={t("libraryNfoOutput")}
-            >
-              <div className="flex flex-wrap items-center gap-3">
-                <h2 className="section-title mb-0">{t("libraryNfoOutput")}</h2>
-                <Badge
-                  variant={
-                    data.health.includes("nfo_output_failed")
-                      ? "destructive"
-                      : "secondary"
-                  }
-                >
+            <Card asChild>
+              <section
+                className="space-y-3"
+                aria-label={t("libraryNfoOutput")}>
+                <div className="flex flex-wrap items-center gap-3">
+                  <h2 className="section-title mb-0">{t("libraryNfoOutput")}</h2>
+                  <Badge
+                    variant={
+                      data.health.includes("nfo_output_failed")
+                        ? "destructive"
+                        : "secondary"
+                    }
+                  >
+                    {t(
+                      data.health.includes("nfo_output_failed")
+                        ? "health_nfo_output_failed"
+                        : "health_missing_nfo",
+                    )}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground">
                   {t(
                     data.health.includes("nfo_output_failed")
-                      ? "health_nfo_output_failed"
-                      : "health_missing_nfo",
+                      ? "libraryNfoFailedHint"
+                      : "libraryNfoPendingHint",
                   )}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {t(
-                  data.health.includes("nfo_output_failed")
-                    ? "libraryNfoFailedHint"
-                    : "libraryNfoPendingHint",
-                )}
-              </p>
-              <Button asChild variant="outline" size="sm">
-                <Link to="/roots" search={adult ? { kind: "adult_video" } : {}}>
-                  {t("libraryRefreshManage")}
-                </Link>
-              </Button>
-            </section>
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link to="/roots" search={adult ? { kind: "adult_video" } : {}}>
+                    {t("libraryRefreshManage")}
+                  </Link>
+                </Button>
+              </section>
+            </Card>
           )}
-          <section className="panel">
-            <h2 className="section-title">{t("files")}</h2>
-            {data.files.length ? (
-              <ul className="divide-y divide-border">
-                {data.files.map((file) => (
-                  <li className="py-3" key={file.id}>
-                    <p className="break-all text-sm font-medium">
-                      {file.relative_path}
-                    </p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {number(file.size_bytes)} B{" "}
-                      {file.part !== null &&
-                        ` · ${t("part")} ${number(file.part)}`}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p>{t("noFiles")}</p>
-            )}
-          </section>
-          <section className="panel">
-            <h2 className="section-title">{t("metadata")}</h2>
-            {data.metadata_values.length ? (
-              <dl className="divide-y divide-border">
-                {data.metadata_values.map((field) => (
-                  <div key={field.id} className="py-3">
-                    <dt className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                      {field.field_key}
-                      {field.locale && (
-                        <span className="badge">{field.locale}</span>
-                      )}
-                      {field.is_locked && (
-                        <span className="badge">
-                          <LockKeyhole size={11} aria-hidden="true" />{" "}
-                          {t("locked")}
-                        </span>
-                      )}
-                      {field.is_user_modified && (
-                        <span className="badge">{t("userEdited")}</span>
-                      )}
-                    </dt>
-                    <dd className="mt-2 break-words text-sm">
-                      {typeof field.value === "string"
-                        ? field.value
-                        : JSON.stringify(field.value)}
-                    </dd>
-                    <dd className="mt-1 text-xs text-muted-foreground">
-                      {t("source")}: {field.provider_id ?? t("localMetadata")}
-                    </dd>
-                  </div>
-                ))}
-              </dl>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("noMetadata")}</p>
-            )}
-          </section>
-          <section className="panel">
-            <h2 className="section-title">{t("externalIds")}</h2>
-            {data.external_ids.length ? (
-              <ul>
-                {data.external_ids.map((id) => (
-                  <li key={id.id} className="break-all py-1 text-sm">
-                    {id.provider_id} / {id.namespace}: {id.external_id}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("none")}</p>
-            )}
-          </section>
-          <section className="panel">
-            <h2 className="section-title">{t("artworks")}</h2>
-            {data.artworks.length ? (
-              <ul>
-                {data.artworks.map((art) => (
-                  <li key={art.id} className="break-all py-1 text-sm">
-                    {art.kind} · {art.cache_path ?? t("none")}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-muted-foreground">{t("noPoster")}</p>
-            )}
-          </section>
-          {data.relations.length > 0 && (
-            <section className="panel">
-              <h2 className="section-title">{t("relations")}</h2>
-              <ul>
-                {data.relations.map((relation) => (
-                  <li key={relation.id} className="py-1">
-                    <Button asChild variant="ghost">
-                      <Link
-                        to="/media/$mediaId"
-                        params={{ mediaId: relation.id }}
-                        search={adult ? { kind: "adult_video" } : {}}
-                        className="text-ring"
-                      >
-                        {relation.title}
-                      </Link>
-                    </Button>
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {t(`kind_${relation.kind}`)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+          <Card asChild>
+            <section>
+              <h2 className="section-title">{t("files")}</h2>
+              {data.files.length ? (
+                <ul className="divide-y divide-border">
+                  {data.files.map((file) => (
+                    <li className="py-3" key={file.id}>
+                      <p className="break-all text-sm font-medium">
+                        {file.relative_path}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {number(file.size_bytes)} B{" "}
+                        {file.part !== null &&
+                          ` · ${t("part")} ${number(file.part)}`}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p>{t("noFiles")}</p>
+              )}
             </section>
+          </Card>
+          <Card asChild>
+            <section>
+              <h2 className="section-title">{t("metadata")}</h2>
+              {data.metadata_values.length ? (
+                <dl className="divide-y divide-border">
+                  {data.metadata_values.map((field) => (
+                    <div key={field.id} className="py-3">
+                      <dt className="flex flex-wrap items-center gap-2 text-sm font-medium">
+                        {field.field_key}
+                        {field.locale && (
+                          <Badge variant="secondary">{field.locale}</Badge>
+                        )}
+                        {field.is_locked && (
+                          <Badge variant="secondary">
+                            <LockKeyhole size={11} aria-hidden="true" />{" "}
+                            {t("locked")}
+                          </Badge>
+                        )}
+                        {field.is_user_modified && (
+                          <Badge variant="secondary">{t("userEdited")}</Badge>
+                        )}
+                      </dt>
+                      <dd className="mt-2 break-words text-sm">
+                        {typeof field.value === "string"
+                          ? field.value
+                          : JSON.stringify(field.value)}
+                      </dd>
+                      <dd className="mt-1 text-xs text-muted-foreground">
+                        {t("source")}: {field.provider_id ?? t("localMetadata")}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("noMetadata")}</p>
+              )}
+            </section>
+          </Card>
+          <Card asChild>
+            <section>
+              <h2 className="section-title">{t("externalIds")}</h2>
+              {data.external_ids.length ? (
+                <ul>
+                  {data.external_ids.map((id) => (
+                    <li key={id.id} className="break-all py-1 text-sm">
+                      {id.provider_id} / {id.namespace}: {id.external_id}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("none")}</p>
+              )}
+            </section>
+          </Card>
+          <Card asChild>
+            <section>
+              <h2 className="section-title">{t("artworks")}</h2>
+              {data.artworks.length ? (
+                <ul>
+                  {data.artworks.map((art) => (
+                    <li key={art.id} className="break-all py-1 text-sm">
+                      {art.kind} · {art.cache_path ?? t("none")}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t("noPoster")}</p>
+              )}
+            </section>
+          </Card>
+          {data.relations.length > 0 && (
+            <Card asChild>
+              <section>
+                <h2 className="section-title">{t("relations")}</h2>
+                <ul>
+                  {data.relations.map((relation) => (
+                    <li key={relation.id} className="py-1">
+                      <Button asChild variant="ghost">
+                        <Link
+                          to="/media/$mediaId"
+                          params={{ mediaId: relation.id }}
+                          search={adult ? { kind: "adult_video" } : {}}
+                          className="text-ring"
+                        >
+                          {relation.title}
+                        </Link>
+                      </Button>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        {t(`kind_${relation.kind}`)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </Card>
           )}
         </div>
       </div>

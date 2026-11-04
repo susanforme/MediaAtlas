@@ -2,6 +2,8 @@ import "../scraper/translations";
 import { Link } from "@tanstack/react-router";
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
@@ -11,8 +13,8 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../components/ui/tabs";
+import { setTheme, useTheme } from "../../lib/theme";
 import "../adult/translations";
-import { Button } from "../../components/ui/button";
 import { usePrivacy } from "../library/context";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import {
@@ -60,6 +62,7 @@ export function SettingsPage({
   onTabChange?: (tab: SettingsTab) => void;
 } = {}) {
   const { t, i18n } = useTranslation();
+  const theme = useTheme();
   const setup =
     inputSetup ??
     ((returnToScraper
@@ -133,20 +136,35 @@ export function SettingsPage({
             ) : (
               <div className="grid items-start gap-6 xl:grid-cols-2">
                 <div className="space-y-6">
-                  <section className="panel">
-                    <Label className="filter-field">
-                      <span>{t("language")}</span>
-                      <Select
-                        value={i18n.resolvedLanguage ?? "zh-CN"}
-                        onChange={(event) =>
-                          void i18n.changeLanguage(event.target.value)
-                        }
-                      >
-                        <option value="zh-CN">简体中文</option>
-                        <option value="en-US">English (US)</option>
-                      </Select>
-                    </Label>
-                  </section>
+                  <Card asChild>
+                    <section>
+                      <h2 className="section-title">{t("appearance")}</h2>
+                      <Label className="filter-field mb-5">
+                        <span>{t("theme")}</span>
+                        <Select
+                          value={theme}
+                          onChange={(event) =>
+                            setTheme(event.target.value === "light" ? "light" : "dark")
+                          }
+                        >
+                          <option value="dark">{t("theme_dark")}</option>
+                          <option value="light">{t("theme_light")}</option>
+                        </Select>
+                      </Label>
+                      <Label className="filter-field">
+                        <span>{t("language")}</span>
+                        <Select
+                          value={i18n.resolvedLanguage ?? "zh-CN"}
+                          onChange={(event) =>
+                            void i18n.changeLanguage(event.target.value)
+                          }
+                        >
+                          <option value="zh-CN">简体中文</option>
+                          <option value="en-US">English (US)</option>
+                        </Select>
+                      </Label>
+                    </section>
+                  </Card>
                   <ContentPreferences />
                 </div>
               </div>
@@ -165,35 +183,37 @@ function ContentPreferences() {
   const [edited, setEdited] = useState(false);
   const value = edited ? enabled : settings.entry_visible;
   return (
-    <section className="panel">
-      <h2 className="section-title">{t("settingsMediaTypes")}</h2>
-      <Label className="mb-4 flex items-center gap-3">
-        <Checkbox
-          checked={value}
-          disabled={loading}
-          onChange={(event) => {
-            setEdited(true);
-            setEnabled(event.target.checked);
-          }}
-        />
-        {t("adultEntry")}
-      </Label>
-      <div className="flex gap-3">
-        <Button
-          disabled={loading}
-          onClick={() => {
-            void saveSettings({
-              entry_visible: value,
-              covers_visible: value,
-              remember_recent: false,
-            });
-            setEdited(false);
-          }}
-        >
-          {t("save")}
-        </Button>
-      </div>
-      {error !== undefined && <ErrorNotice error={error} />}
-    </section>
+    <Card asChild>
+      <section>
+        <h2 className="section-title">{t("settingsMediaTypes")}</h2>
+        <Label className="mb-4 flex items-center gap-3">
+          <Checkbox
+            checked={value}
+            disabled={loading}
+            onChange={(event) => {
+              setEdited(true);
+              setEnabled(event.target.checked);
+            }}
+          />
+          {t("adultEntry")}
+        </Label>
+        <div className="flex gap-3">
+          <Button
+            disabled={loading}
+            onClick={() => {
+              void saveSettings({
+                entry_visible: value,
+                covers_visible: value,
+                remember_recent: false,
+              });
+              setEdited(false);
+            }}
+          >
+            {t("save")}
+          </Button>
+        </div>
+        {error !== undefined && <ErrorNotice error={error} />}
+      </section>
+    </Card>
   );
 }

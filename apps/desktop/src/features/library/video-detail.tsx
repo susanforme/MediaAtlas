@@ -7,6 +7,7 @@ import type { MediaDetail } from "../../api/library";
 import { scraperApi, type SeasonDetail } from "../../api/scraper";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { VideoSourceDetails } from "../scraper/source-detail";
 import { DetailRecoveryAction } from "./detail-recovery-action";
@@ -60,20 +61,22 @@ function VideoSeasons({ seasons }: { seasons: SeasonDetail[] }) {
       </h3>
       <ol className="video-episodes">
         {season.episodes.map((episode) => (
-          <li key={`${episode.episode_number}:${episode.remote_id}`}>
-            <span className="video-episode-number">
-              {number(episode.episode_number)}
-            </span>
-            <div>
-              <h4>
-                {episode.title ||
-                  t("videoDetailEpisode", {
-                    number: number(episode.episode_number),
-                  })}
-              </h4>
-              {episode.overview && <p>{episode.overview}</p>}
-            </div>
-          </li>
+          <Card asChild key={`${episode.episode_number}:${episode.remote_id}`}>
+            <li>
+              <span className="video-episode-number">
+                {number(episode.episode_number)}
+              </span>
+              <div>
+                <h4>
+                  {episode.title ||
+                    t("videoDetailEpisode", {
+                      number: number(episode.episode_number),
+                    })}
+                </h4>
+                {episode.overview && <p>{episode.overview}</p>}
+              </div>
+            </li>
+          </Card>
         ))}
       </ol>
       {!season.episodes.length && (
@@ -234,53 +237,55 @@ export function VideoDetail({
                 )}
               </dl>
             </section>
-            <aside
-              className="video-detail-status"
-              aria-label={t("videoDetailStatus")}
-            >
-              <h2>{t("videoDetailStatus")}</h2>
-              <HealthBadges health={visibleHealth} />
-              <dl>
-                <div>
-                  <dt>{t("metadata")}</dt>
-                  <dd>
-                    {detail.metadata_values.length
-                      ? t("videoDetailFields", {
-                          count: detail.metadata_values.length,
-                        })
-                      : t("noMetadata")}
-                  </dd>
-                </div>
-                <div>
-                  <dt>{t("videoDetailPoster")}</dt>
-                  <dd>
-                    {t(detail.poster_uri ? "videoDetailAvailable" : "videoDetailMissing")}
-                  </dd>
-                </div>
-                {detail.external_ids.map((id) => (
-                  <div key={id.id}>
-                    <dt>{id.provider_id} / {id.namespace}</dt>
-                    <dd>{id.external_id}</dd>
+            <Card asChild>
+              <aside
+                className="video-detail-status"
+                aria-label={t("videoDetailStatus")}
+              >
+                <h2>{t("videoDetailStatus")}</h2>
+                <HealthBadges health={visibleHealth} />
+                <dl>
+                  <div>
+                    <dt>{t("metadata")}</dt>
+                    <dd>
+                      {detail.metadata_values.length
+                        ? t("videoDetailFields", {
+                            count: detail.metadata_values.length,
+                          })
+                        : t("noMetadata")}
+                    </dd>
                   </div>
-                ))}
-              </dl>
-              {(missingNfo || failedNfo) && (
-                <section
-                  className="video-detail-nfo"
-                  aria-label={t("libraryNfoOutput")}
-                >
-                  <Badge variant={failedNfo ? "destructive" : "secondary"}>
-                    {t(failedNfo ? "health_nfo_output_failed" : "health_missing_nfo")}
-                  </Badge>
-                  <p>
-                    {t(failedNfo ? "libraryNfoFailedHint" : "libraryNfoPendingHint")}
-                  </p>
-                  <Button asChild variant="outline" size="sm">
-                    <Link to="/roots" search={{}}>{t("libraryRefreshManage")}</Link>
-                  </Button>
-                </section>
-              )}
-            </aside>
+                  <div>
+                    <dt>{t("videoDetailPoster")}</dt>
+                    <dd>
+                      {t(detail.poster_uri ? "videoDetailAvailable" : "videoDetailMissing")}
+                    </dd>
+                  </div>
+                  {detail.external_ids.map((id) => (
+                    <div key={id.id}>
+                      <dt>{id.provider_id} / {id.namespace}</dt>
+                      <dd>{id.external_id}</dd>
+                    </div>
+                  ))}
+                </dl>
+                {(missingNfo || failedNfo) && (
+                  <section
+                    className="video-detail-nfo"
+                    aria-label={t("libraryNfoOutput")}
+                  >
+                    <Badge variant={failedNfo ? "destructive" : "secondary"}>
+                      {t(failedNfo ? "health_nfo_output_failed" : "health_missing_nfo")}
+                    </Badge>
+                    <p>
+                      {t(failedNfo ? "libraryNfoFailedHint" : "libraryNfoPendingHint")}
+                    </p>
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/roots" search={{}}>{t("libraryRefreshManage")}</Link>
+                    </Button>
+                  </section>
+                )}
+              </aside>
+            </Card>
           </div>
           {sourceDetail}
           <Tabs value={tab} onValueChange={setTab} className="video-detail-tabs">
@@ -304,24 +309,26 @@ export function VideoDetail({
               {detail.files.length ? (
                 <ul className="video-detail-files">
                   {detail.files.map((file) => (
-                    <li key={file.id}>
-                      <FileVideo size={25} aria-hidden="true" />
-                      <div className="video-detail-file-name">
-                        <h3>{file.relative_path.split(/[\\/]/).at(-1)}</h3>
-                        <p>{file.relative_path}</p>
-                      </div>
-                      <span className="video-detail-file-size">
-                        {number(file.size_bytes)} B
-                        {file.part !== null && ` · ${t("part")} ${number(file.part)}`}
-                      </span>
-                      {playable.some((item) => item.id === file.id) && (
-                        <NativeOpen
-                          files={[file]}
-                          label={file.relative_path}
-                          className="video-detail-file-open"
-                        />
-                      )}
-                    </li>
+                    <Card asChild key={file.id}>
+                      <li>
+                        <FileVideo size={25} aria-hidden="true" />
+                        <div className="video-detail-file-name">
+                          <h3>{file.relative_path.split(/[\\/]/).at(-1)}</h3>
+                          <p>{file.relative_path}</p>
+                        </div>
+                        <span className="video-detail-file-size">
+                          {number(file.size_bytes)} B
+                          {file.part !== null && ` · ${t("part")} ${number(file.part)}`}
+                        </span>
+                        {playable.some((item) => item.id === file.id) && (
+                          <NativeOpen
+                            files={[file]}
+                            label={file.relative_path}
+                            className="video-detail-file-open"
+                          />
+                        )}
+                      </li>
+                    </Card>
                   ))}
                 </ul>
               ) : (
@@ -346,7 +353,11 @@ export function VideoDetail({
             {fields.cast.length > 0 && (
               <TabsContent value="cast">
                 <ul className="video-detail-cast">
-                  {fields.cast.map((name) => <li key={name}>{name}</li>)}
+                  {fields.cast.map((name) => (
+                    <Card asChild key={name}>
+                      <li>{name}</li>
+                    </Card>
+                  ))}
                 </ul>
               </TabsContent>
             )}
@@ -421,12 +432,14 @@ export function VideoDetail({
               <TabsContent value="artwork">
                 <ul className="video-detail-artwork">
                   {detail.artworks.map((art) => (
-                    <li key={art.id}>
-                      <span>{art.kind}</span>
-                      <Badge variant="secondary">
-                        {t(art.cache_path ? "videoDetailAvailable" : "videoDetailMissing")}
-                      </Badge>
-                    </li>
+                    <Card asChild key={art.id}>
+                      <li>
+                        <span>{art.kind}</span>
+                        <Badge variant="secondary">
+                          {t(art.cache_path ? "videoDetailAvailable" : "videoDetailMissing")}
+                        </Badge>
+                      </li>
+                    </Card>
                   ))}
                 </ul>
               </TabsContent>

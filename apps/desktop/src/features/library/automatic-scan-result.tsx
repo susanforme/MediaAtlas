@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { ScanTask } from "../../api/library";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { refreshCounts, refreshResultTitle } from "./library-activity-model";
 import { useFormat } from "./shared";
 import "./translations";
@@ -29,69 +30,71 @@ export function AutomaticScanResult({
       : []),
   ] as const;
   return (
-    <section className="panel space-y-5">
-      <p role="status">{t(refreshResultTitle(task))}</p>
-      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        {metrics.map(([label, count]) => (
-          <div key={label}>
-            <dt className="text-sm text-muted-foreground">{t(label)}</dt>
-            <dd className="mt-1 text-xl font-semibold">{number(count)}</dd>
-          </div>
-        ))}
-      </dl>
-      {counts.unconfigured > 0 && (
-        <p className="text-sm text-muted-foreground">
-          {t("libraryRefreshSourceRequired")}
-        </p>
-      )}
-      <div className="flex flex-wrap gap-3">
+    <Card asChild>
+      <section className="space-y-5">
+        <p role="status">{t(refreshResultTitle(task))}</p>
+        <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {metrics.map(([label, count]) => (
+            <div key={label}>
+              <dt className="text-sm text-muted-foreground">{t(label)}</dt>
+              <dd className="mt-1 text-xl font-semibold">{number(count)}</dd>
+            </div>
+          ))}
+        </dl>
         {counts.unconfigured > 0 && (
-          <Button asChild>
-            <Link
-              to="/settings"
-              search={{ from: "library", root: task.root_id, ...scope }}
-            >
-              {t("libraryRefreshConfigureAction")}
+          <p className="text-sm text-muted-foreground">
+            {t("libraryRefreshSourceRequired")}
+          </p>
+        )}
+        <div className="flex flex-wrap gap-3">
+          {counts.unconfigured > 0 && (
+            <Button asChild>
+              <Link
+                to="/settings"
+                search={{ from: "library", root: task.root_id, ...scope }}
+              >
+                {t("libraryRefreshConfigureAction")}
+              </Link>
+            </Button>
+          )}
+          <Button
+            asChild
+            variant={counts.unconfigured > 0 ? "outline" : "default"}
+          >
+            <Link to="/library" search={{ root: task.root_id, ...scope }}>
+              {t("autoBrowseLibrary")}
             </Link>
           </Button>
-        )}
-        <Button
-          asChild
-          variant={counts.unconfigured > 0 ? "outline" : "default"}
-        >
-          <Link to="/library" search={{ root: task.root_id, ...scope }}>
-            {t("autoBrowseLibrary")}
-          </Link>
-        </Button>
-        {counts.review > 0 && (
-          <Button asChild variant="outline">
-            <Link
-              to={adult ? "/library" : "/tools"}
-              search={{
-                root: task.root_id,
-                health: "metadata_needs_review",
-                ...scope,
-              }}
-            >
-              {t("autoReviewItems")}
-            </Link>
-          </Button>
-        )}
-        {counts.failed > 0 && (
-          <Button asChild variant="outline">
-            <Link
-              to={adult ? "/library" : "/tools"}
-              search={{
-                root: task.root_id,
-                health: "metadata_failed",
-                ...scope,
-              }}
-            >
-              {t("autoFailedItems")}
-            </Link>
-          </Button>
-        )}
-      </div>
-    </section>
+          {counts.review > 0 && (
+            <Button asChild variant="outline">
+              <Link
+                to={adult ? "/library" : "/tools"}
+                search={{
+                  root: task.root_id,
+                  health: "metadata_needs_review",
+                  ...scope,
+                }}
+              >
+                {t("autoReviewItems")}
+              </Link>
+            </Button>
+          )}
+          {counts.failed > 0 && (
+            <Button asChild variant="outline">
+              <Link
+                to={adult ? "/library" : "/tools"}
+                search={{
+                  root: task.root_id,
+                  health: "metadata_failed",
+                  ...scope,
+                }}
+              >
+                {t("autoFailedItems")}
+              </Link>
+            </Button>
+          )}
+        </div>
+      </section>
+    </Card>
   );
 }

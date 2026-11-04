@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
+import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Select } from "../../components/ui/select";
 import { ErrorNotice } from "../library/shared";
 import { validateToolsSearch } from "../tools/search";
@@ -63,143 +65,147 @@ export function PersistentQueueNavigation({
     selected.reason === "missing_media" ||
     selected.reason === "unavailable_media";
   return (
-    <section
+    <Card
+      asChild
       className={
         compact
-          ? "mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3"
-          : "panel mb-6 space-y-4"
+          ? "mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-4 sm:py-3"
+          : "mb-6 space-y-4"
       }
-      aria-label={t("reviewQueues")}
     >
-      <p aria-live="polite" className="text-sm">
-        {t("reviewSummary", { count: queue.items.length, ...counts })}
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy || !onNavigate || !previous}
-          onClick={() => previous && void choose(previous.media_id)}
-        >
-          {t("reviewPrevious")}
-        </Button>
-        <Select
-          className="h-9 w-auto max-w-full flex-1 sm:flex-none sm:min-w-48"
-          aria-label={t("reviewItemPicker")}
-          value={selected.media_id}
-          disabled={busy || !onNavigate}
-          onChange={(event) => void choose(event.target.value)}
-        >
-          {queue.items.map((item) => (
-            <option key={item.media_id} value={item.media_id}>
-              {t("reviewPosition", {
-                index: item.position + 1,
-                count: queue.items.length,
-              })}
-            </option>
-          ))}
-        </Select>
-        <Badge
-          role="status"
-          variant={
-            selected.state === "failed"
-              ? "destructive"
-              : selected.state === "confirmed"
-                ? "default"
-                : selected.state === "deferred"
-                  ? "secondary"
-                  : "outline"
-          }
-        >
-          {t(`reviewState_${selected.state}`)}
-        </Badge>
-        <Button
-          size="sm"
-          variant="outline"
-          disabled={busy || !onNavigate || !next}
-          onClick={() => next && void choose(next.media_id)}
-        >
-          {t("reviewNext")}
-        </Button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {selected.state === "pending" &&
-          queue.current_media_id === selected.media_id &&
-          !selected.needs_recheck && (
-            <Button
-              size="sm"
-              variant="outline"
-              disabled={busy}
-              onClick={() => void defer()}
-            >
-              {t("reviewDefer")}
-            </Button>
-          )}
-        {!unavailable &&
-          (selected.state === "failed" ||
-            selected.state === "deferred" ||
-            (selected.state === "pending" &&
-              (selected.needs_recheck ||
-                queue.current_media_id !== selected.media_id))) && (
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                void review
-                  .transition(
-                    selected.state === "pending" ? "select" : "retry",
-                    selected.media_id,
-                  )
-                  .catch(() => {})
-              }
-            >
-              {t("reviewRetry")}
-            </Button>
-          )}
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={busy}
-          onClick={review.refresh}
-        >
-          {t("reviewRefresh")}
-        </Button>
-        <Button asChild variant="outline" size="sm" disabled={busy}>
-          {busy ? (
-            <span>{t("scraperQueueReturn")}</span>
-          ) : (
-            <Link
-              to="/tools"
-              search={validateToolsSearch({ ...queue.context })}
-            >
-              {t("scraperQueueReturn")}
-            </Link>
-          )}
-        </Button>
-      </div>
-      {(selected.needs_recheck ||
-        selected.state === "failed" ||
-        selected.state === "deferred") && (
-        <p role="status" className="notice">
-          {t(
-            unavailable
-              ? "reviewUnavailable"
-              : selected.needs_recheck
-                ? "reviewRecheck"
-                : selected.state === "failed"
-                  ? "reviewFailed"
-                  : "reviewDeferred",
-          )}
+      <section aria-label={t("reviewQueues")}>
+        <p aria-live="polite" className="text-sm">
+          {t("reviewSummary", { count: queue.items.length, ...counts })}
         </p>
-      )}
-      {queue.current_media_id === null && (
-        <p role="status" className="text-sm text-muted-foreground">
-          {t("reviewFinished")}
-        </p>
-      )}
-      {review.error && (
-        <ErrorNotice error={review.error} retry={review.refresh} />
-      )}
-    </section>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !onNavigate || !previous}
+            onClick={() => previous && void choose(previous.media_id)}
+          >
+            {t("reviewPrevious")}
+          </Button>
+          <Select
+            className="h-9 w-auto max-w-full flex-1 sm:flex-none sm:min-w-48"
+            aria-label={t("reviewItemPicker")}
+            value={selected.media_id}
+            disabled={busy || !onNavigate}
+            onChange={(event) => void choose(event.target.value)}
+          >
+            {queue.items.map((item) => (
+              <option key={item.media_id} value={item.media_id}>
+                {t("reviewPosition", {
+                  index: item.position + 1,
+                  count: queue.items.length,
+                })}
+              </option>
+            ))}
+          </Select>
+          <Badge
+            role="status"
+            variant={
+              selected.state === "failed"
+                ? "destructive"
+                : selected.state === "confirmed"
+                  ? "default"
+                  : selected.state === "deferred"
+                    ? "secondary"
+                    : "outline"
+            }
+          >
+            {t(`reviewState_${selected.state}`)}
+          </Badge>
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={busy || !onNavigate || !next}
+            onClick={() => next && void choose(next.media_id)}
+          >
+            {t("reviewNext")}
+          </Button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {selected.state === "pending" &&
+            queue.current_media_id === selected.media_id &&
+            !selected.needs_recheck && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() => void defer()}
+              >
+                {t("reviewDefer")}
+              </Button>
+            )}
+          {!unavailable &&
+            (selected.state === "failed" ||
+              selected.state === "deferred" ||
+              (selected.state === "pending" &&
+                (selected.needs_recheck ||
+                  queue.current_media_id !== selected.media_id))) && (
+              <Button
+                size="sm"
+                disabled={busy}
+                onClick={() =>
+                  void review
+                    .transition(
+                      selected.state === "pending" ? "select" : "retry",
+                      selected.media_id,
+                    )
+                    .catch(() => {})
+                }
+              >
+                {t("reviewRetry")}
+              </Button>
+            )}
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={review.refresh}
+          >
+            {t("reviewRefresh")}
+          </Button>
+          <Button asChild variant="outline" size="sm" disabled={busy}>
+            {busy ? (
+              <span>{t("scraperQueueReturn")}</span>
+            ) : (
+              <Link
+                to="/tools"
+                search={validateToolsSearch({ ...queue.context })}
+              >
+                {t("scraperQueueReturn")}
+              </Link>
+            )}
+          </Button>
+        </div>
+        {(selected.needs_recheck ||
+          selected.state === "failed" ||
+          selected.state === "deferred") && (
+          <Alert asChild>
+            <p role="status">
+              {t(
+                unavailable
+                  ? "reviewUnavailable"
+                  : selected.needs_recheck
+                    ? "reviewRecheck"
+                    : selected.state === "failed"
+                      ? "reviewFailed"
+                      : "reviewDeferred",
+              )}
+            </p>
+          </Alert>
+        )}
+        {queue.current_media_id === null && (
+          <p role="status" className="text-sm text-muted-foreground">
+            {t("reviewFinished")}
+          </p>
+        )}
+        {review.error && (
+          <ErrorNotice error={review.error} retry={review.refresh} />
+        )}
+      </section>
+    </Card>
   );
 }

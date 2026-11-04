@@ -113,7 +113,7 @@
   border-radius: 5px;
   font-size: 11px;
   background: var(--color-primary);
-  color: var(--color-foreground);
+  color: var(--color-primary-foreground);
 }
 .library-view-options {
   display: flex;
@@ -199,12 +199,12 @@
   bottom: 8px;
   display: flex;
 }
-.library-poster-status .badge {
+.library-poster-status [data-slot="badge"] {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
   max-width: 100%;
-  background: rgba(16, 16, 22, 0.88);
+  background: color-mix(in srgb, var(--color-background) 92%, transparent);
   color: var(--color-foreground);
   font-size: 10px;
 }

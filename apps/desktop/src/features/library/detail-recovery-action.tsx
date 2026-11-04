@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import type { MediaDetail } from "../../api/library";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { detailRecovery } from "./detail-recovery-model";
 import "./library-status-translations";
@@ -11,9 +12,9 @@ export function DetailRecoveryAction({ detail }: { detail: MediaDetail }) {
   if (recovery.action === "none") return null;
   if (recovery.action === "pending")
     return (
-      <span role="status" className="badge">
+      <Badge variant="secondary" role="status">
         {t("health_metadata_pending")}
-      </span>
+      </Badge>
     );
   if (recovery.action === "configure")
     return (

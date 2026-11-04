@@ -1,4 +1,5 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Immutable provider snapshots can lack unique season/episode identifiers. */
+import { Card } from "../../components/ui/card";
 import "./styles.css";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -105,21 +106,23 @@ export function LibraryVideoSourceDetail({ mediaId }: { mediaId: string }) {
     queryFn: () => scraperApi.mediaDetail(mediaId),
   });
   return (
-    <section className="panel" aria-labelledby="video-source-title">
-      <h2 id="video-source-title" className="section-title">
-        {t("scraperLibrarySourceTitle")}
-      </h2>
-      {detail.isPending ? (
-        <Loading />
-      ) : detail.error ? (
-        <ErrorNotice error={detail.error} retry={() => void detail.refetch()} />
-      ) : detail.data ? (
-        <VideoSourceDetails metadata={detail.data} />
-      ) : (
-        <p className="mt-4 text-sm text-muted-foreground">
-          {t("scraperLibrarySourceEmpty")}
-        </p>
-      )}
-    </section>
+    <Card asChild>
+      <section aria-labelledby="video-source-title">
+        <h2 id="video-source-title" className="section-title">
+          {t("scraperLibrarySourceTitle")}
+        </h2>
+        {detail.isPending ? (
+          <Loading />
+        ) : detail.error ? (
+          <ErrorNotice error={detail.error} retry={() => void detail.refetch()} />
+        ) : detail.data ? (
+          <VideoSourceDetails metadata={detail.data} />
+        ) : (
+          <p className="mt-4 text-sm text-muted-foreground">
+            {t("scraperLibrarySourceEmpty")}
+          </p>
+        )}
+      </section>
+    </Card>
   );
 }

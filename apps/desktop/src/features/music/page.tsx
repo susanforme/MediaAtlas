@@ -9,12 +9,21 @@ import {
 } from "../../api/music";
 import { Badge } from "../../components/ui/badge";
 import { Anchor, Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { toast } from "../../components/ui/sonner";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "../../components/ui/table";
 import { Empty, ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { tagFields } from "./tag-model";
 import { useTagEditor } from "./use-tag-editor";
@@ -26,19 +35,20 @@ function Albums({ albums }: { albums: MusicAlbumView[] }) {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       {albums.map((album) => (
-        <Anchor
-          className="panel block"
-          key={album.release_id}
-          href={`/music/album/${encodeURIComponent(album.release_id)}`}
-        >
-          <h2 className="font-semibold">{album.title}</h2>
-          <p>{album.artist}</p>
-          <p className="text-sm text-muted-foreground">
-            {album.country ?? t("musicUnknown")} ·{" "}
-            {album.date ?? t("musicUnknown")} · {t("musicDiscs")}:{" "}
-            {album.medium_count} · {t("musicTracks")}: {album.track_count}
-          </p>
-        </Anchor>
+        <Card asChild key={album.release_id}>
+          <Anchor
+            className="block"
+            href={`/music/album/${encodeURIComponent(album.release_id)}`}
+          >
+            <h2 className="font-semibold">{album.title}</h2>
+            <p>{album.artist}</p>
+            <p className="text-sm text-muted-foreground">
+              {album.country ?? t("musicUnknown")} ·{" "}
+              {album.date ?? t("musicUnknown")} · {t("musicDiscs")}:{" "}
+              {album.medium_count} · {t("musicTracks")}: {album.track_count}
+            </p>
+          </Anchor>
+        </Card>
       ))}
     </div>
   );
@@ -100,123 +110,127 @@ export function MusicToolsPage() {
   return (
     <div className="space-y-6">
       <PageHeading title={t("musicTools")} />
-      <section className="panel space-y-4">
-        <h2 className="font-semibold">{t("musicSearch")}</h2>
-        <form
-          className="flex flex-wrap gap-3"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (query.trim()) {
-              setSelected(undefined);
-              detail.reset();
-              add.reset();
-              search.mutate(query.trim());
-            }
-          }}
-        >
-          <Input
-            aria-label={t("musicSearchHint")}
-            placeholder={t("musicSearchHint")}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            maxLength={500}
-          />
-          <Button
-            type="submit"
-            disabled={
-              !query.trim() ||
-              search.isPending ||
-              detail.isPending ||
-              add.isPending
-            }
+      <Card asChild>
+        <section className="space-y-4">
+          <h2 className="font-semibold">{t("musicSearch")}</h2>
+          <form
+            className="flex flex-wrap gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (query.trim()) {
+                setSelected(undefined);
+                detail.reset();
+                add.reset();
+                search.mutate(query.trim());
+              }
+            }}
           >
-            {t("musicSearch")}
-          </Button>
-        </form>
-        {search.isPending && <Loading />}
-        {search.error && <ErrorNotice error={search.error} />}
-        {search.data && (
-          <div className="space-y-2">
-            <h3>{t("musicEditions")}</h3>
-            {search.data.length === 0 && <Empty title={t("noResults")} />}{" "}
-            {search.data.map((c) => (
-              <div
-                key={c.mbid}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3"
-              >
-                <div>
-                  <p className="font-medium">
-                    {c.title} — {c.artist}
-                  </p>
-                  <p>
-                    {c.country ?? t("musicUnknown")} ·{" "}
-                    {c.date ?? t("musicUnknown")} ·{" "}
-                    {c.disambiguation ?? t("musicUnknown")} · {t("musicDiscs")}:{" "}
-                    {c.medium_count} · {t("musicTracks")}: {c.track_count}
-                  </p>
-                  <small>MBID: {c.mbid}</small>
-                </div>
-                <Button
-                  variant="outline"
-                  disabled={
-                    search.isPending || detail.isPending || add.isPending
-                  }
-                  onClick={() => {
-                    setSelected(undefined);
-                    add.reset();
-                    detail.mutate(c.mbid);
-                  }}
-                >
-                  {t("musicSelect")}
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-        {detail.isPending && <Loading />}
-        {detail.error && <ErrorNotice error={detail.error} />}
-        {selected && (
-          <section aria-label={t("musicEdition")} className="space-y-3">
-            <ReleaseContents graph={selected} />
+            <Input
+              aria-label={t("musicSearchHint")}
+              placeholder={t("musicSearchHint")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              maxLength={500}
+            />
             <Button
-              disabled={add.isPending || add.isSuccess}
-              onClick={() =>
-                add.mutate(selectedMbid, {
-                  onSuccess: () => toast.success(t("musicImported")),
-                })
+              type="submit"
+              disabled={
+                !query.trim() ||
+                search.isPending ||
+                detail.isPending ||
+                add.isPending
               }
             >
-              {t("musicImport")}
+              {t("musicSearch")}
             </Button>
-          </section>
-        )}
-        {add.error && <ErrorNotice error={add.error} />}
-      </section>
+          </form>
+          {search.isPending && <Loading />}
+          {search.error && <ErrorNotice error={search.error} />}
+          {search.data && (
+            <div className="space-y-2">
+              <h3>{t("musicEditions")}</h3>
+              {search.data.length === 0 && <Empty title={t("noResults")} />}{" "}
+              {search.data.map((c) => (
+                <Card
+                  key={c.mbid}
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-lg p-3 sm:p-3"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {c.title} — {c.artist}
+                    </p>
+                    <p>
+                      {c.country ?? t("musicUnknown")} ·{" "}
+                      {c.date ?? t("musicUnknown")} ·{" "}
+                      {c.disambiguation ?? t("musicUnknown")} · {t("musicDiscs")}:{" "}
+                      {c.medium_count} · {t("musicTracks")}: {c.track_count}
+                    </p>
+                    <small>MBID: {c.mbid}</small>
+                  </div>
+                  <Button
+                    variant="outline"
+                    disabled={
+                      search.isPending || detail.isPending || add.isPending
+                    }
+                    onClick={() => {
+                      setSelected(undefined);
+                      add.reset();
+                      detail.mutate(c.mbid);
+                    }}
+                  >
+                    {t("musicSelect")}
+                  </Button>
+                </Card>
+              ))}
+            </div>
+          )}
+          {detail.isPending && <Loading />}
+          {detail.error && <ErrorNotice error={detail.error} />}
+          {selected && (
+            <section aria-label={t("musicEdition")} className="space-y-3">
+              <ReleaseContents graph={selected} />
+              <Button
+                disabled={add.isPending || add.isSuccess}
+                onClick={() =>
+                  add.mutate(selectedMbid, {
+                    onSuccess: () => toast.success(t("musicImported")),
+                  })
+                }
+              >
+                {t("musicImport")}
+              </Button>
+            </section>
+          )}
+          {add.error && <ErrorNotice error={add.error} />}
+        </section>
+      </Card>
       {albums.isPending ? (
         <Loading />
       ) : albums.error ? (
         <ErrorNotice error={albums.error} retry={() => void albums.refetch()} />
       ) : (
-        <section className="panel space-y-4">
-          <Label className="block">
-            {t("musicSelectAlbum")}
-            <Select
-              className="ml-3"
-              aria-label={t("musicSelectAlbum")}
-              value={albumId}
-              onChange={(event) => setAlbumId(event.target.value)}
-            >
-              <option value="">{t("musicSelectAlbum")}</option>
-              {albums.data?.map((album) => (
-                <option key={album.release_id} value={album.release_id}>
-                  {album.title} · {album.artist} · {album.country ?? "—"} ·{" "}
-                  {album.date ?? "—"}
-                </option>
-              ))}
-            </Select>
-          </Label>
-          {albumId && <MusicAlbumTools key={albumId} releaseId={albumId} />}
-        </section>
+        <Card asChild>
+          <section className="space-y-4">
+            <Label className="block">
+              {t("musicSelectAlbum")}
+              <Select
+                className="ml-3"
+                aria-label={t("musicSelectAlbum")}
+                value={albumId}
+                onChange={(event) => setAlbumId(event.target.value)}
+              >
+                <option value="">{t("musicSelectAlbum")}</option>
+                {albums.data?.map((album) => (
+                  <option key={album.release_id} value={album.release_id}>
+                    {album.title} · {album.artist} · {album.country ?? "—"} ·{" "}
+                    {album.date ?? "—"}
+                  </option>
+                ))}
+              </Select>
+            </Label>
+            {albumId && <MusicAlbumTools key={albumId} releaseId={albumId} />}
+          </section>
+        </Card>
       )}
     </div>
   );
@@ -273,35 +287,35 @@ function ReleaseContents({ graph }: { graph: MusicReleaseGraph }) {
               {medium.format}
             </h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th>{t("musicTrackNumber")}</th>
-                    <th>{t("musicField_title")}</th>
-                    <th>{t("musicArtist")}</th>
-                    <th>{t("musicLength")}</th>
-                    <th>{t("musicRecording")}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table className="w-full text-left text-sm">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("musicTrackNumber")}</TableHead>
+                    <TableHead>{t("musicField_title")}</TableHead>
+                    <TableHead>{t("musicArtist")}</TableHead>
+                    <TableHead>{t("musicLength")}</TableHead>
+                    <TableHead>{t("musicRecording")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {graph.tracks
                     .filter((track) => track.medium_id === medium.id)
                     .sort((a, b) => a.position - b.position)
                     .map((track) => (
-                      <tr key={track.media_item_id}>
-                        <td className="py-2">{track.number}</td>
-                        <td>{track.title}</td>
-                        <td>
+                      <TableRow key={track.media_item_id}>
+                        <TableCell className="py-2">{track.number}</TableCell>
+                        <TableCell>{track.title}</TableCell>
+                        <TableCell>
                           {track.artist_credits
                             .map((c) => `${c.credited_name}${c.join_phrase}`)
                             .join("")}
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           {track.length_ms === null
                             ? "—"
                             : `${Math.floor(track.length_ms / 60000)}:${String(Math.floor(track.length_ms / 1000) % 60).padStart(2, "0")}`}
-                        </td>
-                        <td>
+                        </TableCell>
+                        <TableCell>
                           <small>
                             {graph.identifiers.find(
                               (id) =>
@@ -315,11 +329,11 @@ function ReleaseContents({ graph }: { graph: MusicReleaseGraph }) {
                               )?.title ??
                               t("musicUnknown")}
                           </small>
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </section>
         ))}
@@ -378,99 +392,107 @@ export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
       <Anchor className="underline" href="/music">
         {t("musicBack")}
       </Anchor>
-      <section className="panel">
-        <ReleaseContents graph={graph} />
-      </section>
-      <section className="panel space-y-3">
-        <h2>{t("musicArtwork")}</h2>
-        {cover.isPending ? (
-          <Loading />
-        ) : cover.error ? (
-          <ErrorNotice error={cover.error} />
-        ) : cover.data ? (
-          <CoverFigure cover={cover.data} title={graph.release.title} />
-        ) : (
-          <p>{t("musicNoCover")}</p>
-        )}
-      </section>
-      <section className="panel space-y-3">
-        <h2 className="font-semibold">{t("musicFieldSources")}</h2>
-        {graph.field_sources?.length ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr>
-                  <th>{t("musicEntity")}</th>
-                  <th>{t("musicField")}</th>
-                  <th>{t("musicLanguage")}</th>
-                  <th>{t("musicAfter")}</th>
-                  <th>{t("musicSource")}</th>
-                  <th>{t("musicProtection")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {graph.field_sources.map((field) => (
-                  <tr key={field.id}>
-                    <td className="py-2">
-                      {graph.artists.find(
-                        (a) => a.media_item_id === field.media_item_id,
-                      )?.name ??
-                        graph.tracks.find(
-                          (tr) => tr.media_item_id === field.media_item_id,
-                        )?.title ??
-                        graph.recordings.find(
-                          (r) => r.media_item_id === field.media_item_id,
-                        )?.title ??
-                        (field.media_item_id === graph.release.media_item_id
-                          ? graph.release.title
-                          : graph.release_group.title)}
-                    </td>
-                    <td>
-                      {t(`musicField_${field.field_key}`, {
-                        defaultValue: field.field_key,
-                      })}
-                    </td>
-                    <td>{field.locale ?? "—"}</td>
-                    <td>
-                      {typeof field.value === "string"
-                        ? field.value
-                        : JSON.stringify(field.value)}
-                    </td>
-                    <td>
-                      {field.provider_id ?? t("musicManual")}
-                      {field.source_url && (
-                        <Anchor
-                          href={field.source_url}
-                          className="ml-2 underline"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          {t("musicSource")}
-                        </Anchor>
-                      )}
-                    </td>
-                    <td>
-                      {t(
-                        field.is_locked
-                          ? "musicLocked"
-                          : field.is_user_modified
-                            ? "musicUserModified"
-                            : "musicProviderValue",
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <p>{t("musicNoSources")}</p>
-        )}
-      </section>
-      <section className="panel space-y-3">
-        <h2 className="font-semibold">{t("musicLocalFile")}</h2>
-        <LocalAudioFiles graph={graph} />
-      </section>
+      <Card asChild>
+        <section>
+          <ReleaseContents graph={graph} />
+        </section>
+      </Card>
+      <Card asChild>
+        <section className="space-y-3">
+          <h2>{t("musicArtwork")}</h2>
+          {cover.isPending ? (
+            <Loading />
+          ) : cover.error ? (
+            <ErrorNotice error={cover.error} />
+          ) : cover.data ? (
+            <CoverFigure cover={cover.data} title={graph.release.title} />
+          ) : (
+            <p>{t("musicNoCover")}</p>
+          )}
+        </section>
+      </Card>
+      <Card asChild>
+        <section className="space-y-3">
+          <h2 className="font-semibold">{t("musicFieldSources")}</h2>
+          {graph.field_sources?.length ? (
+            <div className="overflow-x-auto">
+              <Table className="w-full text-left text-sm">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("musicEntity")}</TableHead>
+                    <TableHead>{t("musicField")}</TableHead>
+                    <TableHead>{t("musicLanguage")}</TableHead>
+                    <TableHead>{t("musicAfter")}</TableHead>
+                    <TableHead>{t("musicSource")}</TableHead>
+                    <TableHead>{t("musicProtection")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {graph.field_sources.map((field) => (
+                    <TableRow key={field.id}>
+                      <TableCell className="py-2">
+                        {graph.artists.find(
+                          (a) => a.media_item_id === field.media_item_id,
+                        )?.name ??
+                          graph.tracks.find(
+                            (tr) => tr.media_item_id === field.media_item_id,
+                          )?.title ??
+                          graph.recordings.find(
+                            (r) => r.media_item_id === field.media_item_id,
+                          )?.title ??
+                          (field.media_item_id === graph.release.media_item_id
+                            ? graph.release.title
+                            : graph.release_group.title)}
+                      </TableCell>
+                      <TableCell>
+                        {t(`musicField_${field.field_key}`, {
+                          defaultValue: field.field_key,
+                        })}
+                      </TableCell>
+                      <TableCell>{field.locale ?? "—"}</TableCell>
+                      <TableCell>
+                        {typeof field.value === "string"
+                          ? field.value
+                          : JSON.stringify(field.value)}
+                      </TableCell>
+                      <TableCell>
+                        {field.provider_id ?? t("musicManual")}
+                        {field.source_url && (
+                          <Anchor
+                            href={field.source_url}
+                            className="ml-2 underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            {t("musicSource")}
+                          </Anchor>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {t(
+                          field.is_locked
+                            ? "musicLocked"
+                            : field.is_user_modified
+                              ? "musicUserModified"
+                              : "musicProviderValue",
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p>{t("musicNoSources")}</p>
+          )}
+        </section>
+      </Card>
+      <Card asChild>
+        <section className="space-y-3">
+          <h2 className="font-semibold">{t("musicLocalFile")}</h2>
+          <LocalAudioFiles graph={graph} />
+        </section>
+      </Card>
       <Anchor className="underline" href="/music/tools">
         {t("musicTools")}
       </Anchor>
@@ -525,31 +547,33 @@ export function MusicAlbumTools({ releaseId }: { releaseId: string }) {
       {" "}
       <MusicCoverTools graph={graph} />
       <LocalLink graph={graph} />
-      <section className="panel space-y-4">
-        <h2 className="text-lg font-semibold">{t("musicTags")}</h2>
-        {graph.files.length ? (
-          <Label className="block">
-            {t("musicLocalFile")}
-            <Select
-              className="ml-3"
-              value={file}
-              onChange={(e) => setFile(e.target.value)}
-            >
-              <option value="">{t("musicPickFile")}</option>
-              {graph.files.map((f) => (
-                <option key={f.file_id} value={f.file_id}>
-                  {f.relative_path}
-                </option>
-              ))}
-            </Select>
-          </Label>
-        ) : (
-          <p>{t("musicNoFiles")}</p>
-        )}
-        {file && graph.files.some((f) => f.file_id === file) && (
-          <TagEditor key={file} fileId={file} graph={graph} />
-        )}
-      </section>
+      <Card asChild>
+        <section className="space-y-4">
+          <h2 className="text-lg font-semibold">{t("musicTags")}</h2>
+          {graph.files.length ? (
+            <Label className="block">
+              {t("musicLocalFile")}
+              <Select
+                className="ml-3"
+                value={file}
+                onChange={(e) => setFile(e.target.value)}
+              >
+                <option value="">{t("musicPickFile")}</option>
+                {graph.files.map((f) => (
+                  <option key={f.file_id} value={f.file_id}>
+                    {f.relative_path}
+                  </option>
+                ))}
+              </Select>
+            </Label>
+          ) : (
+            <p>{t("musicNoFiles")}</p>
+          )}
+          {file && graph.files.some((f) => f.file_id === file) && (
+            <TagEditor key={file} fileId={file} graph={graph} />
+          )}
+        </section>
+      </Card>
     </div>
   );
 }
@@ -587,20 +611,22 @@ function MusicCoverTools({ graph }: { graph: MusicReleaseGraph }) {
   });
   if (!mbid) return null;
   return (
-    <section className="panel space-y-3">
-      <h2>{t("musicArtwork")}</h2>
-      <Button
-        variant="outline"
-        disabled={cover.isPending}
-        onClick={() => cover.mutate()}
-      >
-        {t("musicLoadCover")}
-      </Button>
-      {cover.data && (
-        <CoverFigure cover={cover.data} title={graph.release.title} />
-      )}{" "}
-      {cover.error && <ErrorNotice error={cover.error} />}
-    </section>
+    <Card asChild>
+      <section className="space-y-3">
+        <h2>{t("musicArtwork")}</h2>
+        <Button
+          variant="outline"
+          disabled={cover.isPending}
+          onClick={() => cover.mutate()}
+        >
+          {t("musicLoadCover")}
+        </Button>
+        {cover.data && (
+          <CoverFigure cover={cover.data} title={graph.release.title} />
+        )}{" "}
+        {cover.error && <ErrorNotice error={cover.error} />}
+      </section>
+    </Card>
   );
 }
 function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
@@ -626,47 +652,49 @@ function LocalLink({ graph }: { graph: MusicReleaseGraph }) {
     },
   });
   return (
-    <section className="panel space-y-3">
-      <p>{t("musicLinkHelp")}</p>
-      <div className="flex flex-wrap gap-3">
-        <Select
-          aria-label={t("musicChooseTrack")}
-          value={track}
-          onChange={(e) => setTrack(e.target.value)}
-          disabled={link.isPending}
-        >
-          <option value="">{t("musicChooseTrack")}</option>
-          {graph.tracks.map((tr) => (
-            <option key={tr.media_item_id} value={tr.media_item_id}>
-              {graph.media.find((m) => m.id === tr.medium_id)?.position}-
-              {tr.number} {tr.title}
-            </option>
-          ))}
-        </Select>
-        <Select
-          aria-label={t("musicChooseFile")}
-          value={file}
-          onChange={(e) => setFile(e.target.value)}
-          disabled={local.isPending || link.isPending}
-        >
-          <option value="">{t("musicChooseFile")}</option>
-          {local.data?.map((f) => (
-            <option key={f.file_id} value={f.file_id}>
-              {f.relative_path}
-            </option>
-          ))}
-        </Select>
-        <Button
-          disabled={!track || !file || link.isPending}
-          onClick={() => link.mutate()}
-        >
-          {t("musicLink")}
-        </Button>
-      </div>
-      {[local.error, link.error].filter(Boolean).map((e, i) => (
-        <ErrorNotice key={String(i)} error={e} />
-      ))}
-    </section>
+    <Card asChild>
+      <section className="space-y-3">
+        <p>{t("musicLinkHelp")}</p>
+        <div className="flex flex-wrap gap-3">
+          <Select
+            aria-label={t("musicChooseTrack")}
+            value={track}
+            onChange={(e) => setTrack(e.target.value)}
+            disabled={link.isPending}
+          >
+            <option value="">{t("musicChooseTrack")}</option>
+            {graph.tracks.map((tr) => (
+              <option key={tr.media_item_id} value={tr.media_item_id}>
+                {graph.media.find((m) => m.id === tr.medium_id)?.position}-
+                {tr.number} {tr.title}
+              </option>
+            ))}
+          </Select>
+          <Select
+            aria-label={t("musicChooseFile")}
+            value={file}
+            onChange={(e) => setFile(e.target.value)}
+            disabled={local.isPending || link.isPending}
+          >
+            <option value="">{t("musicChooseFile")}</option>
+            {local.data?.map((f) => (
+              <option key={f.file_id} value={f.file_id}>
+                {f.relative_path}
+              </option>
+            ))}
+          </Select>
+          <Button
+            disabled={!track || !file || link.isPending}
+            onClick={() => link.mutate()}
+          >
+            {t("musicLink")}
+          </Button>
+        </div>
+        {[local.error, link.error].filter(Boolean).map((e, i) => (
+          <ErrorNotice key={String(i)} error={e} />
+        ))}
+      </section>
+    </Card>
   );
 }
 export function TagEditor({
@@ -709,18 +737,18 @@ export function TagEditor({
       {tags.data && (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr>
-                  <th>{t("musicField")}</th>
-                  <th>{t("musicBefore")}</th>
-                  <th>{t("musicAfter")}</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table className="w-full text-left text-sm">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("musicField")}</TableHead>
+                  <TableHead>{t("musicBefore")}</TableHead>
+                  <TableHead>{t("musicAfter")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {tagFields.map((f) => (
-                  <tr key={f}>
-                    <td>
+                  <TableRow key={f}>
+                    <TableCell>
                       <Label>
                         <Checkbox
                           aria-label={t("musicSelectField", {
@@ -738,9 +766,9 @@ export function TagEditor({
                         />
                         {t(`musicField_${f}`)}
                       </Label>
-                    </td>
-                    <td className="p-2">{tags.data.tags[f] ?? "—"}</td>
-                    <td>
+                    </TableCell>
+                    <TableCell className="p-2">{tags.data.tags[f] ?? "—"}</TableCell>
+                    <TableCell>
                       <Input
                         aria-label={t(`musicField_${f}`)}
                         value={values[f]}
@@ -750,11 +778,11 @@ export function TagEditor({
                           setValues({ ...values, [f]: e.target.value })
                         }
                       />
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
           <Button
             disabled={
@@ -773,57 +801,56 @@ export function TagEditor({
         </>
       )}
       {preview && (
-        <section
-          className="space-y-3 rounded-lg border p-4"
-          aria-label={t("musicPreview")}
-        >
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr>
-                <th>{t("musicField")}</th>
-                <th>{t("musicBefore")}</th>
-                <th>{t("musicAfter")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {preview.changes.map((c) => (
-                <tr key={c.field}>
-                  <td>
-                    {t(`musicField_${c.field}`, { defaultValue: c.field })}
-                  </td>
-                  <td>{c.before ?? "—"}</td>
-                  <td>{c.after ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <Label className="block">
-            <Checkbox
-              checked={confirmed}
-              disabled={busy}
-              onChange={(e) => setConfirmed(e.target.checked)}
-            />
-            {t(restore ? "musicRestoreConfirm" : "musicWriteConfirm")}
-          </Label>
-          <div className="flex gap-3">
-            <Button
-              disabled={!confirmed || busy}
-              onClick={() => write.mutate()}
-            >
-              {t(restore ? "musicRestoreExecute" : "musicWrite")}
-            </Button>
-            <Button
-              variant="outline"
-              disabled={busy}
-              onClick={() => {
-                setPreview(undefined);
-                setConfirmed(false);
-              }}
-            >
-              {t("musicCancel")}
-            </Button>
-          </div>
-        </section>
+        <Card asChild className="space-y-3 rounded-lg p-4 sm:p-4">
+          <section aria-label={t("musicPreview")}>
+            <Table className="w-full text-left text-sm">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t("musicField")}</TableHead>
+                  <TableHead>{t("musicBefore")}</TableHead>
+                  <TableHead>{t("musicAfter")}</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {preview.changes.map((c) => (
+                  <TableRow key={c.field}>
+                    <TableCell>
+                      {t(`musicField_${c.field}`, { defaultValue: c.field })}
+                    </TableCell>
+                    <TableCell>{c.before ?? "—"}</TableCell>
+                    <TableCell>{c.after ?? "—"}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <Label className="block">
+              <Checkbox
+                checked={confirmed}
+                disabled={busy}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />
+              {t(restore ? "musicRestoreConfirm" : "musicWriteConfirm")}
+            </Label>
+            <div className="flex gap-3">
+              <Button
+                disabled={!confirmed || busy}
+                onClick={() => write.mutate()}
+              >
+                {t(restore ? "musicRestoreExecute" : "musicWrite")}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={busy}
+                onClick={() => {
+                  setPreview(undefined);
+                  setConfirmed(false);
+                }}
+              >
+                {t("musicCancel")}
+              </Button>
+            </div>
+          </section>
+        </Card>
       )}
       {operation && (
         <div className="space-y-3">

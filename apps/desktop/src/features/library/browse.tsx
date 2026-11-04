@@ -6,6 +6,14 @@ import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "../../components/ui/table";
 import type { LibrarySearch } from "./browse-model";
 import { LibraryActivity } from "./library-activity";
 import { LibraryFilters } from "./library-filters";
@@ -172,44 +180,42 @@ export function LibraryPage({
           )}
         </>
       ) : search.view === "list" ? (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("titleLabel")}</th>
-                <th>{t("type")}</th>
-                <th>{t("year")}</th>
-                <th>{t("health")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {media.data.items.map((card) => (
-                <tr key={card.media.id}>
-                  <td>
-                    <NativeOpen mediaId={card.media.id} adult={adult}>
-                      {card.media.title}
-                    </NativeOpen>
-                    <Button asChild variant="ghost">
-                      <Link
-                        to="/media/$mediaId"
-                        params={{ mediaId: card.media.id }}
-                        search={adult ? { kind: "adult_video" } : {}}
-                        className="font-medium text-ring"
-                      >
-                        {t("detailsAction")}
-                      </Link>
-                    </Button>
-                  </td>
-                  <td>{t(`kind_${card.media.kind}`)}</td>
-                  <td>{card.media.year ? card.media.year : t("none")}</td>
-                  <td>
-                    <HealthBadges health={card.health} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("titleLabel")}</TableHead>
+              <TableHead>{t("type")}</TableHead>
+              <TableHead>{t("year")}</TableHead>
+              <TableHead>{t("health")}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {media.data.items.map((card) => (
+              <TableRow key={card.media.id}>
+                <TableCell>
+                  <NativeOpen mediaId={card.media.id} adult={adult}>
+                    {card.media.title}
+                  </NativeOpen>
+                  <Button asChild variant="ghost">
+                    <Link
+                      to="/media/$mediaId"
+                      params={{ mediaId: card.media.id }}
+                      search={adult ? { kind: "adult_video" } : {}}
+                      className="font-medium text-ring"
+                    >
+                      {t("detailsAction")}
+                    </Link>
+                  </Button>
+                </TableCell>
+                <TableCell>{t(`kind_${card.media.kind}`)}</TableCell>
+                <TableCell>{card.media.year ? card.media.year : t("none")}</TableCell>
+                <TableCell>
+                  <HealthBadges health={card.health} />
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       ) : (
         <div className="poster-grid library-poster-grid">
           {media.data.items.map((card) => (

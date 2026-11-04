@@ -3,13 +3,16 @@ import {
   FolderOpen,
   Layers3,
   ListTodo,
+  Moon,
   Search,
   Settings2,
   ShieldCheck,
+  Sun,
   Wrench,
 } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { setTheme, useTheme } from "../../lib/theme";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select } from "../ui/select";
@@ -79,6 +82,7 @@ function Sidebar({ chrome }: { chrome: WindowChrome }) {
 
 function Toolbar({ chrome }: { chrome: WindowChrome }) {
   const { t, i18n } = useTranslation();
+  const theme = useTheme();
   const pathname = useLocation({ select: (location) => location.pathname });
   const navigate = useNavigate();
   const [query, setQuery] = useState("");
@@ -122,6 +126,18 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
       )}
       <div className="app-toolbar-actions" data-tauri-drag-region="false">
         <ShieldCheck className="app-local-icon" size={19} aria-hidden="true" />
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t(theme === "dark" ? "switchToLight" : "switchToDark")}
+          onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        >
+          {theme === "dark" ? (
+            <Sun size={19} aria-hidden="true" />
+          ) : (
+            <Moon size={19} aria-hidden="true" />
+          )}
+        </Button>
         <Select
           className="app-language"
           aria-label={t("language")}

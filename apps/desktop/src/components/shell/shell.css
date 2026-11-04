@@ -13,7 +13,7 @@
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid var(--color-border);
-  background: linear-gradient(165deg, #17171f, #121219 80%);
+  background: var(--color-sidebar);
 }
 .app-brand {
   display: flex;
@@ -31,7 +31,7 @@
   place-items: center;
   border-radius: 11px;
   background: var(--color-primary);
-  color: white;
+  color: var(--color-primary-foreground);
 }
 .app-brand-name {
   font-size: 21px;
@@ -95,7 +95,7 @@
   color: var(--color-foreground);
 }
 .app-nav-item.active {
-  background: #393577;
+  background: var(--sidebar-active);
   color: var(--color-foreground);
 }
 .app-nav-item[data-section-active="true"] svg,
@@ -104,10 +104,10 @@
 }
 .app-nav-item:hover {
   color: var(--color-foreground);
-  background: #ffffff08;
+  background: var(--color-hover);
 }
 .app-nav-item.active:hover {
-  background: #443f80;
+  background: var(--sidebar-active-hover);
 }
 .app-sidebar-bottom {
   flex-shrink: 0;
@@ -134,7 +134,10 @@
   align-items: center;
   gap: 24px;
   padding: 0 40px;
-  background: linear-gradient(#101016ed, #101016b3);
+  background: linear-gradient(
+    color-mix(in srgb, var(--color-background) 93%, transparent),
+    color-mix(in srgb, var(--color-background) 80%, transparent)
+  );
   backdrop-filter: blur(16px);
 }
 .app-toolbar-search {
@@ -149,14 +152,14 @@
   padding-left: 43px;
   padding-right: 44px;
   border-radius: 24px;
-  background: #ffffff0a;
+  background: var(--color-muted);
   backdrop-filter: blur(20px);
 }
 .app-search-icon {
   position: absolute;
   left: 16px;
   z-index: 1;
-  color: #c8c5d1;
+  color: var(--color-muted-foreground);
   pointer-events: none;
 }
 .app-toolbar-search > [data-slot="button"] {
@@ -170,13 +173,13 @@
 .app-toolbar-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 8px;
   margin-left: auto;
   color: var(--color-muted-foreground);
 }
 .app-language {
   width: 112px;
-  background-color: #ffffff08;
+  background-color: var(--color-muted);
   border-color: transparent;
   border-radius: 22px;
   font-size: 12px;
@@ -246,8 +249,8 @@
     padding: 12px 6px;
   }
   .app-toolbar {
-    gap: 10px;
-    padding-inline: 16px;
+    gap: 6px;
+    padding-inline: 8px;
   }
   .app-toolbar-actions {
     gap: 0;
@@ -256,7 +259,7 @@
     display: none;
   }
   .app-language {
-    width: 96px;
+    width: 84px;
     padding-left: 10px;
     padding-right: 32px;
     font-size: 11px;

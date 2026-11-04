@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { RootView } from "../../api/library";
 import type { AuthMethod, AuthStorage } from "../../api/provider-auth";
+import { Alert } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
@@ -35,7 +38,9 @@ function PublicSourceEditor({
   const workflow = useProviderSetup(providerId, setup, root, onSetupComplete);
   return (
     <>
-      <p className="notice mt-4">{t("setupPublicProvider")}</p>
+      <Alert asChild>
+        <p className="mt-4">{t("setupPublicProvider")}</p>
+      </Alert>
       <SourceSetupActions
         workflow={workflow}
         setup={setup}
@@ -89,24 +94,28 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
   if (!needsSecret)
     return (
       <>
-        <p className="notice mt-4">{t("providerAuthPublic")}</p>
+        <Alert asChild>
+          <p className="mt-4">{t("providerAuthPublic")}</p>
+        </Alert>
         <SourceSetupActions workflow={workflow} setup={setup} credentialReady />
       </>
     );
   return (
     <div className="mt-4">
-      <p className="badge" role="status">
+      <Badge variant="secondary" role="status">
         {status.data.configured
           ? t("providerAuthConfigured")
           : t("providerAuthMissing")}
-      </p>
+      </Badge>
       {!status.data.configured &&
         status.data.status === "credentials_unavailable" && (
-          <p className="notice mt-3">
-            {t("providerFailure_credentials_unavailable", {
-              defaultValue: t("providerAuthSaveFailed"),
-            })}
-          </p>
+          <Alert asChild>
+            <p className="mt-3">
+              {t("providerFailure_credentials_unavailable", {
+                defaultValue: t("providerAuthSaveFailed"),
+              })}
+            </p>
+          </Alert>
         )}
       {status.data.configured && (
         <p className="mt-2 text-sm text-muted-foreground">
@@ -120,13 +129,15 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
         </p>
       )}
       {status.data.status === "cleanup_pending" && (
-        <p className="notice mt-3" role="status">
-          {t(
-            status.data.configured
-              ? "providerAuthCleanupPending"
-              : "providerAuthCleanupDisabled",
-          )}
-        </p>
+        <Alert asChild>
+          <p className="mt-3" role="status">
+            {t(
+              status.data.configured
+                ? "providerAuthCleanupPending"
+                : "providerAuthCleanupDisabled",
+            )}
+          </p>
+        </Alert>
       )}
       <Button
         variant="outline"
@@ -241,9 +252,11 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
           </p>
         )}
         {invalid && (
-          <p className="notice error-notice" role="alert">
-            {t("providerAuthInvalid")}
-          </p>
+          <Alert asChild variant="destructive">
+            <p role="alert">
+              {t("providerAuthInvalid")}
+            </p>
+          </Alert>
         )}
         <div className="flex flex-wrap gap-3">
           <Button
@@ -282,13 +295,15 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
         }
       />
       {outcome && (
-        <p className="notice error-notice mt-4" role="alert">
-          {t(
-            outcome === "save_failed"
-              ? "providerAuthSaveFailed"
-              : "providerAuthClearFailed",
-          )}
-        </p>
+        <Alert asChild variant="destructive">
+          <p className="mt-4" role="alert">
+            {t(
+              outcome === "save_failed"
+                ? "providerAuthSaveFailed"
+                : "providerAuthClearFailed",
+            )}
+          </p>
+        </Alert>
       )}
       {error !== undefined && (
         <div className="mt-3">
@@ -340,51 +355,53 @@ function ProviderAuthForm({
   const selectedProvider =
     !includeAdult && ["dmm", "wikidata"].includes(provider) ? "tmdb" : provider;
   return (
-    <section className="panel" aria-labelledby="provider-auth-title">
-      <h2 id="provider-auth-title" className="section-title">
-        {t("providerAuthTitle")}
-      </h2>
-      {root && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          {t("setupForRoot", { name: root.name })}
-        </p>
-      )}
-      <Label className="filter-field">
-        <span>{t("providerAuthProvider")}</span>
-        <Select
-          value={selectedProvider}
-          onChange={(event) => setProvider(event.target.value)}
-        >
-          <option value="tmdb">TMDB</option>
-          <option value="anilist">AniList</option>
-          <option value="wikipedia.html">Wikipedia</option>
-          <option value="musicbrainz">MusicBrainz</option>
-          <option value="coverartarchive">Cover Art Archive</option>
-          {includeAdult && (
-            <>
-              <option value="dmm">DMM / FANZA</option>
-              <option value="wikidata">{t("providerAuthWikidata")}</option>
-            </>
-          )}
-        </Select>
-      </Label>
-      {["musicbrainz", "coverartarchive"].includes(selectedProvider) ? (
-        <PublicSourceEditor
-          key={selectedProvider}
-          providerId={selectedProvider}
-          setup={setup}
-          root={root}
-          onSetupComplete={onSetupComplete}
-        />
-      ) : (
-        <AuthEditor
-          key={selectedProvider}
-          providerId={selectedProvider}
-          setup={setup}
-          root={root}
-          onSetupComplete={onSetupComplete}
-        />
-      )}
-    </section>
+    <Card asChild>
+      <section aria-labelledby="provider-auth-title">
+        <h2 id="provider-auth-title" className="section-title">
+          {t("providerAuthTitle")}
+        </h2>
+        {root && (
+          <p className="mb-4 text-sm text-muted-foreground">
+            {t("setupForRoot", { name: root.name })}
+          </p>
+        )}
+        <Label className="filter-field">
+          <span>{t("providerAuthProvider")}</span>
+          <Select
+            value={selectedProvider}
+            onChange={(event) => setProvider(event.target.value)}
+          >
+            <option value="tmdb">TMDB</option>
+            <option value="anilist">AniList</option>
+            <option value="wikipedia.html">Wikipedia</option>
+            <option value="musicbrainz">MusicBrainz</option>
+            <option value="coverartarchive">Cover Art Archive</option>
+            {includeAdult && (
+              <>
+                <option value="dmm">DMM / FANZA</option>
+                <option value="wikidata">{t("providerAuthWikidata")}</option>
+              </>
+            )}
+          </Select>
+        </Label>
+        {["musicbrainz", "coverartarchive"].includes(selectedProvider) ? (
+          <PublicSourceEditor
+            key={selectedProvider}
+            providerId={selectedProvider}
+            setup={setup}
+            root={root}
+            onSetupComplete={onSetupComplete}
+          />
+        ) : (
+          <AuthEditor
+            key={selectedProvider}
+            providerId={selectedProvider}
+            setup={setup}
+            root={root}
+            onSetupComplete={onSetupComplete}
+          />
+        )}
+      </section>
+    </Card>
   );
 }

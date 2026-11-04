@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { ErrorNotice } from "../library/shared";
 import type { ProviderSetupSearch } from "./setup-search";
@@ -50,9 +51,11 @@ export function SourceSetupActions({
         />
       ) : workflow.unavailable ? (
         <div className="space-y-3">
-          <p className="notice" role="alert">
-            {t(workflow.incompatible ? "setupWrongType" : "setupUnavailable")}
-          </p>
+          <Alert asChild>
+            <p role="alert">
+              {t(workflow.incompatible ? "setupWrongType" : "setupUnavailable")}
+            </p>
+          </Alert>
           <Button
             variant="outline"
             disabled={workflow.snapshot.isFetching}
@@ -83,13 +86,15 @@ export function SourceSetupActions({
         </>
       )}
       {workflow.failurePhase && (
-        <p role="alert" className="notice error-notice">
-          {t(
-            workflow.failurePhase === "start"
-              ? "setupStartFailed"
-              : "setupEnableFailed",
-          )}
-        </p>
+        <Alert asChild variant="destructive">
+          <p role="alert">
+            {t(
+              workflow.failurePhase === "start"
+                ? "setupStartFailed"
+                : "setupEnableFailed",
+            )}
+          </p>
+        </Alert>
       )}
       {workflow.error !== undefined && <ErrorNotice error={workflow.error} />}
     </div>

@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import type { SearchPreview } from "../../api/scraper";
+import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
 import { searchRecoveries } from "./recovery-model";
 import "./recovery-translations";
@@ -39,62 +40,63 @@ export function ScraperRecovery({
         index,
     );
   return (
-    <section
-      className="notice mt-4 space-y-3"
-      role={
-        recoveries.every((item) => item.kind === "no_results")
-          ? "status"
-          : "alert"
-      }
-    >
-      {recoveries.map((item) => {
-        const name =
-          item.providerId && Object.hasOwn(providerNames, item.providerId)
-            ? providerNames[item.providerId]
-            : undefined;
-        return (
-          <p key={`${item.kind}:${item.providerId ?? ""}`}>
-            {name && <span>{name}: </span>}
-            {t(`scraperRecovery_${item.kind}`)}
-          </p>
-        );
-      })}
-      {!desktop &&
-        (onEdit || onRetry || (onConfigure && configure.length > 0)) && (
-          <div className="flex flex-wrap gap-2">
-            {onConfigure &&
-              configure.map((item) => (
+    <Alert asChild>
+      <section
+        className="mt-4 space-y-3"
+        role={
+          recoveries.every((item) => item.kind === "no_results")
+            ? "status"
+            : "alert"
+        }>
+        {recoveries.map((item) => {
+          const name =
+            item.providerId && Object.hasOwn(providerNames, item.providerId)
+              ? providerNames[item.providerId]
+              : undefined;
+          return (
+            <p key={`${item.kind}:${item.providerId ?? ""}`}>
+              {name && <span>{name}: </span>}
+              {t(`scraperRecovery_${item.kind}`)}
+            </p>
+          );
+        })}
+        {!desktop &&
+          (onEdit || onRetry || (onConfigure && configure.length > 0)) && (
+            <div className="flex flex-wrap gap-2">
+              {onConfigure &&
+                configure.map((item) => (
+                  <Button
+                    key={item.providerId ?? "source"}
+                    type="button"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => onConfigure(item.providerId)}
+                  >
+                    {t("scraperRecoveryConfigure")}
+                    {item.providerId &&
+                    Object.hasOwn(providerNames, item.providerId)
+                      ? ` · ${providerNames[item.providerId]}`
+                      : ""}
+                  </Button>
+                ))}
+              {onEdit && (
                 <Button
-                  key={item.providerId ?? "source"}
                   type="button"
                   variant="outline"
                   disabled={busy}
-                  onClick={() => onConfigure(item.providerId)}
+                  onClick={onEdit}
                 >
-                  {t("scraperRecoveryConfigure")}
-                  {item.providerId &&
-                  Object.hasOwn(providerNames, item.providerId)
-                    ? ` · ${providerNames[item.providerId]}`
-                    : ""}
+                  {t("scraperRecoveryEdit")}
                 </Button>
-              ))}
-            {onEdit && (
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={onEdit}
-              >
-                {t("scraperRecoveryEdit")}
-              </Button>
-            )}
-            {onRetry && (
-              <Button type="button" disabled={busy} onClick={onRetry}>
-                {t("scraperRecoveryRetry")}
-              </Button>
-            )}
-          </div>
-        )}
-    </section>
+              )}
+              {onRetry && (
+                <Button type="button" disabled={busy} onClick={onRetry}>
+                  {t("scraperRecoveryRetry")}
+                </Button>
+              )}
+            </div>
+          )}
+      </section>
+    </Alert>
   );
 }

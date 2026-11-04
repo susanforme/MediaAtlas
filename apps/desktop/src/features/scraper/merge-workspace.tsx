@@ -3,9 +3,18 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Label } from "../../components/ui/label";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "../../components/ui/table";
 import {
   Tabs,
   TabsContent,
@@ -54,7 +63,7 @@ function FieldChoice({
 }) {
   const { t } = useTranslation();
   return (
-    <Label className="flex min-w-0 items-start gap-3 rounded-lg p-2 hover:bg-white/3">
+    <Label className="flex min-w-0 items-start gap-3 rounded-lg p-2 hover:bg-accent">
       <Checkbox
         className="mt-1"
         checked={row.selected}
@@ -135,56 +144,54 @@ export function MetadataMergeWorkspace({
     );
   const count = projection.counts;
   return (
-    <section
-      aria-label={t("mergeTitle")}
-      className="overflow-clip rounded-2xl border border-border bg-surface/50"
-    >
-      <div className="grid min-w-0 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.65fr)]">
-        <div className="min-w-0 border-b border-border lg:border-r lg:border-b-0">
-          <section
-            className="space-y-4 border-b border-border p-5"
-            aria-labelledby="merge-sources"
-          >
-            <h2
-              id="merge-sources"
-              className="flex items-center gap-3 font-semibold"
+    <Card asChild className="overflow-clip rounded-2xl bg-surface/50 p-0 sm:p-0">
+      <section aria-label={t("mergeTitle")}>
+        <div className="grid min-w-0 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.65fr)]">
+          <div className="min-w-0 border-b border-border lg:border-r lg:border-b-0">
+            <section
+              className="space-y-4 border-b border-border p-5"
+              aria-labelledby="merge-sources"
             >
-              <span className="text-xs text-muted-foreground">01</span>
-              {t("mergeSources")}
-            </h2>
-            <div className="space-y-1 border-l-2 border-border pl-3 text-sm">
-              <h3 className="text-muted-foreground">{t("mergeBase")}</h3>
-              <p className="break-words font-medium">
-                {current?.media.title ?? t("scraperAnonymous")}
-              </p>
-              {current?.metadata_values.length ? (
-                <p className="text-xs text-muted-foreground">
-                  {[
-                    ...new Set(
-                      current.metadata_values
-                        .map((field) => field.provider_id)
-                        .filter(Boolean),
-                    ),
-                  ].join(" · ")}
+              <h2
+                id="merge-sources"
+                className="flex items-center gap-3 font-semibold"
+              >
+                <span className="text-xs text-muted-foreground">01</span>
+                {t("mergeSources")}
+              </h2>
+              <div className="space-y-1 border-l-2 border-border pl-3 text-sm">
+                <h3 className="text-muted-foreground">{t("mergeBase")}</h3>
+                <p className="break-words font-medium">
+                  {current?.media.title ?? t("scraperAnonymous")}
                 </p>
-              ) : null}
-            </div>
-            <div className="space-y-1 border-l-2 border-primary pl-3 text-sm">
-              <h3 className="text-muted-foreground">{t("mergeSupplement")}</h3>
-              <p className="font-medium">
-                {metadata.data.identity.provider_id}
-              </p>
-              <p className="break-all text-xs text-muted-foreground">
-                {metadata.data.identity.source_url}
-              </p>
-            </div>
-            <Details className="border-0 p-0">
-              <DetailsSummary className="text-xs text-muted-foreground">
-                {t("mergeSourceDetails")}
-              </DetailsSummary>
-              <VideoSourceDetails metadata={metadata} />
-            </Details>
-          </section>
+                {current?.metadata_values.length ? (
+                  <p className="text-xs text-muted-foreground">
+                    {[
+                      ...new Set(
+                        current.metadata_values
+                          .map((field) => field.provider_id)
+                          .filter(Boolean),
+                      ),
+                    ].join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+              <div className="space-y-1 border-l-2 border-primary pl-3 text-sm">
+                <h3 className="text-muted-foreground">{t("mergeSupplement")}</h3>
+                <p className="font-medium">
+                  {metadata.data.identity.provider_id}
+                </p>
+                <p className="break-all text-xs text-muted-foreground">
+                  {metadata.data.identity.source_url}
+                </p>
+              </div>
+              <Details className="border-0 p-0">
+                <DetailsSummary className="text-xs text-muted-foreground">
+                  {t("mergeSourceDetails")}
+                </DetailsSummary>
+                <VideoSourceDetails metadata={metadata} />
+              </Details>
+            </section>
           <section
             className="space-y-3 border-b border-border p-5"
             aria-labelledby="merge-fields"
@@ -364,21 +371,23 @@ export function MetadataMergeWorkspace({
                 </div>
               </div>
               {overview && (
-                <article className="mt-6 rounded-xl border border-border p-4">
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-medium">
-                      {t(`scraperField_${overview.key}`)}
-                    </h3>
-                    {overviewRow && (
-                      <Badge variant="outline">
-                        {t(`mergeResult_${overviewRow.result}`)}
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="whitespace-pre-wrap break-words text-sm leading-7 text-muted-foreground">
-                    {value(overview.value)}
-                  </p>
-                </article>
+                <Card asChild className="mt-6 rounded-xl p-4 sm:p-4">
+                  <article>
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <h3 className="text-sm font-medium">
+                        {t(`scraperField_${overview.key}`)}
+                      </h3>
+                      {overviewRow && (
+                        <Badge variant="outline">
+                          {t(`mergeResult_${overviewRow.result}`)}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-7 text-muted-foreground">
+                      {value(overview.value)}
+                    </p>
+                  </article>
+                </Card>
               )}
               <div className="mt-5 grid gap-4 sm:grid-cols-2">
                 {projection.fields
@@ -462,22 +471,22 @@ export function MetadataMergeWorkspace({
               {t("mergeChanges")}
             </h2>
             <div className="overflow-x-auto">
-              <table className="w-full table-fixed text-left text-sm">
-                <thead className="text-xs text-muted-foreground">
-                  <tr>
-                    <th className="w-1/5 py-3 pr-3">{t("scraperField")}</th>
-                    <th className="w-1/4 py-3 pr-3">{t("scraperOld")}</th>
-                    <th className="py-3 pr-3">{t("mergeAfter")}</th>
-                    <th className="w-20 py-3">{t("mergeResult")}</th>
-                  </tr>
-                </thead>
-                <tbody>
+              <Table className="w-full table-fixed text-left text-sm">
+                <TableHeader className="text-xs text-muted-foreground">
+                  <TableRow>
+                    <TableHead className="w-1/5 py-3 pr-3">{t("scraperField")}</TableHead>
+                    <TableHead className="w-1/4 py-3 pr-3">{t("scraperOld")}</TableHead>
+                    <TableHead className="py-3 pr-3">{t("mergeAfter")}</TableHead>
+                    <TableHead className="w-20 py-3">{t("mergeResult")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {projection.rows.map((row) => (
-                    <tr
+                    <TableRow
                       className="border-t border-border align-top"
                       key={`${row.key}:${row.language}`}
                     >
-                      <td className="py-3 pr-3 break-words">
+                      <TableCell className="py-3 pr-3 break-words">
                         {t(`scraperField_${row.key}`, {
                           defaultValue: row.key,
                         })}
@@ -486,14 +495,14 @@ export function MetadataMergeWorkspace({
                             {row.language}
                           </span>
                         )}
-                      </td>
-                      <td className="py-3 pr-3 whitespace-pre-wrap break-words text-muted-foreground">
+                      </TableCell>
+                      <TableCell className="py-3 pr-3 whitespace-pre-wrap break-words text-muted-foreground">
                         {row.old ? value(row.old.value) : t("none")}
-                      </td>
-                      <td className="py-3 pr-3 whitespace-pre-wrap break-words">
+                      </TableCell>
+                      <TableCell className="py-3 pr-3 whitespace-pre-wrap break-words">
                         {value(row.value) || t("none")}
-                      </td>
-                      <td className="py-3">
+                      </TableCell>
+                      <TableCell className="py-3">
                         <Badge
                           variant={
                             row.result === "added" ||
@@ -506,11 +515,11 @@ export function MetadataMergeWorkspace({
                             ? t("locked")
                             : t(`mergeResult_${row.result}`)}
                         </Badge>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           </section>
         </div>
@@ -608,5 +617,6 @@ export function MetadataMergeWorkspace({
         )}
       </footer>
     </section>
+    </Card>
   );
 }

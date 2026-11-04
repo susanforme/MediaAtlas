@@ -12,7 +12,9 @@ import {
 import type { MouseEvent } from "react";
 import { useTranslation } from "react-i18next";
 import type { RootView, ScanTask } from "../../api/library";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { useFormat } from "./shared";
 
 export function RootCard({
@@ -62,72 +64,74 @@ export function RootCard({
   const scope =
     root.kind === "adult_video" ? { kind: "adult_video" as const } : {};
   return (
-    <article className="root-card">
-      <div className="flex items-start gap-3">
-        <div className="rounded-xl bg-primary/10 p-3 text-primary">
-          <Icon size={22} aria-hidden="true" />
+    <Card asChild>
+      <article className="root-card">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-primary/10 p-3 text-primary">
+            <Icon size={22} aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-semibold">
+              <Button
+                asChild
+                variant="link"
+                className="h-auto max-w-full justify-start truncate p-0 text-left text-foreground"
+              >
+                <Link to="/library" search={{ root: root.id, ...scope }}>
+                  {root.name}
+                </Link>
+              </Button>
+            </h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {root.kind ? t(`kind_${root.kind}`) : t("mixed")}
+            </p>
+          </div>
+          <Badge variant="secondary">
+            {t(status)}
+          </Badge>
         </div>
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-base font-semibold">
+        <p className="root-card-path">{root.path}</p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          {t("lastScan")}:{" "}
+          {root.last_scan_at ? date(root.last_scan_at) : t("neverScanned")}
+        </p>
+        <div className="root-card-actions">
+          {root.enabled && (
             <Button
-              asChild
-              variant="link"
-              className="h-auto max-w-full justify-start truncate p-0 text-left text-foreground"
+              size="sm"
+              variant="outline"
+              disabled={disabled || refreshing || active}
+              onClick={onRefresh}
             >
-              <Link to="/library" search={{ root: root.id, ...scope }}>
-                {root.name}
+              <RefreshCw size={15} aria-hidden="true" />
+              {t(refreshing || active ? "rootUpdating" : "autoRefreshLibrary")}
+            </Button>
+          )}
+          {attention && (
+            <Button asChild size="sm" variant="ghost">
+              <Link
+                to="/scanner"
+                search={{ root: root.id, task: task.id, ...scope }}
+              >
+                {t("rootReviewUpdate")}
               </Link>
             </Button>
-          </h2>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {root.kind ? t(`kind_${root.kind}`) : t("mixed")}
-          </p>
-        </div>
-        <span className="rounded-full bg-white/5 px-2 py-1 text-xs text-muted-foreground">
-          {t(status)}
-        </span>
-      </div>
-      <p className="root-card-path">{root.path}</p>
-      <p className="mt-3 text-xs text-muted-foreground">
-        {t("lastScan")}:{" "}
-        {root.last_scan_at ? date(root.last_scan_at) : t("neverScanned")}
-      </p>
-      <div className="root-card-actions">
-        {root.enabled && (
+          )}
+          <Button size="sm" variant="ghost" disabled={disabled} onClick={onEdit}>
+            <Pencil size={15} aria-hidden="true" />
+            {t("edit")}
+          </Button>
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
             disabled={disabled || refreshing || active}
-            onClick={onRefresh}
+            onClick={onRemove}
           >
-            <RefreshCw size={15} aria-hidden="true" />
-            {t(refreshing || active ? "rootUpdating" : "autoRefreshLibrary")}
+            <Trash2 size={15} aria-hidden="true" />
+            {t("remove")}
           </Button>
-        )}
-        {attention && (
-          <Button asChild size="sm" variant="ghost">
-            <Link
-              to="/scanner"
-              search={{ root: root.id, task: task.id, ...scope }}
-            >
-              {t("rootReviewUpdate")}
-            </Link>
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" disabled={disabled} onClick={onEdit}>
-          <Pencil size={15} aria-hidden="true" />
-          {t("edit")}
-        </Button>
-        <Button
-          size="sm"
-          variant="ghost"
-          disabled={disabled || refreshing || active}
-          onClick={onRemove}
-        >
-          <Trash2 size={15} aria-hidden="true" />
-          {t("remove")}
-        </Button>
-      </div>
-    </article>
+        </div>
+      </article>
+    </Card>
   );
 }

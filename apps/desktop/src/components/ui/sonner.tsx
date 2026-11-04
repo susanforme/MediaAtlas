@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Toaster as Sonner } from "sonner";
+import { useTheme } from "../../lib/theme";
 import "./sonner.css";
 import "./sonner-translations";
 
@@ -7,9 +8,10 @@ export { toast } from "sonner";
 
 export function Toaster() {
   const { t } = useTranslation();
+  const theme = useTheme();
   return (
     <Sonner
-      theme="dark"
+      theme={theme}
       position="bottom-right"
       closeButton
       visibleToasts={3}

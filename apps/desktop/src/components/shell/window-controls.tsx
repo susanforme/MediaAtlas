@@ -1,5 +1,6 @@
 import { Copy, Minus, Square, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import type { WindowChrome } from "./use-window-controls";
 import "./window-translations";
@@ -52,7 +53,10 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
         <X size={14} strokeWidth={1.5} aria-hidden="true" />
       </Button>
       {chrome.error && (
-        <div className="window-controls-error" role="alert">
+        <Alert
+          variant="destructive"
+          className="window-controls-error bg-popover text-popover-foreground shadow-lg"
+        >
           <p>{t("windowOperationFailed")}</p>
           <Button
             className="mt-3"
@@ -63,7 +67,7 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
           >
             {t("windowRetry")}
           </Button>
-        </div>
+        </Alert>
       )}
     </fieldset>
   );

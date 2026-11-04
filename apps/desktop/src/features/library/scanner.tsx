@@ -3,7 +3,9 @@ import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Card } from "../../components/ui/card";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { ProviderTasks } from "../providers/pages";
@@ -78,84 +80,85 @@ export function TasksPage() {
       ) : (
         <div className="space-y-4">
           {tasks.data.map((task) => (
-            <article className="panel" key={task.id}>
-              <div className="flex flex-wrap justify-between gap-4">
-                <div>
-                  <p className="badge">
-                    {t(
-                      task.mode === "automatic" && !refreshIsRunning(task)
-                        ? refreshResultTitle(task)
-                        : `state_${task.state}`,
-                    )}
-                  </p>
-                  <p className="mt-2 break-all text-xs text-muted-foreground">
-                    {roots.data?.find((root) => root.id === task.root_id)
-                      ?.name ?? t("root")}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {date(task.updated_at)}
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button asChild variant="ghost">
-                    <Link
-                      to="/scanner"
-                      search={{
-                        root: task.root_id,
-                        task: task.id,
-                        ...(roots.data.some(
-                          (root) =>
-                            root.id === task.root_id &&
-                            root.kind === "adult_video",
-                        )
-                          ? { kind: "adult_video" as const }
-                          : {}),
-                      }}
-                      className="action-link"
-                    >
+            <Card asChild key={task.id}>
+              <article>
+                <div className="flex flex-wrap justify-between gap-4">
+                  <div>
+                    <Badge variant="secondary">
                       {t(
-                        task.mode === "automatic"
-                          ? "autoScanDetails"
-                          : "preview",
+                        task.mode === "automatic" && !refreshIsRunning(task)
+                          ? refreshResultTitle(task)
+                          : `state_${task.state}`,
                       )}
-                    </Link>
-                  </Button>
-                  {(task.mode === "automatic"
-                    ? task.state === "queued" || task.state === "running"
-                    : isActiveScanTask(task)) && (
-                    <Button
-                      variant="outline"
-                      disabled={cancel.isPending}
-                      onClick={() => cancel.mutate(task.id)}
-                    >
-                      {t("cancelTask")}
+                    </Badge>
+                    <p className="mt-2 break-all text-xs text-muted-foreground">
+                      {roots.data?.find((root) => root.id === task.root_id)
+                        ?.name ?? t("root")}
+                    </p>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {date(task.updated_at)}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button asChild variant="ghost">
+                      <Link
+                        to="/scanner"
+                        search={{
+                          root: task.root_id,
+                          task: task.id,
+                          ...(roots.data.some(
+                            (root) =>
+                              root.id === task.root_id &&
+                              root.kind === "adult_video",
+                          )
+                            ? { kind: "adult_video" as const }
+                            : {}),
+                        }}
+                      >
+                        {t(
+                          task.mode === "automatic"
+                            ? "autoScanDetails"
+                            : "preview",
+                        )}
+                      </Link>
                     </Button>
-                  )}
+                    {(task.mode === "automatic"
+                      ? task.state === "queued" || task.state === "running"
+                      : isActiveScanTask(task)) && (
+                      <Button
+                        variant="outline"
+                        disabled={cancel.isPending}
+                        onClick={() => cancel.mutate(task.id)}
+                      >
+                        {t("cancelTask")}
+                      </Button>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-5 text-sm">
-                {(
-                  [
-                    ["visited", task.visited_files],
-                    ["skipped", task.skipped_files],
-                    ["candidates", task.candidate_count],
-                    ["imported", task.imported_count],
-                    ["warnings", task.warnings],
-                  ] as const
-                ).map(([label, value]) => (
-                  <span key={label}>
-                    {t(label)}: {number(value)}
-                  </span>
-                ))}
-              </div>
-              <ScanRecovery
-                task={task}
-                adult={roots.data.some(
-                  (root) =>
-                    root.id === task.root_id && root.kind === "adult_video",
-                )}
-              />
-            </article>
+                <div className="mt-4 flex flex-wrap gap-5 text-sm">
+                  {(
+                    [
+                      ["visited", task.visited_files],
+                      ["skipped", task.skipped_files],
+                      ["candidates", task.candidate_count],
+                      ["imported", task.imported_count],
+                      ["warnings", task.warnings],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <span key={label}>
+                      {t(label)}: {number(value)}
+                    </span>
+                  ))}
+                </div>
+                <ScanRecovery
+                  task={task}
+                  adult={roots.data.some(
+                    (root) =>
+                      root.id === task.root_id && root.kind === "adult_video",
+                  )}
+                />
+              </article>
+            </Card>
           ))}
         </div>
       )}
@@ -220,43 +223,45 @@ export function ScannerPage({
         </>
       ) : (
         <>
-          <div className="panel mb-6">
-            <div className="flex flex-wrap items-end gap-4">
-              <Label className="filter-field min-w-0 flex-1">
-                <span>{t("chooseRoot")}</span>
-                <Select
-                  value={rootId ?? ""}
-                  disabled={start.isPending}
-                  onChange={(event) => selectRoot(event.target.value)}
+          <Card asChild>
+            <div className="mb-6">
+              <div className="flex flex-wrap items-end gap-4">
+                <Label className="filter-field min-w-0 flex-1">
+                  <span>{t("chooseRoot")}</span>
+                  <Select
+                    value={rootId ?? ""}
+                    disabled={start.isPending}
+                    onChange={(event) => selectRoot(event.target.value)}
+                  >
+                    <option value="">{t("chooseRoot")}</option>
+                    {availableRoots.map((root) => (
+                      <option key={root.id} value={root.id}>
+                        {root.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
+                <Button
+                  disabled={!canStart || start.isPending}
+                  onClick={() => rootId && start.mutate(rootId)}
                 >
-                  <option value="">{t("chooseRoot")}</option>
-                  {availableRoots.map((root) => (
-                    <option key={root.id} value={root.id}>
-                      {root.name}
-                    </option>
-                  ))}
-                </Select>
-              </Label>
-              <Button
-                disabled={!canStart || start.isPending}
-                onClick={() => rootId && start.mutate(rootId)}
-              >
-                {t(start.isPending ? "rootScanning" : "autoRefreshLibrary")}
-              </Button>
+                  {t(start.isPending ? "rootScanning" : "autoRefreshLibrary")}
+                </Button>
+              </div>
+              {roots.isError && (
+                <ErrorNotice
+                  error={roots.error}
+                  retry={() => void roots.refetch()}
+                />
+              )}
+              {rootId && roots.isSuccess && !selectedRoot && (
+                <p className="mt-3 text-sm" role="status">
+                  {t("scanRootUnavailable")}
+                </p>
+              )}
+              {start.isError && <ErrorNotice error={start.error} />}
             </div>
-            {roots.isError && (
-              <ErrorNotice
-                error={roots.error}
-                retry={() => void roots.refetch()}
-              />
-            )}
-            {rootId && roots.isSuccess && !selectedRoot && (
-              <p className="mt-3 text-sm" role="status">
-                {t("scanRootUnavailable")}
-              </p>
-            )}
-            {start.isError && <ErrorNotice error={start.error} />}
-          </div>
+          </Card>
           <Label className="filter-field mb-6">
             <span>{t("scanChooseRecent")}</span>
             <Select
@@ -298,60 +303,64 @@ export function ScannerPage({
             <Empty title={t("taskNotAvailable")} />
           ) : (
             <>
-              <div className="panel mb-5">
-                <div className="flex flex-wrap justify-between gap-4">
-                  <div>
-                    <strong>
-                      {t(
-                        task.mode === "automatic" &&
-                          (task.state === "queued" || task.state === "running")
-                          ? `autoPhase_${task.phase ?? "scan"}`
-                          : task.mode === "automatic"
-                            ? refreshResultTitle(task)
-                            : `state_${task.state}`,
-                      )}
-                    </strong>
-                    <p className="mt-2 text-sm">
-                      {t("visited")}: {number(task.visited_files)} ·{" "}
-                      {t("candidates")}: {number(task.candidate_count)} ·{" "}
-                      {t("warnings")}: {number(task.warnings)}
-                    </p>
+              <Card asChild>
+                <div className="mb-5">
+                  <div className="flex flex-wrap justify-between gap-4">
+                    <div>
+                      <strong>
+                        {t(
+                          task.mode === "automatic" &&
+                            (task.state === "queued" || task.state === "running")
+                            ? `autoPhase_${task.phase ?? "scan"}`
+                            : task.mode === "automatic"
+                              ? refreshResultTitle(task)
+                              : `state_${task.state}`,
+                        )}
+                      </strong>
+                      <p className="mt-2 text-sm">
+                        {t("visited")}: {number(task.visited_files)} ·{" "}
+                        {t("candidates")}: {number(task.candidate_count)} ·{" "}
+                        {t("warnings")}: {number(task.warnings)}
+                      </p>
+                    </div>
+                    {(task.state === "queued" || task.state === "running") && (
+                      <Button
+                        variant="outline"
+                        disabled={cancel.isPending}
+                        onClick={() => cancel.mutate(task.id)}
+                      >
+                        {t("cancelTask")}
+                      </Button>
+                    )}
                   </div>
-                  {(task.state === "queued" || task.state === "running") && (
-                    <Button
-                      variant="outline"
-                      disabled={cancel.isPending}
-                      onClick={() => cancel.mutate(task.id)}
-                    >
-                      {t("cancelTask")}
-                    </Button>
-                  )}
+                  <ScanRecovery
+                    task={task}
+                    adult={selectedAdult}
+                    onRetry={() => rootId && start.mutate(rootId)}
+                    retryDisabled={!canStart || start.isPending}
+                  />
                 </div>
-                <ScanRecovery
-                  task={task}
-                  adult={selectedAdult}
-                  onRetry={() => rootId && start.mutate(rootId)}
-                  retryDisabled={!canStart || start.isPending}
-                />
-              </div>
+              </Card>
               {cancel.isError && <ErrorNotice error={cancel.error} />}
               {task.mode === "automatic" ? (
                 <AutomaticScanResult task={task} adult={selectedAdult} />
               ) : (
-                <div className="panel space-y-4">
-                  <p role="status">
-                    {t(
-                      task.state === "queued" || task.state === "running"
-                        ? "autoLegacyScanRunning"
-                        : "autoLegacyScanReady",
-                    )}
-                  </p>
-                  <Button asChild variant="outline">
-                    <Link to="/library" search={librarySearch}>
-                      {t("autoBrowseLibrary")}
-                    </Link>
-                  </Button>
-                </div>
+                <Card asChild>
+                  <div className="space-y-4">
+                    <p role="status">
+                      {t(
+                        task.state === "queued" || task.state === "running"
+                          ? "autoLegacyScanRunning"
+                          : "autoLegacyScanReady",
+                      )}
+                    </p>
+                    <Button asChild variant="outline">
+                      <Link to="/library" search={librarySearch}>
+                        {t("autoBrowseLibrary")}
+                      </Link>
+                    </Button>
+                  </div>
+                </Card>
               )}
             </>
           )}

@@ -1,4 +1,15 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Diagnostic rows have no local state; multiple requests can share one origin and attempt. */
+import { Alert } from "../../components/ui/alert";
+import { Badge } from "../../components/ui/badge";
+import { Card } from "../../components/ui/card";
+import {
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableBody,
+  TableCell,
+} from "../../components/ui/table";
 import "../scraper/translations";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,7 +22,7 @@ import {
   type ProviderView,
   providerApi,
 } from "../../api/providers";
-import { Button } from "../../components/ui/button";
+import { Anchor, Button } from "../../components/ui/button";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
@@ -161,167 +172,169 @@ function ProviderCard({
     },
   });
   return (
-    <article className="panel">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="section-title">
-          {provider.descriptor.fixture
-            ? t("providerFixtureName")
-            : provider.descriptor.name}
-        </h2>
-        <span className="badge">
-          {t(`providerHealth_${provider.health}`, {
-            defaultValue: t("providerHealthUnknown"),
-          })}
-        </span>
-      </div>
-      {provider.descriptor.fixture && (
-        <p className="notice mb-4">{t("providerFixtureNotice")}</p>
-      )}
-      <p className="mb-3 text-sm">
-        {provider.descriptor.capabilities
-          .map((cap) => t(`providerCapability_${cap}`, { defaultValue: cap }))
-          .join(" · ")}
-      </p>
-      <Label className="mb-4 flex items-center gap-2">
-        <Checkbox
-          checked={provider.config.enabled}
-          disabled={enabled.isPending}
-          onChange={(event) => enabled.mutate(event.target.checked)}
-        />
-        {t("providerEnabled")}
-      </Label>
-      {provider.descriptor.fixture ? (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (query.trim() && provider.config.enabled) start.mutate();
-          }}
-          className="flex flex-wrap items-end gap-3"
-        >
-          <Label className="filter-field flex-1">
-            <span>{t("providerQuery")}</span>
-            <Input
-              maxLength={200}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              autoComplete="off"
-            />
-          </Label>
-          <Button
-            type="submit"
-            disabled={
-              !query.trim() || !provider.config.enabled || start.isPending
-            }
+    <Card asChild>
+      <article>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="section-title">
+            {provider.descriptor.fixture
+              ? t("providerFixtureName")
+              : provider.descriptor.name}
+          </h2>
+          <Badge variant="secondary">
+            {t(`providerHealth_${provider.health}`, {
+              defaultValue: t("providerHealthUnknown"),
+            })}
+          </Badge>
+        </div>
+        {provider.descriptor.fixture && (
+          <Alert asChild>
+            <p className="mb-4">{t("providerFixtureNotice")}</p>
+          </Alert>
+        )}
+        <p className="mb-3 text-sm">
+          {provider.descriptor.capabilities
+            .map((cap) => t(`providerCapability_${cap}`, { defaultValue: cap }))
+            .join(" · ")}
+        </p>
+        <Label className="mb-4 flex items-center gap-2">
+          <Checkbox
+            checked={provider.config.enabled}
+            disabled={enabled.isPending}
+            onChange={(event) => enabled.mutate(event.target.checked)}
+          />
+          {t("providerEnabled")}
+        </Label>
+        {provider.descriptor.fixture ? (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (query.trim() && provider.config.enabled) start.mutate();
+            }}
+            className="flex flex-wrap items-end gap-3"
           >
-            {t("providerRun")}
-          </Button>
-        </form>
-      ) : (
-        <div className="flex flex-wrap gap-3">
-          {setup?.from !== "library" && (
+            <Label className="filter-field flex-1">
+              <span>{t("providerQuery")}</span>
+              <Input
+                maxLength={200}
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                autoComplete="off"
+              />
+            </Label>
+            <Button
+              type="submit"
+              disabled={
+                !query.trim() || !provider.config.enabled || start.isPending
+              }
+            >
+              {t("providerRun")}
+            </Button>
+          </form>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {setup?.from !== "library" && (
+              <Button asChild variant="outline">
+                <Link
+                  to="/scraper"
+                  search={{
+                    media: scraperContext?.media,
+                    queue: scraperContext?.queue,
+                    session: scraperContext?.session,
+                  }}
+                >
+                  {t("providerOpenScraper")}
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="outline">
               <Link
-                to="/scraper"
+                to="/settings"
                 search={{
-                  media: scraperContext?.media,
-                  queue: scraperContext?.queue,
-                  session: scraperContext?.session,
+                  ...(setup ??
+                    (returnToScraper
+                      ? {
+                          from: "scraper",
+                          media: returnMediaId,
+                          queue: returnQueue,
+                        }
+                      : {})),
+                  provider: SETUP_PROVIDERS.includes(
+                    provider.descriptor.id as SetupProvider,
+                  )
+                    ? (provider.descriptor.id as SetupProvider)
+                    : undefined,
+                  tab: "auth",
                 }}
               >
-                {t("providerOpenScraper")}
+                {t("providerOpenAuthSettings")}
               </Link>
             </Button>
-          )}
-          <Button asChild variant="outline">
-            <Link
-              to="/settings"
-              search={{
-                ...(setup ??
-                  (returnToScraper
-                    ? {
-                        from: "scraper",
-                        media: returnMediaId,
-                        queue: returnQueue,
-                      }
-                    : {})),
-                provider: SETUP_PROVIDERS.includes(
-                  provider.descriptor.id as SetupProvider,
-                )
-                  ? (provider.descriptor.id as SetupProvider)
-                  : undefined,
-                tab: "auth",
-              }}
-            >
-              {t("providerOpenAuthSettings")}
-            </Link>
-          </Button>
-        </div>
-      )}
-      <ProviderConfiguration provider={provider} />
-      <Details className="mt-4">
-        <DetailsSummary>{t("providerDetails")}</DetailsSummary>
-        <dl className="mt-3 space-y-2 text-sm">
-          <div>
-            <dt>{t("providerLicense")}</dt>
-            <dd>{provider.descriptor.license}</dd>
           </div>
-          <div>
-            <dt>{t("providerPolicy")}</dt>
-            <dd>{provider.descriptor.rate_limit_policy}</dd>
-          </div>
-          <div>
-            <dt>{t("providerAttribution")}</dt>
-            <dd>{provider.descriptor.attribution}</dd>
-          </div>
-          <div>
-            <dt>{t("providerDataUsage")}</dt>
-            <dd>{provider.descriptor.data_usage_notes}</dd>
-          </div>
-          <div>
-            <dt>{t("providerApiKey")}</dt>
-            <dd>
-              {t(
-                provider.descriptor.requires_api_key
-                  ? "providerYes"
-                  : "providerNo",
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt>{t("providerLogin")}</dt>
-            <dd>
-              {t(
-                provider.descriptor.requires_login
-                  ? "providerYes"
-                  : "providerNo",
-              )}
-            </dd>
-          </div>
-        </dl>
-        <div className="mt-3 flex flex-wrap gap-3">
-          {(
-            [
-              ["providerDocumentation", provider.descriptor.documentation_url],
-              ["providerTerms", provider.descriptor.terms_url],
-              ["providerPrivacy", provider.descriptor.privacy_url],
-            ] as const
-          ).map(
-            ([label, url]) =>
-              url && (
-                <Button asChild variant="link" key={label}>
-                  <a href={url} target="_blank" rel="noreferrer">
+        )}
+        <ProviderConfiguration provider={provider} />
+        <Details className="mt-4">
+          <DetailsSummary>{t("providerDetails")}</DetailsSummary>
+          <dl className="mt-3 space-y-2 text-sm">
+            <div>
+              <dt>{t("providerLicense")}</dt>
+              <dd>{provider.descriptor.license}</dd>
+            </div>
+            <div>
+              <dt>{t("providerPolicy")}</dt>
+              <dd>{provider.descriptor.rate_limit_policy}</dd>
+            </div>
+            <div>
+              <dt>{t("providerAttribution")}</dt>
+              <dd>{provider.descriptor.attribution}</dd>
+            </div>
+            <div>
+              <dt>{t("providerDataUsage")}</dt>
+              <dd>{provider.descriptor.data_usage_notes}</dd>
+            </div>
+            <div>
+              <dt>{t("providerApiKey")}</dt>
+              <dd>
+                {t(
+                  provider.descriptor.requires_api_key
+                    ? "providerYes"
+                    : "providerNo",
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>{t("providerLogin")}</dt>
+              <dd>
+                {t(
+                  provider.descriptor.requires_login
+                    ? "providerYes"
+                    : "providerNo",
+                )}
+              </dd>
+            </div>
+          </dl>
+          <div className="mt-3 flex flex-wrap gap-3">
+            {(
+              [
+                ["providerDocumentation", provider.descriptor.documentation_url],
+                ["providerTerms", provider.descriptor.terms_url],
+                ["providerPrivacy", provider.descriptor.privacy_url],
+              ] as const
+            ).map(
+              ([label, url]) =>
+                url && (
+                  <Anchor key={label} href={url} target="_blank" rel="noreferrer">
                     {t(label)}
-                  </a>
-                </Button>
-              ),
-          )}
-        </div>
-      </Details>
-      {enabled.isError && <ErrorNotice error={enabled.error} />}
-      {provider.descriptor.fixture && start.isError && (
-        <ErrorNotice error={start.error} />
-      )}
-    </article>
+                  </Anchor>
+                ),
+            )}
+          </div>
+        </Details>
+        {enabled.isError && <ErrorNotice error={enabled.error} />}
+        {provider.descriptor.fixture && start.isError && (
+          <ErrorNotice error={start.error} />
+        )}
+      </article>
+    </Card>
   );
 }
 export function ProvidersPage({
@@ -408,38 +421,40 @@ export function ProviderTasks() {
       ) : (
         <div className="space-y-4">
           {snapshot.data.tasks.map((task) => (
-            <article className="panel" key={task.id}>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="badge">{t(`state_${task.state}`)}</span>
-                {["queued", "running", "waiting_for_user"].includes(
-                  task.state,
-                ) && (
-                  <Button
-                    variant="outline"
-                    disabled={cancel.isPending}
-                    onClick={() => cancel.mutate(task.id)}
-                  >
-                    {t("cancelTask")}
-                  </Button>
+            <Card asChild key={task.id}>
+              <article>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <Badge variant="secondary">{t(`state_${task.state}`)}</Badge>
+                  {["queued", "running", "waiting_for_user"].includes(
+                    task.state,
+                  ) && (
+                    <Button
+                      variant="outline"
+                      disabled={cancel.isPending}
+                      onClick={() => cancel.mutate(task.id)}
+                    >
+                      {t("cancelTask")}
+                    </Button>
+                  )}
+                </div>
+                <p className="mt-3 break-all text-sm">{task.query}</p>
+                <p className="mt-2 break-all text-xs text-muted-foreground">
+                  {task.provider_id} · {task.id} · {date(task.updated_at)}
+                </p>
+                {task.failure && (
+                  <p role="status" className="mt-3 text-sm">
+                    {t(`providerFailure_${task.failure}`)}
+                  </p>
                 )}
-              </div>
-              <p className="mt-3 break-all text-sm">{task.query}</p>
-              <p className="mt-2 break-all text-xs text-muted-foreground">
-                {task.provider_id} · {task.id} · {date(task.updated_at)}
-              </p>
-              {task.failure && (
-                <p role="status" className="mt-3 text-sm">
-                  {t(`providerFailure_${task.failure}`)}
-                </p>
-              )}
-              {task.result_summary && (
-                <p className="mt-2 text-sm">
-                  {t(`providerResult_${task.result_summary}`, {
-                    defaultValue: t("providerResultReady"),
-                  })}
-                </p>
-              )}
-            </article>
+                {task.result_summary && (
+                  <p className="mt-2 text-sm">
+                    {t(`providerResult_${task.result_summary}`, {
+                      defaultValue: t("providerResultReady"),
+                    })}
+                  </p>
+                )}
+              </article>
+            </Card>
           ))}
         </div>
       )}
@@ -467,60 +482,58 @@ export function NetworkInspectorPage({
       ) : !snapshot.data.requests.length ? (
         <Empty title={t("noNetworkRequests")} />
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                {[
-                  "providerLabel",
-                  "providerRequest",
-                  "providerDuration",
-                  "providerStatus",
-                  "providerAttempt",
-                ].map((key) => (
-                  <th key={key}>{t(key)}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {snapshot.data.requests.map((record, index) => (
-                <tr
-                  key={`${record.task_id}-${record.engine}-${record.attempt}-${record.method}-${record.safe_url}-${index}`}
-                >
-                  <td className="break-all text-xs">
-                    {record.provider_id}
-                    <p>{record.task_id}</p>
-                  </td>
-                  <td className="break-all text-xs">
-                    {record.engine} · {record.method}
-                    <p>
-                      {record.safe_url === "[redacted]"
-                        ? t("providerRedacted")
-                        : record.safe_url}
-                    </p>
-                    {record.summary && (
-                      <p>
-                        {t(`providerSummary_${record.summary}`, {
-                          defaultValue: t("providerSummaryRequest"),
-                        })}
-                      </p>
-                    )}
-                  </td>
-                  <td>{number(record.duration_ms)} ms</td>
-                  <td>
-                    {record.status === null
-                      ? t("providerNoStatus")
-                      : number(record.status)}
-                    {record.failure && (
-                      <p>{t(`providerFailure_${record.failure}`)}</p>
-                    )}
-                  </td>
-                  <td>{number(record.attempt)}</td>
-                </tr>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {[
+                "providerLabel",
+                "providerRequest",
+                "providerDuration",
+                "providerStatus",
+                "providerAttempt",
+              ].map((key) => (
+                <TableHead key={key}>{t(key)}</TableHead>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {snapshot.data.requests.map((record, index) => (
+              <TableRow
+                key={`${record.task_id}-${record.engine}-${record.attempt}-${record.method}-${record.safe_url}-${index}`}
+              >
+                <TableCell className="break-all text-xs">
+                  {record.provider_id}
+                  <p>{record.task_id}</p>
+                </TableCell>
+                <TableCell className="break-all text-xs">
+                  {record.engine} · {record.method}
+                  <p>
+                    {record.safe_url === "[redacted]"
+                      ? t("providerRedacted")
+                      : record.safe_url}
+                  </p>
+                  {record.summary && (
+                    <p>
+                      {t(`providerSummary_${record.summary}`, {
+                        defaultValue: t("providerSummaryRequest"),
+                      })}
+                    </p>
+                  )}
+                </TableCell>
+                <TableCell>{number(record.duration_ms)} ms</TableCell>
+                <TableCell>
+                  {record.status === null
+                    ? t("providerNoStatus")
+                    : number(record.status)}
+                  {record.failure && (
+                    <p>{t(`providerFailure_${record.failure}`)}</p>
+                  )}
+                </TableCell>
+                <TableCell>{number(record.attempt)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       )}
     </>
   );
