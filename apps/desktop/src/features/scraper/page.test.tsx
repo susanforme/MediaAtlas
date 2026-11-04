@@ -220,6 +220,30 @@ async function openOutputPreview() {
     fireEvent.click(button);
   });
 }
+/** React can commit the enabled button before mutation options update in a passive effect. */
+function clickFirstEnabledCommit(name: string | RegExp) {
+  let clicks = 0;
+  const observer = new MutationObserver(() => {
+    const button = Array.from(
+      document.querySelectorAll<HTMLButtonElement>("button"),
+    ).find((element) => {
+      const text = element.textContent?.trim() ?? "";
+      return typeof name === "string" ? text === name : name.test(text);
+    });
+    if (!button || button.disabled) return;
+    observer.disconnect();
+    clicks += 1;
+    // A native click preserves the real commit-to-passive-effect window.
+    button.click();
+  });
+  observer.observe(document.body, {
+    subtree: true,
+    attributes: true,
+    childList: true,
+  });
+  return { observer, clicks: () => clicks };
+}
+
 async function searchAndChoose() {
   const view = show();
   await screen.findByText("Local film · 2024");
@@ -1607,3 +1631,79 @@ it("refuses a concurrent only-missing overwrite and refreshes to a proof contain
   expect(scraperOutputApi.preview).not.toHaveBeenCalled();
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
 });
+
+it("confirms exactly the current proof when clicked in its first enabled commit", async () => {
+  let finish!: (value: typeof syntheticMerge) => void;
+  vi.mocked(scraperApi.preview).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await searchAndChoose();
+  await waitFor(() => expect(scraperApi.preview).toHaveBeenCalled());
+  const click = clickFirstEnabledCommit(/^Confirm merge/);
+  try {
+    // Do not pre-flush passive effects with act before the observer can click.
+    finish(syntheticMerge);
+    await screen.findByText("Metadata confirmed. 1 fields applied.");
+    expect(click.clicks()).toBe(1);
+    expect(scraperApi.confirm).toHaveBeenCalledExactlyOnceWith("merge-1");
+    expect(scraperOutputApi.preview).not.toHaveBeenCalled();
+    expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+  } finally {
+    click.observer.disconnect();
+  }
+});
+
+it.each(["execute", "discard"] as const)(
+  "uses exactly the visible output proof for %s in its first enabled commit",
+  async (action) => {
+    let finish!: (value: typeof syntheticOutput) => void;
+    vi.mocked(scraperOutputApi.preview).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await searchAndChoose();
+    await confirmMerge();
+    await openOutputPreview();
+    await waitFor(() =>
+      expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith(
+        "media-1",
+      ),
+    );
+    const click = clickFirstEnabledCommit(
+      action === "execute"
+        ? "Confirm and write sidecars"
+        : "Cancel output preview",
+    );
+    try {
+      finish(syntheticOutput);
+      if (action === "execute") {
+        await screen.findByText("Output recorded: 1 written, 0 preserved.");
+      } else {
+        await waitFor(() =>
+          expect(scraperOutputApi.discard).toHaveBeenCalledWith("output-1"),
+        );
+        await waitFor(() =>
+          expect(
+            screen.queryByText("/synthetic/library/film.nfo"),
+          ).not.toBeInTheDocument(),
+        );
+      }
+      // Settle lifecycle cleanup as well as the direct mutation before counting.
+      await act(async () => {});
+      expect(click.clicks()).toBe(1);
+      expect(scraperOutputApi[action]).toHaveBeenCalledExactlyOnceWith(
+        "output-1",
+      );
+      if (action === "discard")
+        expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+      expect(scraperApi.confirm).toHaveBeenCalledExactlyOnceWith("merge-1");
+    } finally {
+      click.observer.disconnect();
+    }
+  },
+);

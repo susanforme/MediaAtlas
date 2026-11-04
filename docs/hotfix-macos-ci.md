@@ -19,3 +19,11 @@
 ## 相邻输出测试的同类同步（beta.6）
 
 后续 [0fdfae8 的 macOS job](https://github.com/susanforme/MediaAtlas/actions/runs/41766592580/job/126366280323) 已通过全部 8 项真实签名/DMG 回归，但相邻用例 `releases an unexecuted sidecar preview before leaving a queue item` 同样直接轮询下一步输出按钮。现在相关用例统一先等待可见的元数据确认成功反馈，再读取已启用的输出按钮并在异步 act 中点击；保留取消、离开、卸载和迟到响应的丢弃/不写入断言。未加大超时或加入自动重试。更新后本地完整 `pnpm check`：50 文件 / 425 项测试、lint、typecheck 与生产构建通过。
+
+## 确认动作的真实提交竞态（beta.6）
+
+后续本地将同一页面用例重复 30 次，复现 1 次失败：按钮已经启用，但确认 IPC 调用为零，界面显示客户端操作失败。进一步在真实页面中用 DOM MutationObserver 于按钮第一次启用的 commit 立即点击，稳定复现；无需放大超时或 mock TanStack。此前仅将其视为测试同步问题并不完整。
+
+`useMutation` 在 passive effect 中更新 observer options；DOM 已提交时，mutationFn 仍可能持有上一轮预览闭包。相同窗口也使新输出的写入和取消动作传入空的旧预览 ID。现在确认、写入、取消均通过 mutation variables 传入实际点击时的预览 ID 与上下文 epoch，并核对 layout 阶段同步的已提交状态；过期、离开、失效或受保护的预览仍被拒绝。显式取消和卸载清理共用按 ID 去重的释放入口，失败允许显式重试，不自动重新写入。
+
+新增三个真实页面的 commit 窗口回归：确认 IPC 必须仅一次使用 `merge-1`；写入与取消必须仅一次使用当前 `output-1`，不得传空 ID；取消后的 cleanup 不得双重释放。三项在旧实现下全部失败，修复后整页 44 项通过，完整 `pnpm check` 50 文件 / 428 项测试、lint、typecheck 与生产 build 通过。新 beta 发布仍须当前修复的远程三平台 CI 及实际包门槛通过。

@@ -4,7 +4,13 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 import { DesktopError } from "../../api/desktop";
 import { defaultBrowse, libraryApi } from "../../api/library";
@@ -25,6 +31,8 @@ import {
 } from "./merge-preview-model";
 import { scrapeKind } from "./scraper-model";
 import { useLiveMergePreview } from "./use-live-merge-preview";
+
+type PreviewAction = { previewId: string; epoch: number };
 
 export function useScraper(
   mediaId?: string,
@@ -70,16 +78,27 @@ export function useScraper(
   const [output, setOutput] = useState<OutputPreview>();
   const [invalid, setInvalid] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
+  const outputReleases = useRef(new Map<string, Promise<null>>());
+  const releaseOutput = useCallback((previewId: string) => {
+    const existing = outputReleases.current.get(previewId);
+    if (existing) return existing;
+    const request = Promise.resolve().then(() =>
+      scraperOutputApi.discard(previewId),
+    );
+    outputReleases.current.set(previewId, request);
+    void request.catch(() => outputReleases.current.delete(previewId));
+    return request;
+  }, []);
   useEffect(() => {
     const id = output?.preview_id;
     if (!id) return;
     return () => {
       // Replacing or leaving a preview releases backend leases and never writes.
-      void Promise.resolve(scraperOutputApi.discard(id)).catch(() => {
+      void releaseOutput(id).catch(() => {
         // Backend leases expire independently if the desktop connection is gone.
       });
     };
-  }, [output?.preview_id]);
+  }, [output?.preview_id, releaseOutput]);
   const snapshot = useQuery({
     queryKey: ["providers"],
     queryFn: providerApi.snapshot,
@@ -149,6 +168,35 @@ export function useScraper(
   const mergeSelectionValid = Boolean(
     preview && projection && mergeSelectionMatches(preview, projection),
   );
+  const latestActions = useRef({
+    epoch: generation.current,
+    mergeId: preview?.preview_id,
+    mergeReady: false,
+    outputId: output?.preview_id,
+  });
+  // A DOM action can arrive before useMutation's passive option update.
+  // Bind it to the committed preview rather than a mutationFn render closure.
+  useLayoutEffect(() => {
+    latestActions.current = {
+      epoch: generation.current,
+      mergeId: preview?.preview_id,
+      mergeReady: Boolean(
+        mergeSelectionValid && !liveMerge.pending && projection?.counts.total,
+      ),
+      outputId: output?.preview_id,
+    };
+  });
+  function validAction(action: PreviewAction, kind: "merge" | "output") {
+    const latest = latestActions.current;
+    return (
+      current(action.epoch) &&
+      latest.epoch === action.epoch &&
+      Boolean(action.previewId) &&
+      (kind === "merge"
+        ? latest.mergeReady && latest.mergeId === action.previewId
+        : latest.outputId === action.previewId)
+    );
+  }
   const seededTarget = useRef("");
   useEffect(() => {
     if (
@@ -282,21 +330,15 @@ export function useScraper(
     },
   });
   const confirm = useMutation({
-    mutationFn: () => {
-      if (
-        !mergeSelectionValid ||
-        !preview ||
-        liveMerge.pending ||
-        !projection?.counts.total ||
-        (!preview.fields.some((field) => field.selected && !field.protected) &&
-          !preview.artwork.length)
-      )
+    mutationFn: (action: PreviewAction) => {
+      if (!validAction(action, "merge"))
         throw new DesktopError("request_failed");
       return review
-        ? review.confirmPreview(preview.preview_id)
-        : scraperApi.confirm(preview.preview_id);
+        ? review.confirmPreview(action.previewId)
+        : scraperApi.confirm(action.previewId);
     },
-    onSuccess: () => {
+    onSuccess: (_result, action) => {
+      if (!current(action.epoch)) return;
       void client.invalidateQueries({ queryKey: ["media"] });
       void client.invalidateQueries({ queryKey: ["detail"] });
       void client.invalidateQueries({ queryKey: ["video-source-detail"] });
@@ -308,21 +350,33 @@ export function useScraper(
       guarded(() => scraperOutputApi.preview(target), epoch),
     onSuccess: ({ value, epoch }) => {
       if (current(epoch)) setOutput(value);
-      else void scraperOutputApi.discard(value.preview_id).catch(() => {});
+      else void releaseOutput(value.preview_id).catch(() => {});
     },
   });
   const discard = useMutation({
-    mutationFn: (epoch: number) =>
-      guarded(() => scraperOutputApi.discard(output?.preview_id ?? ""), epoch),
-    onSuccess: ({ epoch }) => {
-      if (!current(epoch)) return;
+    mutationFn: (action: PreviewAction) => {
+      if (!validAction(action, "output"))
+        throw new DesktopError("request_failed");
+      return guarded(() => releaseOutput(action.previewId), action.epoch);
+    },
+    onSuccess: ({ epoch }, action) => {
+      if (
+        !current(epoch) ||
+        latestActions.current.outputId !== action.previewId
+      )
+        return;
       setOutput(undefined);
       write.reset();
     },
   });
   const write = useMutation({
-    mutationFn: () => scraperOutputApi.execute(output?.preview_id ?? ""),
-    onSuccess: () => {
+    mutationFn: (action: PreviewAction) => {
+      if (!validAction(action, "output"))
+        throw new DesktopError("request_failed");
+      return scraperOutputApi.execute(action.previewId);
+    },
+    onSuccess: (_result, action) => {
+      if (!current(action.epoch)) return;
       void client.invalidateQueries({ queryKey: ["media"] });
       void client.invalidateQueries({ queryKey: ["detail"] });
       void client.invalidateQueries({ queryKey: ["video-source-detail"] });
@@ -507,13 +561,34 @@ export function useScraper(
       mutate: (index: number) =>
         artworkLoad.mutate({ index, epoch: generation.current }),
     },
-    confirm,
+    confirm: {
+      ...confirm,
+      mutate: () =>
+        confirm.mutate({
+          previewId: preview?.preview_id ?? "",
+          epoch: generation.current,
+        }),
+    },
     outputPlan: {
       ...outputPlan,
       mutate: () => outputPlan.mutate(generation.current),
     },
-    discard: { ...discard, mutate: () => discard.mutate(generation.current) },
-    write,
+    discard: {
+      ...discard,
+      mutate: () =>
+        discard.mutate({
+          previewId: output?.preview_id ?? "",
+          epoch: generation.current,
+        }),
+    },
+    write: {
+      ...write,
+      mutate: () =>
+        write.mutate({
+          previewId: output?.preview_id ?? "",
+          epoch: generation.current,
+        }),
+    },
     busy,
     error,
     available,

@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.6`，包含 [macOS 安装包资源签名修复](hotfix-macos-package.md)、[Windows Provider 取消测试同步修复](hotfix-windows-ci.md#provider-取消与禁用的测试时序2026-11-04)及相邻合并/输出测试的明确阶段同步。用户要求一起解决后发布到新 beta；版本与当前验证完成后，以包含全部修复的新提交触发 tag 构建。不等待打包，既有 beta.1–beta.5 均保持原提交不动。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.6`，包含 [macOS 安装包资源签名修复](hotfix-macos-package.md)、[Windows Provider 取消测试同步修复](hotfix-windows-ci.md#provider-取消与禁用的测试时序2026-11-04)及确认/输出动作在 DOM 提交与 mutation options 更新之间的真实竞态修复。用户要求一起解决后发布到新 beta；版本与当前验证完成后，以包含全部修复的新提交触发 tag 构建。不等待打包，既有 beta.1–beta.5 均保持原提交不动。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |
