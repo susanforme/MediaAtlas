@@ -1,6 +1,6 @@
 # Beta 发布矩阵与验证
 
-仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.4`，包含 main 的流程优化、持久核对队列、shadcn 状态展示、双栏实时合并预览、Windows 测试修复与单 EXE 便携 ZIP。版本检查和当前实现验证完成后创建新 tag；不等待原生打包，不以历史 beta 的测试成绩宣称新包通过。既有 beta.1、beta.2、beta.3 保持不动；beta.3 仍指向 `67782a25b6594050dc57014199bc7eaec7f3def3`。
+仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.5`，在 beta.4 的流程优化、持久核对队列、实时合并预览、固定侧栏和单 EXE 便携 ZIP 基础上，加入 [macOS 前端测试同步修复](hotfix-macos-ci.md)。用户明确要求再次触发 tag 构建，因此新 tag 使用包含修复的新提交；不重跑仍指向旧源码的 beta.4 来冒充修复生效。版本与检查完成后创建新 tag，不等待原生打包；既有 beta.1–beta.4 均保持原提交不动。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |
 | --- | --- | --- | --- |
@@ -73,7 +73,7 @@ $p.ExitCode
 ```sh
 python3 -m unittest discover -s scripts/release -p 'test_*.py' -v
 actionlint .github/workflows/release.yml
-python3 scripts/release/release.py preflight --tag v0.1.0-beta.4
+python3 scripts/release/release.py preflight --tag v0.1.0-beta.5
 ```
 
 首次准备时 24 个 verifier 测试与 actionlint 1.7.12 已在本地通过，合并 Tauri release 配置通过官方 JSON schema 验证；preflight 需 P8 的版本统一及真实许可文件齐全。模拟 fixture 测试验证发布校验器的拒绝路径和完整汇总，不把 fixture 当作 MediaAtlas 安装包通过证据。

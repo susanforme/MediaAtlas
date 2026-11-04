@@ -10,4 +10,8 @@
 
 确认点击使用异步 `act`，状态通知仍通过实际可见结果等待。不增加测试超时、不加入固定 sleep 或自动重试，不跳过测试，不放宽产品预览、确认或写入保护；产品代码未改动。
 
-本地针对该文件 41 项通过；使用相同用例体临时参数化执行 20 次，全部通过，临时重复声明已还原。完整 `pnpm check` 通过：50 文件 / 425 测试、lint、typecheck 和生产 build，未跳过测试。远程 macOS 结果须以修复提交的新 main CI 为准，不能将 Linux 本地结果冒称 macOS 已通过。现有 beta.4 标签保持原提交；main 修复不会改变已经触发的 tag 发布源码。
+本地针对该文件 41 项通过；使用相同用例体临时参数化执行 20 次，全部通过，临时重复声明已还原。完整 `pnpm check` 通过：50 文件 / 425 测试、lint、typecheck 和生产 build，未跳过测试。远程 macOS 结果须以修复提交的新 main CI 为准，不能将 Linux 本地结果冒称 macOS 已通过。用户已明确要求再次触发 tag 编译，因此发布版本递增为 beta.5，新 tag 指向包含此修复的提交。现有 beta.4 标签保持原提交；单独重跑旧 tag 不会包含修复。第三方依赖未变，核对 Cargo.lock 仅第一方版本变化后刷新许可清单摘要。
+
+## 远程 macOS 验证
+
+修复提交 `68d58fa2990f562c61ff2a9818a3f720ec14fc62` 的 [CI run 41764803917](https://github.com/susanforme/MediaAtlas/actions/runs/41764803917) 中，[macOS job 126360568627](https://github.com/susanforme/MediaAtlas/actions/runs/41764803917/job/126360568627) 已 `completed / success`：前端测试与 Rust core/database 步骤均通过。这是实际 macOS runner 的结果，不是 Linux 模拟或旧提交的重跑。后续 beta.5 仅在该修复基础上同步版本与许可锁文件摘要；新 tag 的原生包仍由其独立发布流水线构建和验收。
