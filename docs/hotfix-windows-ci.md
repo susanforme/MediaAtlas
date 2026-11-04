@@ -86,3 +86,5 @@ Final Linux validation passes all 305 Rust workspace tests, workspace formatting
 用例改为受控 adapter：明确等待任务进入执行，成功路径由零 permit 的 Semaphore 阻塞；取消第二项、禁用第一项后分别等待取消退出事件，再断言两个终态和请求记录为空。第三项仅在显式 permit 后成功，再取消及禁用仍保持成功、无 failure，历史恰有该项两条记录。移除原 300ms sleep，生产实现保持不变。
 
 本地 `cargo test --locked --offline -p mediaatlas-infrastructure --test provider_runtime`：7/7；关键用例独立重复 20 次全通过，Rustfmt 与 diff 检查通过。最终 Windows 结果以包含本改动的新 main CI 为准。修复随 beta.6 新 tag 发布，不移动 beta.5。
+
+包含门控 fixture 的提交 `c887a1d48da45b449f9176524a0e06af95da8feb` 在 [Windows 原生 job 126369705116](https://github.com/susanforme/MediaAtlas/actions/runs/41767649174/job/126369705116) 已 `completed / success`，原失败集成用例与整个 Rust core/database 步骤通过。同轮 Linux job 在另一个前端预览闭包竞态失败，相关产品修复与新增回归见 [前端提交竞态](hotfix-macos-ci.md#确认动作的真实提交竞态beta6)；不能将这次 Windows 成功冒称整个三平台 run 成功。

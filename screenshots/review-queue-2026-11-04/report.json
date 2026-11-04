@@ -1,8 +1,8 @@
 {
   "date": "2026-11-04",
   "mode": "real Chromium + synthetic IPC only",
-  "source_commit": "8a8c28d2aa4838c670e70022c0ec9d7377a4a1fe",
-  "worktree_diff_sha256": "4023410361b64555258e3a1c5d14cbe1891434231f19fab65aa9dbc8d9e2f3ae",
+  "source_commit": "c887a1d48da45b449f9176524a0e06af95da8feb",
+  "worktree_diff_sha256": "daa297c1348e23b16b4088dcb31bd4db1a6014734391c9de7878a0600cedec9d",
   "queue_source_sha256": {
     "apps/desktop/src/components/ui/badge.tsx": "5b972a827e247b317ccfad4c316f38c54a652b54a144ffa03d8e95713e18781a",
     "apps/desktop/src/components/ui/tabs.tsx": "e7c4c929efadf37fbbbed2c5c0d68d324cbc48511fa6968640e8bd4eb76dd335",
@@ -22,7 +22,7 @@
     "apps/desktop/src/features/scraper/persistent-queue-navigation.tsx": "2fd73bccbb88c63203e220bbe879962329f9dadd83485030e084b19068fe4092",
     "apps/desktop/src/features/scraper/review-queue-launcher.tsx": "e1cc9811e553ca34e9a04c6f75608baa6742ae02fcb1905ea728ba6c2f50678a",
     "apps/desktop/src/features/scraper/page.tsx": "7e35d8d140ba92259b69f00146a10f6190dfd8efc7656f3319af393ff5e1e2bd",
-    "apps/desktop/src/features/scraper/use-scraper.ts": "e6190efa35b7e69c4e4fcaacc5910e6a7f2712d6732b14fb00d25358457a8f01",
+    "apps/desktop/src/features/scraper/use-scraper.ts": "0dee8c56a65aed06d4ed1ded287a77aff5f09e3354ef72f7056e8513f83b8ace",
     "apps/desktop/src/features/scraper/recovery-actions.tsx": "bead69d67401bc47be8bf635216a6c8b77443e413d24a76264013f6b3dd619e6",
     "apps/desktop/src/features/scraper/recovery-actions.test.tsx": "07da3a727b2d1c44eb8421af85683787f2449fd9403342774a3aaa4c78d04d09",
     "apps/desktop/src/features/tools/ordinary-candidates.tsx": "5a901edae7d18fdda10a9c58a82eb99dc74a9046dcaf2a2aba75e8451fa2ebb8",
@@ -54,7 +54,7 @@
   "limits": [
     "No native Tauri, real provider, keyring or filesystem execution",
     "Browser fixture validates command ordering only; Rust service proof/persistence is separate",
-    "This frontend change did not re-run local Rust tests or native package checks; new release workflow validates its own artifacts"
+    "Native macOS signing and Windows provider cancellation have separate CI evidence; browser fixtures do not prove signed Tauri package launch"
   ],
   "screenshots": {
     "fixture-confirmed-proof-order-1648.png": "1953711096ad8c5807f4e9587623697d7a5fb934cb3d3bcd4770ab0c268ae7f3",
@@ -73,19 +73,12 @@
     "fixture-restored-session-1648.png": "dc05fa77f7cb43f48ff9385565daf295950e00383cab89c9ef18b20d1ef0435f",
     "fixture-settings-return-1648.png": "dc05fa77f7cb43f48ff9385565daf295950e00383cab89c9ef18b20d1ef0435f"
   },
-  "implementation_commit": "8ee518d6f98cdfb90987df91526e8b8e70a31439",
+  "implementation_commit": "3775525d6cdadab47f2ceb16635dcb5effc8cc69",
   "frontend_checks": {
     "command": "pnpm check",
     "test_files": 50,
-    "tests": 425,
+    "tests": 428,
     "status": "passed",
-    "final_css_check": "Biome and production build passed after fixed-toolbar focus and backdrop refinement"
-  },
-  "release_checks": {
-    "command": "python -m unittest discover -s scripts/release -p test_release.py -v",
-    "tests": 24,
-    "status": "passed",
-    "version_preflight": "v0.1.0-beta.4",
-    "license_inventory": "1001 dependencies, 1625 notice references; verified"
+    "commit_window_regressions": "3 real page tests fail before fix and pass after fix; 44 scraper page tests pass"
   }
 }
