@@ -1370,7 +1370,10 @@ mod tests {
     #[test]
     fn real_descriptors_and_resource_caps_are_explicit() {
         let descriptors = VideoProviderHub::descriptors();
-        assert_eq!(descriptors.len(), 3);
+        assert_eq!(
+            descriptors.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
+            vec!["tvmaze", "tmdb", "anilist", "wikipedia.html"]
+        );
         assert!(descriptors
             .iter()
             .all(|d| !d.fixture && d.terms_url.is_some()));

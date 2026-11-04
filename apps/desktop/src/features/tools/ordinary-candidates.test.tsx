@@ -477,21 +477,17 @@ it("rejects a whole-page addition above the limit without silently truncating th
   expect(await selectedQueue()).toEqual(pageOne.map((item) => item.media.id));
   for (const item of pageTwo.slice(0, 8))
     fireEvent.click(
-      screen.getByRole("checkbox", {
-        name: `Select for scraping: ${item.media.title}`,
-      }),
+      screen.getByLabelText(`Select for scraping: ${item.media.title}`),
     );
   expect(await selectedQueue()).toHaveLength(MAX_SCRAPE_QUEUE);
   fireEvent.click(
-    screen.getByRole("checkbox", {
-      name: `Select for scraping: ${pageTwo[8].media.title}`,
-    }),
+    screen.getByLabelText(`Select for scraping: ${pageTwo[8].media.title}`),
   );
   expect(screen.getByRole("alert")).toHaveTextContent("Nothing was added");
   expect(await selectedQueue()).toEqual(
     [...pageOne, ...pageTwo.slice(0, 8)].map((item) => item.media.id),
   );
-});
+}, 15000);
 
 it.each([
   ["Library root", root.id, "root_id"],

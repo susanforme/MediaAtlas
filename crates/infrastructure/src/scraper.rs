@@ -911,7 +911,12 @@ mod tests {
                     } else {
                         r#"{"errors":[{"message":"mock provider unavailable"}]}"#
                     };
-                    let response=format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
+                    let content_type = if path.contains(" /Example ") {
+                        "text/html; charset=utf-8"
+                    } else {
+                        "application/json"
+                    };
+                    let response=format!("HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",body.len());
                     let _ = stream.write_all(response.as_bytes()).await;
                 });
             }
@@ -2497,6 +2502,8 @@ mod tests {
         let mut article_request = request();
         article_request.providers = vec!["wikipedia.html".into()];
         let search = s.service.search(article_request).await.unwrap();
+        assert!(search.failures.is_empty(), "{:?}", search.failures);
+        assert_eq!(search.candidates.len(), 1);
         let selection = MergeRequest {
             run_id: search.run_id,
             candidate_index: 0,
