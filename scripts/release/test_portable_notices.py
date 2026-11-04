@@ -93,9 +93,24 @@ class EmbeddedExporterTests(unittest.TestCase):
             module = json.dumps(str(ROOT / "apps/desktop/src-tauri/src/notices_build.rs"), ensure_ascii=False)
             builder_source.write_text(f'#[path = {module}] mod notices_build;\nfn main() {{ let args: Vec<_> = std::env::args_os().collect(); notices_build::generate(std::path::Path::new(&args[1]), std::path::Path::new(&args[2])).unwrap(); }}\n', encoding="utf-8")
             subprocess.run([RUSTC, "--edition=2021", str(builder_source), "-o", str(builder)], check=True, capture_output=True)
-            generated = subprocess.run([str(builder), str(source_root), str(out)], check=True, capture_output=True, text=True)
-            self.assertIn("cargo:rerun-if-changed=", generated.stdout)
-            self.assertIn(str(source_root / "docs/third-party-licenses"), generated.stdout)
+            # Exercise canonicalization on every host, even without Windows'
+            # short-name TEMP path or macOS's symlinked temporary directory.
+            builder_root = source_root / "docs" / ".."
+            generated = subprocess.run([str(builder), str(builder_root), str(out)], check=True, capture_output=True, text=True)
+            watched_paths = [
+                Path(line.removeprefix("cargo:rerun-if-changed="))
+                for line in generated.stdout.splitlines()
+                if line.startswith("cargo:rerun-if-changed=")
+            ]
+            # Rust canonicalizes these paths: on Windows TEMP may use the
+            # RUNNER~1 short name while Rust emits \\?\C:\Users\runneradmin.
+            # Compare filesystem identity, including directory watches, not
+            # path spelling. This also handles symlinked temp roots on macOS.
+            notice_directory = builder_root / "docs/third-party-licenses"
+            self.assertTrue(
+                any(notice_directory.samefile(path) for path in watched_paths),
+                "build output must watch the full license directory",
+            )
             environment = {**os.environ, "OUT_DIR": str(out)}
             test_binary = directory / f"exporter-tests{suffix}"
             module_path = ROOT / "apps/desktop/src-tauri/src/notices.rs"
