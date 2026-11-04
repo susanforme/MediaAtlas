@@ -116,3 +116,28 @@ it("translates media settings independently of the library page bundle", async (
   expect(screen.queryByText("kind")).not.toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "网络检查器" })).toBeInTheDocument();
 });
+
+it("keeps the durable session and current media when returning from setup", () => {
+  const session = "11111111-1111-4111-8111-111111111111";
+  render(
+    <SettingsPage
+      setup={{
+        from: "scraper",
+        session,
+        media: "22222222-2222-4222-8222-222222222222",
+      }}
+    />,
+  );
+  const url = new URL(
+    screen
+      .getByRole("link", { name: "Return to scraper" })
+      .getAttribute("href") ?? "",
+    "https://example.test",
+  );
+  expect(url.pathname).toBe("/scraper");
+  expect(url.searchParams.get("session")).toBe(session);
+  expect(url.searchParams.get("media")).toBe(
+    "22222222-2222-4222-8222-222222222222",
+  );
+  expect(url.searchParams.has("queue")).toBe(false);
+});

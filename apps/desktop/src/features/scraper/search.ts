@@ -3,6 +3,7 @@ export const MAX_SCRAPE_QUEUE = 32;
 export interface ScraperSearch {
   media?: string;
   queue?: string[];
+  session?: string;
 }
 
 function validMediaId(value: unknown): value is string {
@@ -21,6 +22,14 @@ export function validateScraperSearch(
   value: Record<string, unknown>,
 ): ScraperSearch {
   const media = validMediaId(value.media) ? value.media : undefined;
+  const session =
+    typeof value.session === "string" &&
+    /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(
+      value.session,
+    )
+      ? value.session
+      : undefined;
+  if (session) return { session, ...(media ? { media } : {}) };
   const parsed =
     Array.isArray(value.queue) &&
     value.queue.length > 0 &&

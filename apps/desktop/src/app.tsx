@@ -222,15 +222,19 @@ const scraperRoute = createRoute({
   path: "/scraper",
   validateSearch: validateScraperSearch,
   component: () => {
-    const { media, queue } = scraperRoute.useSearch();
+    const { media, queue, session } = scraperRoute.useSearch();
     const navigate = scraperRoute.useNavigate();
     return (
       <ScraperPage
-        key={media ?? "search"}
+        key={`${session ?? "single"}:${media ?? "search"}`}
         mediaId={media}
+        sessionId={session}
+        onSessionNavigate={(sessionId, nextMedia) =>
+          void navigate({ search: { session: sessionId, media: nextMedia } })
+        }
         queue={queue}
         onQueueNavigate={(nextMedia) =>
-          void navigate({ search: { media: nextMedia, queue } })
+          void navigate({ search: { media: nextMedia, queue, session } })
         }
       />
     );
@@ -301,7 +305,11 @@ const settingsRoute = createRoute({
           else if (search.from === "scraper")
             void navigate({
               to: "/scraper",
-              search: { media: search.media, queue: search.queue },
+              search: {
+                media: search.media,
+                queue: search.queue,
+                session: search.session,
+              },
             });
           else void navigate({ to: "/library", search: { kind } });
         }}

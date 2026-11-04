@@ -1,7 +1,8 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Candidate and field positions are immutable server snapshot indices. */
 import { Label } from "../../components/ui/label";
 import "./styles.css";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import type { VideoKind } from "../../api/scraper";
 import { Button } from "../../components/ui/button";
@@ -10,14 +11,16 @@ import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Select } from "../../components/ui/select";
 import {
-  Empty,
   ErrorNotice,
   Loading,
   PageHeading,
   useFormat,
 } from "../library/shared";
 import "./translations";
+import { validateProviderSetupSearch } from "../settings/setup-search";
+import { PersistentQueueNavigation } from "./persistent-queue-navigation";
 import { ScraperQueueNavigation } from "./queue-navigation";
+import { ScraperRecovery } from "./recovery-actions";
 import {
   providerChoices,
   providerNames,
@@ -26,11 +29,14 @@ import {
 } from "./scraper-model";
 import { validateScraperSearch } from "./search";
 import { VideoSourceDetails } from "./source-detail";
+import { type ReviewSession, useReviewQueue } from "./use-review-queue";
 import { useScraper } from "./use-scraper";
 
 interface ScraperPageProps {
   mediaId?: string;
   queue?: string[];
+  sessionId?: string;
+  onSessionNavigate?: (sessionId: string, mediaId?: string) => void;
   onQueueNavigate?: (mediaId: string) => void;
 }
 
@@ -38,8 +44,24 @@ export function ScraperPage({
   mediaId,
   queue,
   onQueueNavigate,
+  sessionId,
+  onSessionNavigate,
 }: ScraperPageProps = {}) {
-  const context = validateScraperSearch({ media: mediaId, queue });
+  const context = validateScraperSearch({
+    media: mediaId,
+    queue,
+    session: sessionId,
+  });
+  if (context.session)
+    return (
+      <PersistentScraperPage
+        key={context.session}
+        mediaId={context.media}
+        sessionId={context.session}
+        onSessionNavigate={onSessionNavigate}
+        onQueueNavigate={onQueueNavigate}
+      />
+    );
   return (
     <ScraperWorkspace
       key={context.media ?? "local-selection"}
@@ -50,12 +72,41 @@ export function ScraperPage({
   );
 }
 
+function PersistentScraperPage({
+  mediaId,
+  sessionId,
+  onSessionNavigate,
+  onQueueNavigate,
+}: ScraperPageProps & { sessionId: string }) {
+  const review = useReviewQueue(sessionId, mediaId);
+  if (review.query.isPending) return <Loading />;
+  if (review.query.isError)
+    return <ErrorNotice error={review.query.error} retry={review.refresh} />;
+  return (
+    <ScraperWorkspace
+      key={review.selectedId}
+      mediaId={review.selectedId}
+      sessionId={sessionId}
+      review={review}
+      onQueueNavigate={(id) =>
+        onSessionNavigate
+          ? onSessionNavigate(sessionId, id)
+          : onQueueNavigate?.(id)
+      }
+    />
+  );
+}
+
 function ScraperWorkspace({
   mediaId,
   queue,
   onQueueNavigate,
-}: ScraperPageProps) {
+  sessionId,
+  review,
+}: ScraperPageProps & { review?: ReviewSession }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const titleInput = useRef<HTMLInputElement>(null);
   const format = useFormat();
   const {
     kind,
@@ -104,7 +155,7 @@ function ScraperWorkspace({
     outputPlan,
     discard,
     write,
-    busy,
+    busy: workspaceBusy,
     error,
     available,
     providerState,
@@ -113,10 +164,75 @@ function ScraperWorkspace({
     applyFieldPreset,
     selectCandidate,
     clearDetail,
-  } = useScraper(mediaId);
+  } = useScraper(
+    mediaId,
+    review
+      ? { confirmPreview: review.confirm, failed: review.failed }
+      : undefined,
+  );
+  const busy = workspaceBusy || Boolean(review?.busy);
+  const reviewNavigation = review ? (
+    <PersistentQueueNavigation
+      review={review}
+      busy={busy}
+      onNavigate={onQueueNavigate}
+    />
+  ) : null;
+  const recovery = (
+    <ScraperRecovery
+      search={search}
+      error={run.error ?? restore.error}
+      busy={busy}
+      onRetry={
+        searchValid
+          ? () => {
+              void (async () => {
+                if (
+                  review?.selected &&
+                  ["failed", "deferred"].includes(review.selected.state)
+                )
+                  await review.transition("retry", review.selected.media_id);
+                clearDetail();
+                run.mutate();
+              })().catch(() => {});
+            }
+          : undefined
+      }
+      onEdit={
+        !review || review.canWork
+          ? () => titleInput.current?.focus()
+          : undefined
+      }
+      onConfigure={(provider) =>
+        void navigate({
+          to: "/settings",
+          search: validateProviderSetupSearch({
+            tab: "auth",
+            from: "scraper",
+            media: target || undefined,
+            queue,
+            session: sessionId,
+            provider: provider ?? (kind === "anime" ? "anilist" : "tmdb"),
+          }),
+        })
+      }
+    />
+  );
+  if (review && !review.canWork)
+    return (
+      <>
+        <PageHeading title={t("scraper")} />
+        {reviewNavigation}
+        {recovery}
+        {error && error !== run.error && error !== restore.error && (
+          <ErrorNotice error={error} />
+        )}
+      </>
+    );
   return (
     <>
       <PageHeading title={t("scraper")} />
+      {reviewNavigation}
       <section className="panel mb-6 space-y-4">
         {queue && mediaId && (
           <ScraperQueueNavigation
@@ -242,6 +358,7 @@ function ScraperWorkspace({
             <span>{t("scraperTitle")}</span>
             <Input
               value={title}
+              ref={titleInput}
               aria-describedby={
                 selectedProviders.includes("wikipedia.html")
                   ? "scraper-wikipedia-title-hint"
@@ -332,6 +449,7 @@ function ScraperWorkspace({
                   from: "scraper",
                   media: target || undefined,
                   queue,
+                  session: sessionId,
                 }}
               >
                 {t("scraperConfigureProviders")}
@@ -345,6 +463,7 @@ function ScraperWorkspace({
                   from: "scraper",
                   media: target || undefined,
                   queue,
+                  session: sessionId,
                   provider: kind === "anime" ? "anilist" : "tmdb",
                 }}
               >
@@ -375,7 +494,8 @@ function ScraperWorkspace({
           </Button>
         )}
       </form>
-      {error && (
+      {recovery}
+      {error && error !== run.error && error !== restore.error && (
         <div className="mt-4">
           <ErrorNotice error={error} />
         </div>
@@ -390,17 +510,6 @@ function ScraperWorkspace({
           <h2 id="scraper-results" className="text-lg font-semibold">
             {t("scraperResults")}
           </h2>
-          {search.failures.map((f, index) => (
-            <p role="status" className="notice mt-3" key={index}>
-              {f.provider_id}:{" "}
-              {t(`providerFailure_${f.failure}`, {
-                defaultValue: t("operationFailed"),
-              })}
-            </p>
-          ))}
-          {search.candidates.length === 0 && (
-            <Empty title={t("scraperNoResults")} />
-          )}
           <div className="scraper-candidates">
             {search.candidates.map((c, index) => (
               <article

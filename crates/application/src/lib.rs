@@ -2,6 +2,7 @@
 
 pub mod library;
 pub mod music;
+pub mod review_queue;
 
 use mediaatlas_domain::AppError;
 

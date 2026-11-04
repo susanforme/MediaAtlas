@@ -78,7 +78,11 @@ export function SettingsPage({
           <Button asChild variant="outline">
             <Link
               to="/scraper"
-              search={{ media: setup.media, queue: setup.queue }}
+              search={{
+                media: setup.media,
+                queue: setup.queue,
+                session: setup.session,
+              }}
             >
               {t("scraperReturn")}
             </Link>

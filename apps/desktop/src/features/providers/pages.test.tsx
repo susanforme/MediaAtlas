@@ -338,3 +338,32 @@ it("preserves review order in provider return and authentication continuation li
       expect(url.searchParams.get("from")).toBe("scraper");
   }
 });
+
+it("keeps a durable review session through source and authentication links", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor.fixture = false;
+  snapshot.providers[0].descriptor.id = "tmdb";
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  const session = "11111111-1111-4111-8111-111111111111";
+  show(
+    <ProvidersPage
+      embedded
+      setup={{
+        from: "scraper",
+        session,
+        media: "22222222-2222-4222-8222-222222222222",
+      }}
+    />,
+  );
+  await screen.findByRole("link", { name: "Save authentication in Settings" });
+  for (const name of ["Search in Scraper", "Save authentication in Settings"]) {
+    const url = new URL(
+      screen.getByRole("link", { name }).getAttribute("href") ?? "",
+      "https://example.test",
+    );
+    expect(url.searchParams.get("session")).toBe(session);
+    expect(url.searchParams.get("media")).toBe(
+      "22222222-2222-4222-8222-222222222222",
+    );
+  }
+});

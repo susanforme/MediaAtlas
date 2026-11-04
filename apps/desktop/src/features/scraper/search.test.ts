@@ -117,3 +117,18 @@ it("keeps only a valid queue when returning from the fixed scraper setup flow", 
     validateScraperReturnSearch({ from: "external", queue: ["first"] }),
   ).toEqual({});
 });
+
+it("preserves durable session identity through source setup without accepting arbitrary return URLs or parallel URL queues", () => {
+  const session = "11111111-1111-4111-8111-111111111111";
+  expect(
+    validateScraperReturnSearch({
+      from: "scraper",
+      session,
+      media: "local-media",
+      queue: ["other"],
+      returnUrl: "/adult",
+    }),
+  ).toEqual({ from: "scraper", session, media: "local-media" });
+  for (const invalid of ["https://external.example", "../queue", "", [session]])
+    expect(validateScraperSearch({ session: invalid })).toEqual({});
+});

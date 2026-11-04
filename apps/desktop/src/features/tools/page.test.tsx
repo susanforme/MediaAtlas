@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   plan: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => vi.fn(),
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
   ),

@@ -1293,8 +1293,13 @@ mod tests {
         context.validate_tx(&mut tx, s.media.id).await.unwrap();
         tx.rollback().await.unwrap();
         // The guard must continue rejecting a candidate for a different file.
-        sqlx::query("UPDATE scan_candidates SET normalized_relative_path='different.mkv' WHERE task_id=?")
-            .bind(context.task_id.to_string()).execute(s.repo.pool()).await.unwrap();
+        sqlx::query(
+            "UPDATE scan_candidates SET normalized_relative_path='different.mkv' WHERE task_id=?",
+        )
+        .bind(context.task_id.to_string())
+        .execute(s.repo.pool())
+        .await
+        .unwrap();
         let mut tx = s.repo.pool().begin().await.unwrap();
         assert!(matches!(
             context.validate_tx(&mut tx, s.media.id).await,

@@ -12,6 +12,7 @@ import { DesktopError } from "../../api/desktop";
 import { libraryApi } from "../../api/library";
 import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
+import { type ReviewQueue, reviewQueueApi } from "../../api/review-queue";
 import { scraperApi, scraperOutputApi } from "../../api/scraper";
 import i18n from "../../i18n";
 import { fixtureSnapshot } from "../providers/fixtures";
@@ -23,7 +24,9 @@ import {
 } from "./fixtures";
 import { ScraperPage } from "./page";
 
+const recoveryNavigate = vi.hoisted(() => vi.fn());
 vi.mock("@tanstack/react-router", () => ({
+  useNavigate: () => recoveryNavigate,
   Link: ({
     to,
     search,
@@ -45,6 +48,9 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 vi.mock("../../api/provider-auth", () => ({
   providerAuthApi: { status: vi.fn() },
+}));
+vi.mock("../../api/review-queue", () => ({
+  reviewQueueApi: { get: vi.fn(), update: vi.fn(), checkpoint: vi.fn() },
 }));
 vi.mock("../../api/providers", async (original) => ({
   ...(await original<typeof import("../../api/providers")>()),
@@ -75,6 +81,7 @@ function show(
   mediaId?: string,
   queue?: string[],
   onQueueNavigate?: (mediaId: string) => void,
+  sessionId?: string,
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -85,6 +92,7 @@ function show(
         <ScraperPage
           mediaId={id}
           queue={queue}
+          sessionId={sessionId}
           onQueueNavigate={onQueueNavigate}
         />
       </QueryClientProvider>
@@ -986,4 +994,372 @@ it("ignores a search result even when cancellation happens before the mutation f
   expect(
     screen.queryByRole("button", { name: "Choose this candidate" }),
   ).not.toBeInTheDocument();
+});
+
+const savedSessionId = "11111111-1111-4111-8111-111111111111";
+function storedReview(
+  state: ReviewQueue["items"][number]["state"] = "pending",
+): ReviewQueue {
+  return {
+    id: savedSessionId,
+    revision: 0,
+    current_media_id: state === "pending" ? "media-1" : null,
+    context: {
+      q: "Local",
+      kind: "movie",
+      health: "incomplete_metadata",
+      sort: "title_asc",
+      cursor: "fixture-cursor",
+      page: 2,
+    },
+    items: [
+      {
+        media_id: "media-1",
+        position: 0,
+        state,
+        checkpoint: null,
+        preview_id: null,
+        needs_recheck: false,
+        reason: null,
+      },
+    ],
+    created_at: "2026-11-04T10:00:00Z",
+    updated_at: "2026-11-04T10:00:00Z",
+  };
+}
+function persistQueue(initial = storedReview()) {
+  let saved = initial;
+  vi.mocked(reviewQueueApi.get).mockImplementation(async () =>
+    structuredClone(saved),
+  );
+  vi.mocked(reviewQueueApi.checkpoint).mockImplementation(async (input) => {
+    saved = {
+      ...saved,
+      revision: saved.revision + 1,
+      items: saved.items.map((item) => ({
+        ...item,
+        checkpoint: "proof-1",
+        preview_id: input.preview_id,
+      })),
+    };
+    return structuredClone(saved);
+  });
+  vi.mocked(reviewQueueApi.update).mockImplementation(async ({ action }) => {
+    const state =
+      action === "defer"
+        ? "deferred"
+        : action === "failed"
+          ? "failed"
+          : action === "confirmed"
+            ? "confirmed"
+            : "pending";
+    saved = {
+      ...saved,
+      revision: saved.revision + 1,
+      current_media_id: state === "pending" ? "media-1" : null,
+      items: saved.items.map((item) => ({ ...item, state })),
+    };
+    return structuredClone(saved);
+  });
+}
+async function showSavedQueue(state?: ReviewQueue["items"][number]["state"]) {
+  persistQueue(storedReview(state));
+  const view = show("media-1", undefined, vi.fn(), savedSessionId);
+  await screen.findByRole("region", { name: "Saved review queues" });
+  return view;
+}
+
+it("restores a durable session without searching and returns the original tools filters and page", async () => {
+  await showSavedQueue();
+  await screen.findByDisplayValue("Local film");
+  const link = screen.getByRole("link", { name: "Return to media list" });
+  const query = new URL(
+    link.getAttribute("href") ?? "",
+    "https://fixture.invalid",
+  ).searchParams;
+  expect(Object.fromEntries(query)).toMatchObject({
+    q: "Local",
+    kind: "movie",
+    health: "incomplete_metadata",
+    sort: "title_asc",
+    cursor: "fixture-cursor",
+    page: "2",
+  });
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(reviewQueueApi.update).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("persists deferral of the last item and requires explicit review after reopening", async () => {
+  const view = await showSavedQueue();
+  fireEvent.click(screen.getByRole("button", { name: "Defer this item" }));
+  await screen.findByText(
+    "This item was deferred. Review it again to continue.",
+  );
+  expect(reviewQueueApi.update).toHaveBeenCalledWith({
+    queue_id: savedSessionId,
+    media_id: "media-1",
+    expected_revision: 0,
+    action: "defer",
+  });
+  view.unmount();
+  show("media-1", undefined, vi.fn(), savedSessionId);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Review this item again" }),
+  );
+  await screen.findByDisplayValue("Local film");
+  expect(reviewQueueApi.update).toHaveBeenLastCalledWith({
+    queue_id: savedSessionId,
+    media_id: "media-1",
+    expected_revision: 1,
+    action: "retry",
+  });
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+});
+
+it("keeps a failed queued search's specific recovery visible and persists explicit retry before searching again", async () => {
+  await showSavedQueue();
+  vi.mocked(scraperApi.search).mockResolvedValueOnce({
+    ...syntheticSearch,
+    candidates: [],
+    failures: [{ provider_id: "tmdb", failure: "timeout" }],
+  });
+  const search = await screen.findByRole("button", {
+    name: "Search providers",
+  });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.click(search);
+  await screen.findByText(
+    "This item failed. Review it again to retry the search; metadata and files are never applied automatically.",
+  );
+  expect(
+    screen.getByText(
+      "The source request timed out. You can search this item again.",
+    ),
+  ).toBeInTheDocument();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Search this item again" }),
+  );
+  await waitFor(() => expect(scraperApi.search).toHaveBeenCalledTimes(2));
+  expect(reviewQueueApi.update).toHaveBeenLastCalledWith(
+    expect.objectContaining({ action: "retry", media_id: "media-1" }),
+  );
+  expect(
+    vi.mocked(reviewQueueApi.update).mock.invocationCallOrder.at(-1),
+  ).toBeLessThan(
+    vi.mocked(scraperApi.search).mock.invocationCallOrder.at(-1) ?? 0,
+  );
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("binds a durable checkpoint before explicit confirmation and leaves sidecar output separate", async () => {
+  await showSavedQueue();
+  const search = await screen.findByRole("button", {
+    name: "Search providers",
+  });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.click(search);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Choose this candidate" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  await screen.findByText("Metadata confirmed. 1 fields applied.");
+  expect(reviewQueueApi.checkpoint).toHaveBeenCalledWith({
+    queue_id: savedSessionId,
+    media_id: "media-1",
+    expected_revision: 0,
+    preview_id: "merge-1",
+  });
+  expect(reviewQueueApi.update).toHaveBeenLastCalledWith({
+    queue_id: savedSessionId,
+    media_id: "media-1",
+    expected_revision: 1,
+    action: "confirmed",
+    checkpoint: "proof-1",
+  });
+  expect(
+    vi.mocked(reviewQueueApi.checkpoint).mock.invocationCallOrder[0],
+  ).toBeLessThan(vi.mocked(scraperApi.confirm).mock.invocationCallOrder[0]);
+  expect(
+    vi.mocked(scraperApi.confirm).mock.invocationCallOrder[0],
+  ).toBeLessThan(vi.mocked(reviewQueueApi.update).mock.invocationCallOrder[0]);
+  expect(
+    screen.getByRole("button", { name: "Preview NFO and poster output" }),
+  ).toBeEnabled();
+  expect(scraperOutputApi.preview).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("does not replay metadata confirmation or sidecar writes when a confirmed queue is restored", async () => {
+  await showSavedQueue("confirmed");
+  expect(
+    screen.getByText("There are no pending items in this queue."),
+  ).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Search providers" }),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(reviewQueueApi.checkpoint).not.toHaveBeenCalled();
+  expect(reviewQueueApi.update).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("blocks unavailable queue items while retaining a safe return and refresh action", async () => {
+  const queue = storedReview();
+  queue.items[0] = {
+    ...queue.items[0],
+    needs_recheck: true,
+    reason: "unavailable_media",
+  };
+  persistQueue(queue);
+  show("media-1", undefined, vi.fn(), savedSessionId);
+  await screen.findByText(
+    "This media was removed or its folder is unavailable. Restore the folder and refresh the queue.",
+  );
+  expect(screen.getByRole("button", { name: "Refresh queue" })).toBeEnabled();
+  expect(
+    screen.queryByRole("button", { name: "Search providers" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Review this item again" }),
+  ).not.toBeInTheDocument();
+  expect(scraperApi.search).not.toHaveBeenCalled();
+});
+
+it("refuses confirmation after a checkpoint conflict and never marks the item confirmed", async () => {
+  await showSavedQueue();
+  vi.mocked(reviewQueueApi.checkpoint).mockRejectedValue(
+    new DesktopError("request_failed", {
+      schema_version: 1,
+      code: "conflict",
+      message: "safe",
+      correlation_id: "fixture",
+    }),
+  );
+  const search = await screen.findByRole("button", {
+    name: "Search providers",
+  });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.click(search);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Choose this candidate" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  await screen.findByText(
+    "This item failed. Review it again to retry the search; metadata and files are never applied automatically.",
+  );
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(
+    vi
+      .mocked(reviewQueueApi.update)
+      .mock.calls.some(([input]) => input.action === "confirmed"),
+  ).toBe(false);
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("preserves the durable session and current media in both source configuration links", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor.id = "tmdb";
+  snapshot.providers[0].descriptor.media_kinds = ["movie", "tv_series"];
+  snapshot.providers[0].config.enabled = false;
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  await showSavedQueue();
+  for (const name of ["Configure providers", "Configure credentials"]) {
+    const link = await screen.findByRole("link", { name });
+    const url = new URL(
+      link.getAttribute("href") ?? "",
+      "https://fixture.invalid",
+    );
+    expect(url.pathname).toBe("/settings");
+    expect(url.searchParams.get("session")).toBe(savedSessionId);
+    expect(url.searchParams.get("media")).toBe("media-1");
+    expect(url.searchParams.get("queue")).toBeNull();
+  }
+});
+
+it("retains the durable session when a failed source response sends the user to credential setup", async () => {
+  await showSavedQueue();
+  vi.mocked(scraperApi.search).mockResolvedValueOnce({
+    ...syntheticSearch,
+    candidates: [],
+    failures: [{ provider_id: "tmdb", failure: "credentials_unavailable" }],
+  });
+  const search = await screen.findByRole("button", {
+    name: "Search providers",
+  });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.click(search);
+  await screen.findByText(
+    "This item failed. Review it again to retry the search; metadata and files are never applied automatically.",
+  );
+  const configure = await screen.findByRole("button", {
+    name: "Configure source and return · TMDB",
+  });
+  await waitFor(() => expect(configure).toBeEnabled());
+  fireEvent.click(configure);
+  expect(recoveryNavigate).toHaveBeenCalledWith({
+    to: "/settings",
+    search: {
+      tab: "auth",
+      from: "scraper",
+      session: savedSessionId,
+      media: "media-1",
+      provider: "tmdb",
+    },
+  });
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+});
+
+it("does not apply a checkpoint response that arrives after leaving the queue", async () => {
+  const view = await showSavedQueue();
+  let finish: (value: ReviewQueue) => void = () => {};
+  vi.mocked(reviewQueueApi.checkpoint).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const search = await screen.findByRole("button", {
+    name: "Search providers",
+  });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.click(search);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Choose this candidate" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Preview merge" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Confirm selected metadata" }),
+  );
+  await waitFor(() => expect(reviewQueueApi.checkpoint).toHaveBeenCalled());
+  view.unmount();
+  await act(async () => {
+    finish({
+      ...storedReview(),
+      revision: 1,
+      items: [
+        {
+          ...storedReview().items[0],
+          checkpoint: "proof-1",
+          preview_id: "merge-1",
+        },
+      ],
+    });
+  });
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(
+    vi
+      .mocked(reviewQueueApi.update)
+      .mock.calls.some(([input]) => input.action === "confirmed"),
+  ).toBe(false);
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
 });

@@ -21,7 +21,15 @@ import {
 import { type FieldPreset, selectScraperFields } from "./field-selection";
 import { scrapeKind } from "./scraper-model";
 
-export function useScraper(mediaId?: string) {
+export function useScraper(
+  mediaId?: string,
+  review?: {
+    confirmPreview: (
+      previewId: string,
+    ) => ReturnType<typeof scraperApi.confirm>;
+    failed: () => void;
+  },
+) {
   const { i18n } = useTranslation();
   const client = useQueryClient();
   const [kind, setKind] = useState<VideoKind>("movie");
@@ -164,7 +172,11 @@ export function useScraper(mediaId?: string) {
     onSuccess: ({ value: result, epoch }) => {
       if (!current(epoch)) return;
       setSearch(result);
+      if (!result.candidates.length && result.failures.length) review?.failed();
       void client.invalidateQueries({ queryKey: ["scraper-history"] });
+    },
+    onError: (_error, epoch) => {
+      if (current(epoch)) review?.failed();
     },
   });
   const restore = useMutation({
@@ -207,6 +219,9 @@ export function useScraper(mediaId?: string) {
       setSelectedFields(result.data.fields.map((f) => f.key));
       setSelectedArtwork([]);
     },
+    onError: (_error, { epoch }) => {
+      if (current(epoch)) review?.failed();
+    },
   });
   const artworkLoad = useMutation({
     mutationFn: ({ index, epoch }: { index: number; epoch: number }) =>
@@ -240,9 +255,15 @@ export function useScraper(mediaId?: string) {
     onSuccess: ({ value, epoch }) => {
       if (current(epoch)) setPreview(value);
     },
+    onError: (_error, epoch) => {
+      if (current(epoch)) review?.failed();
+    },
   });
   const confirm = useMutation({
-    mutationFn: () => scraperApi.confirm(preview?.preview_id ?? ""),
+    mutationFn: () =>
+      review
+        ? review.confirmPreview(preview?.preview_id ?? "")
+        : scraperApi.confirm(preview?.preview_id ?? ""),
     onSuccess: () => {
       void client.invalidateQueries({ queryKey: ["media"] });
       void client.invalidateQueries({ queryKey: ["detail"] });

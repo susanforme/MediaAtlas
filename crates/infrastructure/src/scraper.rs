@@ -468,6 +468,7 @@ impl ScraperService {
         self.providers.detach_cancellation(run_id).await;
         self.session(run_id).await?;
         let mut tx = self.repo.pool().begin().await?;
+        crate::review_queue::validate_bound_preview(&mut tx, id).await?;
         if let Some(context) = automatic {
             context.validate_tx(&mut tx, media.id).await?;
         }
@@ -1176,6 +1177,349 @@ mod tests {
         assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
         assert_eq!(s.repo.list_files(s.media.id).await.unwrap().len(), 1);
         assert!(!s.dir.path().join("Example.nfo").exists());
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn review_queue_real_merge_recovers_confirmed_result_without_replay() {
+        use crate::review_queue::ReviewQueueService;
+        use mediaatlas_application::review_queue::*;
+        let s = setup().await;
+        let ledger = ReviewQueueService::new(s.repo.clone());
+        let queue = ledger
+            .create(ReviewQueueCreate {
+                media_ids: vec![s.media.id],
+                context: ReviewContext::default(),
+            })
+            .await
+            .unwrap();
+        let search = s.service.search(request()).await.unwrap();
+        let preview = s
+            .service
+            .preview(selection(search.run_id, s.media.id))
+            .await
+            .unwrap();
+        let bound = ledger
+            .checkpoint(ReviewQueueCheckpoint {
+                queue_id: queue.id,
+                media_id: s.media.id,
+                expected_revision: queue.revision,
+                preview_id: preview.preview_id,
+            })
+            .await
+            .unwrap();
+        let update = ReviewQueueUpdate {
+            queue_id: queue.id,
+            media_id: s.media.id,
+            expected_revision: bound.revision,
+            action: ReviewAction::Confirmed,
+            checkpoint: bound.items[0].checkpoint,
+        };
+        assert!(
+            matches!(
+                ledger.update(update.clone()).await,
+                Err(RepositoryError::Conflict)
+            ),
+            "a planned preview is not proof of confirmation"
+        );
+        s.service.confirm(preview.preview_id).await.unwrap();
+        // Simulate a process exit before the frontend can mark its ledger item.
+        let reopened = ReviewQueueService::new(s.repo.clone());
+        let restored = reopened.get(queue.id).await.unwrap();
+        assert_eq!(restored.items[0].state, ReviewState::Confirmed);
+        assert_eq!(restored.current_media_id, None);
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT state FROM review_queue_items WHERE queue_id=?"
+            )
+            .bind(queue.id.to_string())
+            .fetch_one(s.repo.pool())
+            .await
+            .unwrap(),
+            "pending",
+            "reading reconciles facts without replaying or mutating the ledger"
+        );
+        let finished = reopened.update(update).await.unwrap();
+        assert_eq!(finished.items[0].state, ReviewState::Confirmed);
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_some());
+        assert_eq!(
+            std::fs::read(s.dir.path().join("Example.mkv")).unwrap(),
+            b"synthetic source media must stay intact"
+        );
+        assert!(!s.dir.path().join("Example.nfo").exists());
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn review_queue_bound_merge_rechecks_root_files_and_checkpoint_in_final_transaction() {
+        use crate::review_queue::ReviewQueueService;
+        use mediaatlas_application::review_queue::*;
+        for mutation in ["disable", "path", "kind", "exclusions", "file", "supersede"] {
+            let s = setup().await;
+            let ledger = ReviewQueueService::new(s.repo.clone());
+            let queue = ledger
+                .create(ReviewQueueCreate {
+                    media_ids: vec![s.media.id],
+                    context: ReviewContext::default(),
+                })
+                .await
+                .unwrap();
+            let search = s.service.search(request()).await.unwrap();
+            let preview = s
+                .service
+                .preview(selection(search.run_id, s.media.id))
+                .await
+                .unwrap();
+            let bound = ledger
+                .checkpoint(ReviewQueueCheckpoint {
+                    queue_id: queue.id,
+                    media_id: s.media.id,
+                    expected_revision: queue.revision,
+                    preview_id: preview.preview_id,
+                })
+                .await
+                .unwrap();
+            let root = s.repo.list_roots().await.unwrap().remove(0);
+            match mutation {
+                "disable" => {
+                    sqlx::query("UPDATE library_roots SET enabled=0 WHERE id=?")
+                        .bind(root.id.to_string())
+                        .execute(s.repo.pool())
+                        .await
+                        .unwrap();
+                }
+                "path" => {
+                    sqlx::query("UPDATE library_roots SET path=path||'/changed' WHERE id=?")
+                        .bind(root.id.to_string())
+                        .execute(s.repo.pool())
+                        .await
+                        .unwrap();
+                }
+                "kind" => {
+                    sqlx::query("UPDATE library_roots SET kind='tv_series' WHERE id=?")
+                        .bind(root.id.to_string())
+                        .execute(s.repo.pool())
+                        .await
+                        .unwrap();
+                }
+                "exclusions" => {
+                    sqlx::query("INSERT INTO root_settings(root_id,exclude_patterns_json) VALUES(?,'[\"**/*.mkv\"]') ON CONFLICT(root_id) DO UPDATE SET exclude_patterns_json=excluded.exclude_patterns_json").bind(root.id.to_string()).execute(s.repo.pool()).await.unwrap();
+                }
+                "file" => {
+                    sqlx::query(
+                        "UPDATE media_files SET size_bytes=size_bytes+1 WHERE media_item_id=?",
+                    )
+                    .bind(s.media.id.to_string())
+                    .execute(s.repo.pool())
+                    .await
+                    .unwrap();
+                }
+                "supersede" => {
+                    ledger
+                        .update(ReviewQueueUpdate {
+                            queue_id: queue.id,
+                            media_id: s.media.id,
+                            expected_revision: bound.revision,
+                            action: ReviewAction::Select,
+                            checkpoint: None,
+                        })
+                        .await
+                        .unwrap();
+                }
+                _ => unreachable!(),
+            }
+            assert!(
+                matches!(
+                    s.service.confirm(preview.preview_id).await,
+                    Err(RepositoryError::Conflict)
+                ),
+                "{mutation} after checkpoint must reject the real metadata merge"
+            );
+            assert!(s.service.media_detail(s.media.id).await.unwrap().is_none());
+            assert_eq!(
+                s.repo.get_media(s.media.id).await.unwrap().unwrap().title,
+                "Local title"
+            );
+            s.server.abort();
+            s.repo.pool().close().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn review_queue_checkpoints_cannot_reuse_old_foreign_or_consumed_previews() {
+        use crate::review_queue::ReviewQueueService;
+        use mediaatlas_application::review_queue::*;
+        let s = setup().await;
+        let ledger = ReviewQueueService::new(s.repo.clone());
+        let search = s.service.search(request()).await.unwrap();
+        let old = s
+            .service
+            .preview(selection(search.run_id, s.media.id))
+            .await
+            .unwrap();
+        tokio::time::sleep(Duration::from_millis(2)).await;
+        let queue = ledger
+            .create(ReviewQueueCreate {
+                media_ids: vec![s.media.id],
+                context: ReviewContext::default(),
+            })
+            .await
+            .unwrap();
+        let other = ledger
+            .create(ReviewQueueCreate {
+                media_ids: vec![s.media.id],
+                context: ReviewContext::default(),
+            })
+            .await
+            .unwrap();
+        let mut input = ReviewQueueCheckpoint {
+            queue_id: queue.id,
+            media_id: s.media.id,
+            expected_revision: queue.revision,
+            preview_id: old.preview_id,
+        };
+        assert!(matches!(
+            ledger.checkpoint(input.clone()).await,
+            Err(RepositoryError::Conflict)
+        ));
+        let new = s
+            .service
+            .preview(selection(search.run_id, s.media.id))
+            .await
+            .unwrap();
+        input.preview_id = new.preview_id;
+        let bound = ledger.checkpoint(input.clone()).await.unwrap();
+        assert!(
+            matches!(
+                ledger.checkpoint(input).await,
+                Err(RepositoryError::Conflict)
+            ),
+            "stale revision must conflict"
+        );
+        ledger
+            .update(ReviewQueueUpdate {
+                queue_id: queue.id,
+                media_id: s.media.id,
+                expected_revision: bound.revision,
+                action: ReviewAction::Select,
+                checkpoint: None,
+            })
+            .await
+            .unwrap();
+        assert!(
+            matches!(
+                ledger
+                    .checkpoint(ReviewQueueCheckpoint {
+                        queue_id: other.id,
+                        media_id: s.media.id,
+                        expected_revision: other.revision,
+                        preview_id: new.preview_id
+                    })
+                    .await,
+                Err(RepositoryError::Conflict)
+            ),
+            "clearing a checkpoint must not make its preview reusable by another queue"
+        );
+        let foreign = MediaItem {
+            id: Uuid::new_v4(),
+            ..s.media.clone()
+        };
+        s.repo.save_media(&foreign).await.unwrap();
+        let wrong = s
+            .service
+            .preview(selection(search.run_id, foreign.id))
+            .await
+            .unwrap();
+        assert!(matches!(
+            ledger
+                .checkpoint(ReviewQueueCheckpoint {
+                    queue_id: other.id,
+                    media_id: s.media.id,
+                    expected_revision: other.revision,
+                    preview_id: wrong.preview_id
+                })
+                .await,
+            Err(RepositoryError::Conflict)
+        ));
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn review_queue_crash_recovery_can_confirm_the_next_item_without_marking_previous() {
+        use crate::review_queue::ReviewQueueService;
+        use mediaatlas_application::review_queue::*;
+        let s = setup().await;
+        let second = MediaItem {
+            id: Uuid::new_v4(),
+            ..s.media.clone()
+        };
+        s.repo.save_media(&second).await.unwrap();
+        let mut file = s.repo.list_files(s.media.id).await.unwrap().remove(0);
+        file.id = Uuid::new_v4();
+        file.media_item_id = second.id;
+        file.relative_path = "Second.mkv".into();
+        s.repo.save_file(&file).await.unwrap();
+        let ledger = ReviewQueueService::new(s.repo.clone());
+        let queue = ledger
+            .create(ReviewQueueCreate {
+                media_ids: vec![s.media.id, second.id],
+                context: ReviewContext::default(),
+            })
+            .await
+            .unwrap();
+        let search = s.service.search(request()).await.unwrap();
+        let first = s
+            .service
+            .preview(selection(search.run_id, s.media.id))
+            .await
+            .unwrap();
+        ledger
+            .checkpoint(ReviewQueueCheckpoint {
+                queue_id: queue.id,
+                media_id: s.media.id,
+                expected_revision: queue.revision,
+                preview_id: first.preview_id,
+            })
+            .await
+            .unwrap();
+        s.service.confirm(first.preview_id).await.unwrap();
+        let resumed = ledger.get(queue.id).await.unwrap();
+        assert_eq!(resumed.current_media_id, Some(second.id));
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT current_media_id FROM review_queues WHERE id=?"
+            )
+            .bind(queue.id.to_string())
+            .fetch_one(s.repo.pool())
+            .await
+            .unwrap(),
+            s.media.id.to_string()
+        );
+        let search = s.service.search(request()).await.unwrap();
+        let next = s
+            .service
+            .preview(selection(search.run_id, second.id))
+            .await
+            .unwrap();
+        ledger
+            .checkpoint(ReviewQueueCheckpoint {
+                queue_id: queue.id,
+                media_id: second.id,
+                expected_revision: resumed.revision,
+                preview_id: next.preview_id,
+            })
+            .await
+            .unwrap();
+        s.service.confirm(next.preview_id).await.unwrap();
+        let final_view = ledger.get(queue.id).await.unwrap();
+        assert!(final_view
+            .items
+            .iter()
+            .all(|i| i.state == ReviewState::Confirmed));
+        assert_eq!(final_view.current_media_id, None);
         s.server.abort();
         s.repo.pool().close().await;
     }

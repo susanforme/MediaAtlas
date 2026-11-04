@@ -21,6 +21,7 @@ pub mod network;
 pub mod organization;
 pub mod provider_auth;
 pub mod providers;
+pub mod review_queue;
 pub mod scan_service;
 pub mod scraper;
 pub mod tasks;

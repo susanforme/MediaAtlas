@@ -14,6 +14,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { Empty, ErrorNotice, HealthBadges, Loading } from "../library/shared";
+import { ReviewQueueLauncher } from "../scraper/review-queue-launcher";
 import { MAX_SCRAPE_QUEUE } from "../scraper/search";
 import { isSelectableCandidate } from "./candidate-model";
 import {
@@ -192,19 +193,11 @@ export function OrdinaryCandidates({
                 </Button>
               )}
             </div>
-            {selectedIds.length > 0 ? (
-              <Button asChild>
-                <Link
-                  to="/scraper"
-                  search={{ media: selectedIds[0], queue: selectedIds }}
-                >
-                  {t("toolsScrapeSelected")}
-                </Link>
-              </Button>
-            ) : (
-              <Button disabled>{t("toolsScrapeSelected")}</Button>
-            )}
           </div>
+          <ReviewQueueLauncher
+            mediaIds={selectedIds}
+            context={browser.search}
+          />
           <p className="text-sm text-muted-foreground">
             {t("toolsBatchHelp", { limit: MAX_SCRAPE_QUEUE })}
           </p>

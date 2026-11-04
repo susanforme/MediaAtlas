@@ -1,0 +1,34 @@
+{
+  "id": "10000000-0000-4000-8000-000000000001",
+  "revision": 2,
+  "current_media_id": "20000000-0000-4000-8000-000000000001",
+  "context": {
+    "root": "30000000-0000-4000-8000-000000000001",
+    "kind": "movie",
+    "health": "metadata_needs_review",
+    "q": "Synthetic fixture",
+    "sort": "title_asc"
+  },
+  "items": [
+    {
+      "media_id": "20000000-0000-4000-8000-000000000001",
+      "position": 0,
+      "state": "pending",
+      "checkpoint": "40000000-0000-4000-8000-000000000001",
+      "preview_id": "50000000-0000-4000-8000-000000000001",
+      "needs_recheck": false,
+      "reason": null
+    },
+    {
+      "media_id": "20000000-0000-4000-8000-000000000002",
+      "position": 1,
+      "state": "deferred",
+      "checkpoint": null,
+      "preview_id": null,
+      "needs_recheck": false,
+      "reason": null
+    }
+  ],
+  "created_at": "2026-11-04T10:00:00Z",
+  "updated_at": "2026-11-04T10:00:01Z"
+}

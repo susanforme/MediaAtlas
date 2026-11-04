@@ -129,7 +129,9 @@ function ProviderCard({
   setup?: ProviderSetupSearch;
 }) {
   const { t, i18n } = useTranslation();
-  const scraperContext =
+  const scraperContext:
+    | Pick<ProviderSetupSearch, "media" | "queue" | "session">
+    | undefined =
     setup?.from === "scraper"
       ? setup
       : returnToScraper
@@ -219,6 +221,7 @@ function ProviderCard({
                 search={{
                   media: scraperContext?.media,
                   queue: scraperContext?.queue,
+                  session: scraperContext?.session,
                 }}
               >
                 {t("providerOpenScraper")}
