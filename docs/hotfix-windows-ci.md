@@ -68,3 +68,11 @@ Native macOS run [41620630364](https://github.com/susanforme/MediaAtlas/actions/
 The held-writer regression checks that the operation remains pending while the real reservation exists, releases that reservation, then verifies the original `Conflict` and unchanged file. The concurrent regression checks all 24 owner/root reassignments are rejected, and that 24 distinct file IDs competing for one path produce exactly one success and 23 conflicts. All 13 repository tests pass after the fix (`/tmp/save-file-writer-after.log`). The 100 ms bounded pending check verifies contention behavior; it is not a delay used to repair ordering. Native macOS confirmation still requires the next CI result.
 
 Final Linux validation passes all 305 Rust workspace tests, workspace formatting and workspace/all-target Clippy with warnings denied. Logs are `/tmp/save-file-final-workspace.log`, `/tmp/save-file-final-fmt.log` and `/tmp/save-file-final-clippy.log`. Frontend source, beta.2 version and lockfiles are unchanged.
+
+## 刮削测试的文件身份与取消同步（2026-11-04）
+
+独立修复提交 `127f49c`。成人自动测试夹具之前将文件名原始大小写放进索引键；Windows 仓库保存规范化键后，最终守卫无法匹配而返回 Conflict。夹具改为读取持久化的 normalized identity，并新增“规范化键可用、其他文件键仍拒绝”的回归；生产守卫未放宽。
+
+成人详情撤权与并发图库测试改用实际请求进入/响应 gate 同步。图库并发用例明确配置两个图片并发槽，不再依赖固定 25ms 延时；成人响应保持到取消实际完成，避免撤权轮询与立即响应之间的测试竞争。
+
+[CI run 41757918195](https://github.com/susanforme/MediaAtlas/actions/runs/41757918195) 的 Windows、macOS、Linux 全部成功。Windows [job 126338312682](https://github.com/susanforme/MediaAtlas/actions/runs/41757918195/job/126338312682) 于 2026-11-04 10:08:51（北京时间）完成 Rust 核心步骤；原三个失败测试及新增规范化身份测试均通过，infrastructure 单元 214 通过、0 失败。此证据属于独立修复，不代替后续 P0 队列版本的跨平台 CI。
