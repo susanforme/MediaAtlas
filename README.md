@@ -100,6 +100,8 @@ P0 `get_app_info` 契约不变；P2 新增 Root/浏览/扫描命令，返回 `{s
 
 当前文档见 [docs/README.md](docs/README.md)，视觉与开发规范见根 [design.md](design.md)和两级 `AGENTS.md`。旧实施计划、阶段成绩和旧 UI 走查已移除，不作为当前行为或本轮验收依据。
 
+当前 P0 已实现 [持久化人工核对队列](docs/review-queue.md)及 schema 19：最近队列、逐项状态与确认检查点以实际后端账本为准。本轮前端 397 项、Rust 343 项测试及构建检查通过，见[队列截图](screenshots/review-queue-2026-11-04/README.md)。P1 来源顺序、资料语言与补图策略仍为后续契约。
+
 ## 验证与截图
 
 本轮验证重新运行适用的前端、Rust、IPC 和发布检查。实际浏览器截图、源码和数据模式见 [screenshots/README.md](screenshots/README.md)。浏览器合成 IPC 验证界面与交互，不证明真实系统目录窗口、keyring、在线来源或媒体写入已通过。

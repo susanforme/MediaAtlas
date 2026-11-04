@@ -112,3 +112,7 @@ Library consumption and tools have separate query scopes. Consumption requires a
 `organization` owns immutable source/target/attachment snapshots, streaming byte hashes, no-follow capabilities, no-clobber filesystem publication, per-stage persistent intent/completion logs and separately confirmed rollback. Filesystem changes and SQLite commits cannot be atomic together; retained owned staging/quarantine bytes and journal identity provide explicit recovery evidence. Startup only marks interrupted work. The ordinary/adult channels remain separate; revoked adult previews cannot be revived by unlocking.
 
 `watcher` uses maintained native `notify` handles, durable opt-in settings, bounded event queues, debounce and coalescing. For explicitly opted-in ordinary directories it feeds the existing backend automatic update pipeline; source files remain read-only and no event authorizes sidecar output or file organization. Process lifetime and persisted configuration are distinct. `health` performs bounded read-only maintenance review and navigates to explicit tool workflows. App-private quarantine/backup names are excluded without changing the existing user hidden/Git/exclusion semantics.
+
+## 持久化人工核对
+
+P0 人工核对账本通过版本化 IPC 和 `ReviewQueueService` 管理，schema 19 追加队列、项和不可变预览检查点。它只用于普通影视；成人/音乐不进入该账本。客户端恢复显式读取状态，写入使用 revision CAS，确认由真实后端合并成功证据证明；读取、跳过或切换不授予写盘权限。详见 [核对队列契约](review-queue.md)。本轮检查与新截图仍需在集成完成后记录。

@@ -2,6 +2,8 @@
 
 本文记录公共表与已追加的持久化边界；完整实际 schema 以 `crates/infrastructure/migrations/` 的追加迁移为准。领域定义见 [domain-model.md](domain-model.md)，接口约定见 [phase-1-contract.md](phase-1-contract.md)。
 
+当前 main 已追加至 **0019 / schema 19**；这表示源码中的迁移集合，不代表本轮验证已经完成。逐项核对契约见 [持久化核对队列](review-queue.md)。
+
 ## 连接与迁移
 
 - SQLx + SQLite；所有 Repository 连接开启 foreign_keys、WAL 和 busy_timeout。桌面宿主在应用数据目录打开数据库并完成迁移；媒体盘访问只在用户配置的 Root 和相应权限范围内发生。
@@ -77,3 +79,9 @@ Append-only migrations `0013_music.sql` and `0014_music_tags.sql` add real indep
 ## Phase 7 appended review state
 
 Migrations `0015_organization.sql`, `0016_watcher.sql` and `0017_library_ready.sql` append immutable organization plans with ordinary/adult lanes, operation-owned step journals, durable watcher opt-in configuration and explicit local metadata provenance. Organization history records filesystem intent and completed steps separately; rollback is a new immutable plan linked to the original. Recovery does not replay filesystem changes at startup. Watcher settings never imply that an old process handle is alive. Readiness evidence distinguishes parsed local NFO/audio tags from P2 inferred filename fields; existing typed Movie/TV/Anime/adult confirmation source tables remain authoritative provenance. SQLx and existing migration checksum validation are retained.
+
+## 自动媒体库与人工核对账本
+
+`0018_auto_library.sql` 增加自动任务的 mode、phase、实际匹配/待核对/失败统计与 `library_refresh_items`。已发现的本地文件可先浏览，来源资料完成是独立状态，不把本地文件名推断冒称已得到可信资料。后续缺来源计数按实际任务结果派生，不要求补写旧迁移。
+
+`0019_review_queue.sql` 追加 `review_queues`（revision、当前媒体及受限返回上下文）、`review_queue_items`（最多32个有序ID、四种状态、资源范围和检查点）和不可变 `review_queue_checkpoints`。媒体记录失效后保留账本用于重核；revision CAS、预览绑定与服务端成功证据阻止客户端伪造完成。恢复只读取/核验，不重放确认或文件写入。完整结构与状态见 [核对队列契约](review-queue.md)。

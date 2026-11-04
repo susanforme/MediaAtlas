@@ -18,6 +18,8 @@
 
 ## 手动更新与数据保留
 
+当前 main 的迁移集合上限为 **19**，包含 [持久化人工核对账本](review-queue.md)。完整备份会保留队列及检查点记录；恢复或重启后只读取并重新核验，不自动执行遗留确认。已失效/过期的资源和预览需要新核对。此状态属于后续 main，不代表既有 beta.3 包已经包含 schema 19。
+
 本 beta 未启用自动 updater；未配置发行签名、Apple notarization 或更新签名密钥，不制造值，也不绕过校验。只从[项目 Releases](https://github.com/susanforme/MediaAtlas/releases)获取匹配原生平台的包，对照 `SHA256SUMS`。更新前在应用中创建备份并完全退出；随后使用安装包更新或替换便携应用。应用标识 `com.mediaatlas.desktop` 与数据目录稳定，程序包不包含媒体或用户数据库。
 
 数据库迁移向前且逐迁移事务执行；SQLx 拒绝未知的未来迁移和已执行迁移 checksum 不一致。项目及发布 checkout 固定 LF，原始第三方许可材料保留原字节。历史开发库仅对官方同一 SQL 的精确 LF/CRLF SHA384 提供兼容：必须完整成功版本前缀，且表、索引、触发器及 SQLx 历史表的实际 schema 与官方前缀完全一致，才允许将已知 CRLF 记录规范为 LF。不会在任意 checksumMismatch 后重写 expected；额外自建索引/触发器、修改 schema、未知或未来 checksum 均失败保全，不承诺任意旧库都能升级。

@@ -1,6 +1,6 @@
 # 对照 Emby Server 与成熟刮削工具的流程改进
 
-> 当前 P0：逐项核对队列与恢复流程正在实施；下方已有执行结果属于其注明的基线，不能代替本轮完成后的检查与新截图。
+> 当前 P0：[逐项核对队列与恢复契约](review-queue.md)已实现并重新验收；本轮前端 397 项、Rust 343 项测试通过，[新截图与限制](../screenshots/review-queue-2026-11-04/README.md)单独记录。下方更早结果仍属于注明的基线。
 
 调研日期：2026-11-04（北京时间）。代码基线：`acd5c37`。采用官方文档和本仓库代码对照，没有运行这些第三方应用。本文以 Emby Server 成熟的媒体库工作流为主要参考，结合 Jellyfin、MediaElch、tinyMediaManager 和 beets，区分已有实现、本轮改动与后续计划。
 
@@ -94,6 +94,17 @@ flowchart TD
 | P2 | 多个物理路径组成同一逻辑媒体库 | 数据库、去重、权限、根目录变更及删除语义先完备；不靠前端把几个 Root 改成同名就宣称实现 |
 | P2 | 目录结构/命名诊断与重复版本比较 | 提供准确可解释的冲突信息；不把建议命名变成强制重命名，不以同名作为删除依据 |
 
+### P1 实施前的能力审计（尚未实施）
+
+本轮只读核对确认：
+
+- [RootInput / RootView](../crates/application/src/library.rs) 只有名称、路径、类型、启用及排除规则，没有目录级来源顺序、资料语言或图片策略。全局 ProviderConfig 的启用/认证引用/限流配置不能冒充目录策略。
+- [普通自动匹配](../crates/infrastructure/src/scraper/automatic.rs) 对电影/剧集固定 TMDB、动画固定 AniList；每种类型只有一个自动来源，当前添加“来源排序”界面没有实际意义。[成人自动匹配](../crates/infrastructure/src/adult_scraper/automatic.rs) 按真实命名空间选择 `dmm.product → dmm` 或 `wikidata.catalog:* → wikidata`，二者不是可互换的模糊兜底来源，不能跨发行/身份范围回退。
+- 普通和成人自动查询目前请求 `zh-CN`，不等于来源返回中文。AniList 中文请求实际可能返回 `ja-Latn`（见 [适配与回归](../crates/infrastructure/src/video_providers.rs)）；Wikidata 当前 SPARQL 使用 `ja,en`，DMM 保留来源原文。描述符中的 languages 不是翻译或所有字段语言支持承诺。
+- 普通自动流程保护本地 NFO 和已有资料，对当前允许修复的已确认来源只补缺失 poster/backdrop；成人已有资料时直接跳过，封面仍受当前可见权限和已有图片保护。音乐自动流程读取本地标签，不代表已有在线自动音乐刮削。
+
+后续顺序应为：目录策略的后端持久化与 revision → 任务不可变快照 → 适配器实际生效 → requested/effective language 与回退可观测 → 权限、保护、迁移回归 → 最后接入 UI。`provider_order`、`metadata_language`、`artwork_mode: missing|none` 仅是待审查的 P1 字段提案，本轮没有添加这些目录字段或声称 P1 已完成。
+
 ## 5. 状态与权限底线
 
 “文件存在”“已加入应用索引”“来源已配置”“已得到可信资料”“已生成旁车”是五个不同事实。页面的标题、计数、主要操作和失败恢复都必须对应实际事实；不能只用一个绿色成功覆盖全部阶段。
@@ -114,3 +125,7 @@ flowchart TD
 - 新增及调整的行为验证涵盖完整服务端筛选、游标复位、普通/成人查询边界、详情真实目录范围、扫描错误白名单、取消和中断恢复。
 - 实际 Chromium 专项通过，保存六张本轮截图；原有主流程完整回归也通过（输出在本地 work/community-baseline，不覆盖历史截图）。见 [本轮图文验收](../screenshots/community-flow-2026-11-04/README.md)。
 - 本轮未改 Rust 后端或锁依赖，未重新声称原生宿主、真实 Provider 或安装验收通过。没有移动版本 tag，也不等待桌面打包。
+
+### 第一阶段 P0 已交付
+
+已实现 [持久化人工核对队列](review-queue.md)：暂缓/失败/已确认账本、恢复与筛选返回、同媒体预览检查点、最终事务权限重验，以及按真实失败类型提供显式下一步。本轮前端 397 测试、Rust 默认工作区 343 测试、构建/Clippy/格式通过；浏览器十组场景通过。目录级来源/语言/图片策略仍是上节 P1 能力审计与后续实施项，不宣称已实现。

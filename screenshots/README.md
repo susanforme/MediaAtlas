@@ -1,25 +1,7 @@
-# MediaAtlas 当前界面验证
+# 当前验收截图
 
-这里只保留仍能说明当前流程的两组真实浏览器截图；过时的概览/旧界面、重复 fixture/native 截图、旧用户走查和重复报告已移除。截图以各组记录的源码提交为边界，不能把旧成绩当成本轮通过。
+- [持久人工核对队列与失败恢复](review-queue-2026-11-04/README.md)：源码 `c81e6ec`，本轮前端 397 项 / Rust 343 项测试和构建、Clippy、格式检查通过；浏览器十组场景、八张截图。
+- [海报墙、目录与设置标签](library-wall-2026-11-04/README.md)：保留对应布局与状态的有效证据。
+- [就地配置与快捷处理](community-flow-2026-11-04/README.md)：保留异常处理入口证据。
 
-| 范围 | 记录 |
-| --- | --- |
-| 处理快捷筛选、详情恢复、后台处理中及扫描失败/取消 | [社区流程](community-flow-2026-11-04/README.md) · [来源与哈希](community-flow-2026-11-04/report.json) |
-| 默认媒体墙、目录选择、来源配置、设置标签与必要状态 | [媒体墙与设置](library-wall-2026-11-04/README.md) · [来源与哈希](library-wall-2026-11-04/report.json) |
-
-两组为实际 Chromium 页面捕获，包含 1648×928、390×844 和明确标注的合成媒体/图片/IPC。没有生成、拼接或修补截图；不代表真实 Tauri 宿主、系统选择器、keyring、在线 Provider、安装或文件修改已经通过。
-
-## 当前 P0
-
-新的逐项核对队列 P0 正在实施，完成后会在 `review-queue-2026-11-04/` 刷新实际截图及验收；这里尚未将该轮记为通过。当前采用的流程与后续工作见 [Emby 流程基准](../docs/emby-scraper-workflow.md)，平台状态见 [发布矩阵](../docs/release-matrix.md)。
-
-## 复现
-
-启动 `pnpm dev:web`，使用 Python Playwright、Pillow 和系统 Chromium：
-
-```bash
-MEDIAATLAS_QA_OUTPUT_DIR=work/qa/library-wall python scripts/desktop-library-wall-qa.py
-MEDIAATLAS_QA_OUTPUT_DIR=work/qa/community-flow python scripts/desktop-community-flow-qa.py
-```
-
-`MEDIAATLAS_QA_URL` 可指定运行地址，`MEDIAATLAS_CHROMIUM` 可指定浏览器。临时复核输出到 `work/`，只有与当前源码匹配、已检查的证据才保存在本目录。QA 浏览器不是产品运行时依赖，应用不捆绑浏览器引擎。
+旧概览、旧手动入库、旧操作指南及重复的阶段截图已清理。各组截图均有数据来源、源码版本和验收限制；测试 IPC 不能代替原生宿主、真实 Provider、keyring 或系统应用验收。
