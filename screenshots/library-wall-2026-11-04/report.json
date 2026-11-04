@@ -1,0 +1,62 @@
+{
+  "date": "2026-11-04",
+  "data": "explicit synthetic IPC and labeled test artwork",
+  "runtime": "Actual app rendered in system Chromium via Playwright",
+  "source_head": "c7e9e20cfb49977fc2aee57436c8b1e64e35611c",
+  "working_tree_changes": true,
+  "url": "http://127.0.0.1:1432",
+  "viewports": ["1648×928", "390×844"],
+  "scenarios": [
+    "Root redirects to library; six navigation entries; actual poster links",
+    "Poster keyboard opens details only; version picker traps focus; Escape cancels; successful system dispatch closes and restores focus",
+    "Add directory immediately requests native picker once; one save and one background sync; no manual import or media writes",
+    "Picker cancellation saves and scans nothing",
+    "Loading, empty, error and absent/broken image states",
+    "Source setup preserves the root and resolves its kind/provider; manual save precedes enable and sync; returns to same library context",
+    "Historical cards without a retained task still expose source setup for the same root and kind",
+    "390×844 without horizontal overflow; reduced motion; visible keyboard focus; directory and source setup layouts",
+    "Settings source/network/diagnostic tabs render in place with one title; keyboard Home/End/Arrow keys select and focus tabs; directory cards at both widths"
+  ],
+  "page_errors": [],
+  "limitations": [
+    "Native OS picker/keyring/system association not exercised",
+    "No live Provider or real media directory",
+    "No native startup or packaging claim"
+  ],
+  "screenshots": {
+    "browser-desktop-required-1648.png": "ab078a259f15be079bb3b0b248796de22fc91105a04dd39bf5f1ac76aa8b9f62",
+    "fixture-background-library-1648.png": "002eb08408337d43cf7f6684ed0d4e18dd9c67d1c874e376a3c34bd7e8fc0a68",
+    "fixture-empty-1648.png": "8471facff7955f1918390ad60bd4070bc5000d8c86032c7091ab64b302dc4387",
+    "fixture-error-1648.png": "85b111597e8e535c90681793f21fd056d905c37ee28c6e98f95963893bb71eab",
+    "fixture-first-library-empty-1648.png": "c997a08d42a4b9ffdbc7970d1be0acb716e3f47253c08750e9622c34175f9658",
+    "fixture-folder-selected-1648.png": "e70c4581bc54b771b3f198a179aa58f995ce838d68cf718f44097e979fd42c9c",
+    "fixture-folder-selected-390.png": "a0a655212bd86b0e392da7b961efbe5198ae474a941e38afa27ad8731111176b",
+    "fixture-historical-source-recovery-1648.png": "8f83e861ff082c838a85f262e7546ec2d1fbd1a1effe6896d9c30269dabd2c80",
+    "fixture-library-search-1648.png": "4d50c74fc2f7acea73911d75a2db84b8743487a915164cb3d4df14b7a20470d0",
+    "fixture-library-wall-1648-full.png": "6d32866102cb61dfa497ddce5f00cda4982f09cd64ca1d205443174d1cc1d6d0",
+    "fixture-library-wall-1648.png": "a7a62810ecf8c0acb0203af34e920d43fa62f1c7a3636bd0202adf3f19e3714a",
+    "fixture-library-wall-390-reduced-motion.png": "cd71b7fa3ee75300ee78c864f43239b0d6cddc67d411e2c905aa5bb5d8531dc9",
+    "fixture-loading-1648.png": "16b341c911ee8293b44f44a2fe9af80355644ed0133277233dbaa0a3e6a887e1",
+    "fixture-missing-1648.png": "18ac054e6540570a3b6c04c9d5a1ca53ad84b8eaff197629a2e2ab4f0dd6ce0d",
+    "fixture-settings-general-390.png": "b531b76a6466a047de5c48f8d343f4dd5e7b755d7f58e4b1b4c094b2e0fc95fd",
+    "fixture-source-not-configured-1648.png": "a11675103f852f4f48626f6209ff93b316e32a9ecee1d7cead0788bee9db464d",
+    "fixture-source-setup-1648.png": "adde1dbce019bd38da1413421695127c35985186a6df74dfde5363abc61fc0f3",
+    "fixture-source-setup-390.png": "726227aeb887cd94207ec21ced7b9bc024428a26dcfc2449b271988a3b9a50c2",
+    "fixture-source-setup-return-1648.png": "2375deb57f89879da06f12d331397722bc405a5b53c563aafdc3d1510188bfb7",
+    "fixture-system-open-requested-1648.png": "d45fefbeb29121bf49048258ca71ebad0553e687d5482aa6fc94e8721aaad963",
+    "fixture-version-picker-1648.png": "93d7012176798854ebaff91fda2295e3995b7abf188107a37c9d18a6572b6b53",
+    "fixture-settings-providers-1648.png": "f4bff079e8ac897dff34c715a82ac1bc586b627a9efdb37a6ff9ae2246f67181",
+    "fixture-settings-network-1648.png": "cdcabaebb9249324c1c890062c1e334bc4666eaf2db5bd22015a939d1c199dfb",
+    "fixture-settings-diagnostics-1648.png": "4eb63ce6e9f1afaebc8ba4693ba73f883872b9a2a061adb26a62d35c471d0a30",
+    "fixture-directory-cards-1648.png": "a3972f7cb9b7b048e5ce4aa3737228423b8645600a0e49414d42d1af5ff6073e",
+    "fixture-directory-cards-390.png": "7bdb765f0d6596ed9c2379e967e68dc97c3aea13b7c58bbdd72026219d8f773b"
+  },
+  "implementation_commit": "52679c2",
+  "checks": {
+    "frontend": "pnpm check: lint/typecheck/41 files, 303 tests/build passed",
+    "rust": "cargo test --locked: 329 passed",
+    "clippy": "cargo clippy --all-targets --locked -- -D warnings: passed",
+    "format": "cargo fmt --all -- --check: passed",
+    "licenses": "1001 dependencies / 1625 notices verified"
+  }
+}
