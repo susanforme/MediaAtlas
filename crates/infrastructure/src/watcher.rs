@@ -291,6 +291,10 @@ async fn reconcile_unlocked(
                 if !callback_active.load(Ordering::Acquire) {
                     return;
                 }
+                #[cfg(test)]
+                if let Ok(event) = &result {
+                    eprintln!("native watch event: kind={:?}, relevant={}", event.kind, event_relevant(event));
+                }
                 match result {
                     Ok(event) if event_relevant(&event) => {
                         if sender.try_send(signal).is_err() {

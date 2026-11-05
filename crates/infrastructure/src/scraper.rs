@@ -1534,10 +1534,17 @@ mod tests {
         let mut config = s.providers.config("tmdb").await.unwrap();
         config.enabled = false;
         s.providers.update_config("tmdb", &config).await.unwrap();
-        std::fs::write(media_dir.join("Unmatched.2021.mkv"), b"unmatched local video").unwrap();
         let watcher = crate::watcher::WatcherService::new(s.repo.clone(), scans.clone());
         watcher.restore().await.unwrap();
         assert!(watcher.list().await.unwrap()[0].active);
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if scans.list_tasks(false).await.unwrap().iter().any(|task| task.id != first.id && task.state == TaskState::Succeeded) { break; }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }).await.expect("watcher catch-up was not completed");
+        // The review must come from a native event, not restore's catch-up signal.
+        std::fs::write(media_dir.join("Unmatched.2021.mkv"), b"unmatched local video").unwrap();
         tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 if scans.list_tasks(false).await.unwrap().iter().any(|task| task.id != first.id && task.state == TaskState::WaitingForUser) { break; }
