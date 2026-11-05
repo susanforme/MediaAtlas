@@ -154,7 +154,7 @@ def publish_verified(github, tag, commit, paths):
         require({item["name"] for item in old_assets} <= expected,
                 "unexpected existing assets; refuse to delete or mix release packages")
         check_current(github, tag, commit)
-        github.edit_release(identifier, {"draft": True})
+        github.edit_release(identifier, {"tag_name": tag, "target_commitish": commit, "draft": True})
     else:
         check_current(github, tag, commit)
         existing = github.create_release({"tag_name": tag, "target_commitish": commit,
@@ -190,7 +190,7 @@ def publish_verified(github, tag, commit, paths):
     notes = next(path for path in paths if path.name == "RELEASE_NOTES.md").read_text()
     # This is a fresh read immediately before PATCH, not an atomic tag/ref CAS.
     check_current(github, tag, commit)
-    github.edit_release(identifier, {"draft": False, "prerelease": True,
+    github.edit_release(identifier, {"tag_name": tag, "draft": False, "prerelease": True,
                                      "make_latest": "false", "name": f"MediaAtlas {tag}",
                                      "target_commitish": commit, "body": notes})
     print(f"Published verified complete build {commit} for {tag}")

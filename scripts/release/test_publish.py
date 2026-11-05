@@ -79,7 +79,7 @@ class PublishTests(unittest.TestCase):
     def test_rebuild_reuses_existing_release_and_drafts_before_replacing_all_assets(self):
         github = FakeGitHub(self.commit)
         self.publish(github)
-        self.assertEqual(github.changes[0], ("edit", {"draft": True}))
+        self.assertEqual(github.changes[0], ("edit", {"tag_name": self.tag, "target_commitish": self.commit, "draft": True}))
         self.assertFalse(any(name == "create" for name, _ in github.changes))
         self.assertEqual([value for name, value in github.changes if name == "upload"],
                          [path.name for path in self.paths])
@@ -92,6 +92,28 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(github.changes[0][0], "create")
         self.assertTrue(github.changes[0][1]["draft"])
         self.assertFalse(github.release["draft"])
+
+    def test_draft_and_publication_updates_explicitly_preserve_tag_binding(self):
+        for already_draft in [False, True]:
+            with self.subTest(already_draft=already_draft):
+                github = FakeGitHub(self.commit)
+                github.release["draft"] = already_draft
+                original = github.edit_release
+                def edit(identifier, data):
+                    result = original(identifier, data)
+                    # GitHub can detach a draft when an update omits its tag.
+                    if "tag_name" not in data:
+                        result["tag_name"] = "untagged-synthetic"
+                    return result
+                with patch.object(github, "edit_release", side_effect=edit):
+                    self.publish(github)
+                self.assertEqual(github.release["tag_name"], self.tag)
+                self.assertEqual(github.release["target_commitish"], self.commit)
+                self.assertFalse(github.release["draft"])
+                for name, data in github.changes:
+                    if name == "edit":
+                        self.assertEqual(data["tag_name"], self.tag)
+                        self.assertEqual(data["target_commitish"], self.commit)
 
     def test_already_moved_tag_is_rejected_without_any_changes(self):
         github = FakeGitHub("2" * 40)
@@ -113,7 +135,7 @@ class PublishTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "upload failed"):
             self.publish(github)
         self.assertTrue(github.release["draft"])
-        self.assertEqual(github.changes, [("edit", {"draft": True})])
+        self.assertEqual(github.changes, [("edit", {"tag_name": self.tag, "target_commitish": self.commit, "draft": True})])
 
     def test_wrong_remote_digest_keeps_release_draft(self):
         github = FakeGitHub(self.commit)
