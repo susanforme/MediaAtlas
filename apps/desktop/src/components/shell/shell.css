@@ -121,16 +121,23 @@
 .app-nav-heading:has(> .app-nav-item.active) > .app-nav-collapse svg {
   color: var(--color-ring);
 }
-.app-nav-item:hover {
+.app-nav-item:hover,
+.app-nav-heading:hover {
   color: var(--color-foreground);
   background: var(--color-hover);
+}
+.app-nav-heading:hover > .app-nav-item,
+.app-nav-heading:hover > .app-nav-collapse {
+  color: var(--color-foreground);
 }
 .app-nav-item.active:hover,
 .app-nav-heading:has(> .app-nav-item.active):hover {
   background: var(--sidebar-active-hover);
 }
-.app-nav-heading:has(> .app-nav-item.active) > .app-nav-item,
-.app-nav-heading:has(> .app-nav-item.active) > .app-nav-collapse {
+.app-nav-heading > .app-nav-item,
+.app-nav-heading > .app-nav-item:hover,
+.app-nav-heading > .app-nav-collapse,
+.app-nav-heading > .app-nav-collapse:hover {
   background: transparent;
 }
 .app-sidebar-bottom {
