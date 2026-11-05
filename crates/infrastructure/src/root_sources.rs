@@ -20,13 +20,13 @@ pub(crate) fn validate_providers(
     let mut seen = HashSet::new();
     for provider in providers {
         let supported = match provider.as_str() {
-            "tmdb" => kind.is_none() || matches!(kind, Some(MediaKind::Movie | MediaKind::TvSeries)),
-            "anilist" => kind.is_none() || kind == Some(MediaKind::Anime),
+            "tmdb" | "omdb" | "douban" => kind.is_none() || matches!(kind, Some(MediaKind::Movie | MediaKind::TvSeries)),
+            "anilist" | "bangumi" => kind.is_none() || kind == Some(MediaKind::Anime),
             "tvmaze" => kind.is_none() || kind == Some(MediaKind::TvSeries),
             "dmm" | "wikidata" => kind == Some(MediaKind::AdultVideo),
             _ => false,
         };
-        if !supported || !seen.insert(provider) || providers.len() > 5 {
+        if !supported || !seen.insert(provider) || providers.len() > 8 {
             return Err(RepositoryError::InvalidInput);
         }
     }
@@ -57,6 +57,9 @@ mod tests {
     fn directory_sources_reject_duplicates_unknown_and_cross_scope_providers() {
         let names = |values: &[&str]| values.iter().map(|value| (*value).into()).collect::<Vec<_>>();
         assert!(validate_providers(Some(MediaKind::TvSeries), &names(&["tvmaze", "tmdb"])).is_ok());
+        assert!(validate_providers(Some(MediaKind::Movie), &names(&["douban", "omdb", "tmdb"])).is_ok());
+        assert!(validate_providers(Some(MediaKind::Anime), &names(&["bangumi", "anilist"])).is_ok());
+        assert!(validate_providers(None, &names(&["tmdb", "omdb", "douban", "anilist", "bangumi", "tvmaze"])).is_ok());
         assert!(validate_providers(Some(MediaKind::Movie), &[]).is_ok());
         assert!(validate_providers(Some(MediaKind::AdultVideo), &names(&["wikidata", "dmm"])).is_ok());
         for (kind, providers) in [

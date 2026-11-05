@@ -1,5 +1,9 @@
 # Beta 发布矩阵与验证
 
+2026-11-05 本轮按用户要求移动现有 `v0.1.0-beta.8` tag 并 push 重新发布，版本号和第三方依赖不变。新增 IMDb 完整地址／ID 精确识别、人工身份纠错预览，以及 OMDb、豆瓣、Bangumi 三个来源；来源配置、目录优先级和 Kodi 图片导出同步接通。仅静态修改并补写回归，未执行本地测试、lint、构建、格式化或安装包；远程发布结果以对应提交的 Actions 状态及资产清单为准。下文首次创建 beta.8 的描述为历史背景。
+
+发布前读取 main 上 `97ceba8` 的 Actions：Windows、Linux 成功，macOS 的 12 项 NFO 测试因临时目录含系统符号链接报 `NotADirectory`。相关 fixture 改用仓库现有的 canonical 临时目录 helper；生产目录的 no-follow 边界保持。修复未在本地执行，后续结果以新提交的云端检查为准。
+
 仅推送 `vX.Y.Z-beta.N` tag 触发 `.github/workflows/release.yml`；main/PR 保持前端与 Rust core 测试 CI。本地 `pnpm build:desktop` 使用 `--no-bundle`。本次发布版本为 `v0.1.0-beta.8`，包含媒体库交互与来源配置流程重构，并补齐扫描结果进入来源设置时携带返回媒体库参数的测试断言。按用户要求仅静态阅读和修改，未运行本地测试、lint、构建或安装包；包清单、Tauri 配置、Cargo workspace 及锁文件中的本仓库包版本同步为 beta.8，不变更第三方依赖。新建 beta.8 tag 并推送，beta.1–beta.7 保持原提交不动。NFO 关联与 macOS 固定文案的系统语言边界见 [NFO 预览说明](nfo-preview.md)，TVmaze 来源与归属要求见 [Provider 访问说明](provider-access.md)。
 
 | Rust target | 官方 runner label | 产物 | 发布要求 |

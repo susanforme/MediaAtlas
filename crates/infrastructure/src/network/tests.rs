@@ -308,6 +308,22 @@ async fn redirects_remove_all_credentials_on_cross_origin_and_revalidate_target(
 }
 
 #[tokio::test]
+async fn public_metadata_sources_refuse_redirects_without_requesting_verification_pages() {
+    let requests = Arc::new(AtomicUsize::new(0));
+    let observed = requests.clone();
+    let fixture = server(move |_request| {
+        observed.fetch_add(1, Ordering::SeqCst);
+        async { response(302, "text/plain", "", "Location: /verification\r\n") }
+    }).await;
+    let engine = NetworkEngine::for_loopback(2);
+    for provider in ["douban", "bangumi", "omdb"] {
+        assert_eq!(failure(&engine, &job(provider), spec(&format!("{}/subject", fixture.url))).await,
+            ProviderFailure::UnsafeTarget);
+    }
+    assert_eq!(requests.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
 async fn production_policy_rejects_private_ip_encodings_local_hosts_and_http() {
     let policy = super::policy::DestinationPolicy::default();
     for target in [

@@ -11,7 +11,7 @@ use mediaatlas_domain::*;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::{
-    collections::{BTreeMap, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     path::PathBuf,
     sync::Arc,
 };
@@ -77,11 +77,12 @@ impl ScraperService {
     }
     async fn search_cancellable(
         &self,
-        request: ScraperSearchRequest,
+        mut request: ScraperSearchRequest,
         cancellation: CancellationToken,
     ) -> Result<SearchPreview, RepositoryError> {
+        request.query = crate::video_query::normalize(&request.query).map_err(RepositoryError::Provider)?;
         validate_query(&request.query)?;
-        if request.providers.is_empty() || request.providers.len() > 3 {
+        if request.providers.is_empty() || request.providers.len() > VideoProviderHub::descriptors().len() {
             return Err(RepositoryError::InvalidInput);
         }
         let mut seen = HashSet::new();
@@ -249,7 +250,9 @@ impl ScraperService {
         .fetch_optional(self.repo.pool())
         .await?
         {
-            return decode(&data);
+            let detail = decode(&data)?;
+            validate_detail_identity(&query, candidate, &detail)?;
+            return Ok(detail);
         }
         let mut job = jobs
             .get(&candidate.data().provider_id)
@@ -273,13 +276,7 @@ impl ScraperService {
         self.persist_records(run_id).await?;
         self.providers.detach_cancellation(run_id).await;
         let detail = detail.map_err(RepositoryError::Provider)?;
-        if detail.identity().remote_id != candidate.data().remote_id
-            || detail.identity().provider_id != candidate.data().provider_id
-            || metadata_kind(&detail) != query_kind(&query)
-        {
-            return Err(RepositoryError::InvalidInput);
-        }
-        validate_fields(detail.fields())?;
+        validate_detail_identity(&query, candidate, &detail)?;
         self.session(run_id).await?;
         sqlx::query("INSERT OR IGNORE INTO video_scrape_details(task_id,candidate_index,detail_json) VALUES (?,?,?)").bind(run_id.to_string()).bind(index as i64).bind(json(&detail)?).execute(self.repo.pool()).await?;
         let persisted: String = sqlx::query_scalar(
@@ -289,7 +286,9 @@ impl ScraperService {
         .bind(index as i64)
         .fetch_one(self.repo.pool())
         .await?;
-        decode(&persisted)
+        let detail = decode(&persisted)?;
+        validate_detail_identity(&query, candidate, &detail)?;
+        Ok(detail)
     }
     pub async fn artwork_preview(
         &self,
@@ -345,6 +344,15 @@ impl ScraperService {
             .ordinary_media(request.media_item_id, metadata_kind(&detail))
             .await?;
         let old = self.repo.list_metadata_values(media.id).await?;
+        let expected_state = {
+            let mut connection = self.repo.pool().acquire().await?;
+            merge_state(&mut connection, media.id).await?
+        };
+        if old != self.repo.list_metadata_values(media.id).await? {
+            return Err(RepositoryError::Conflict);
+        }
+        let external_ids = identity_diffs(&expected_state, &detail)?;
+        let correction = corrects_identity(&external_ids);
         let keys: HashSet<_> = request.selected_fields.iter().collect();
         if keys.len() != request.selected_fields.len()
             || !keys
@@ -384,6 +392,23 @@ impl ScraperService {
                 selected: (mandatory || keys.contains(&field.key)) && !protected && !empty,
             });
         }
+        if correction {
+            for previous in old.iter().filter(|value| !value.is_protected()) {
+                let language = normalize_locale(previous.locale.as_deref()).map_err(|_| RepositoryError::InvalidInput)?;
+                if fields.iter().any(|field| field.selected && field.key == previous.field_key && field.language == language) {
+                    continue;
+                }
+                let deletion = FieldDiff {
+                    key: previous.field_key.clone(), language: language.clone(), old: Some(previous.clone()),
+                    new: RemoteField { key: previous.field_key.clone(), value: serde_json::Value::Null, language: language.clone() },
+                    provider_id: detail.identity().provider_id.clone(), source_url: detail.identity().source_url.clone(),
+                    protected: false, needs_review: true, selected: true,
+                };
+                if let Some(field) = fields.iter_mut().find(|field| field.key == previous.field_key && field.language == language) {
+                    *field = deletion;
+                } else { fields.push(deletion); }
+            }
+        }
         let mut artwork = vec![];
         let mut indices = HashSet::new();
         for i in &request.selected_artwork {
@@ -404,9 +429,10 @@ impl ScraperService {
             media_item_id: media.id,
             fields,
             artwork,
+            external_ids,
             confirmed: false,
         };
-        sqlx::query("INSERT INTO video_merge_previews(id,task_id,media_item_id,preview_json,detail_json,selected_artwork,expected_media_json,state,created_at) VALUES (?,?,?,?,?,?,?,'planned',?)").bind(preview.preview_id.to_string()).bind(request.run_id.to_string()).bind(media.id.to_string()).bind(json(&preview)?).bind(json(&detail)?).bind(json(&request.selected_artwork)?).bind(json(&media)?).bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?;
+        sqlx::query("INSERT INTO video_merge_previews(id,task_id,media_item_id,preview_json,detail_json,selected_artwork,expected_media_json,expected_state_json,state,created_at) VALUES (?,?,?,?,?,?,?,?,'planned',?)").bind(preview.preview_id.to_string()).bind(request.run_id.to_string()).bind(media.id.to_string()).bind(json(&preview)?).bind(json(&detail)?).bind(json(&request.selected_artwork)?).bind(json(&media)?).bind(json(&expected_state)?).bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?;
         Ok(preview)
     }
     pub async fn confirm(&self, id: Uuid) -> Result<MergeResult, RepositoryError> {
@@ -439,6 +465,13 @@ impl ScraperService {
                 .await;
             return Ok(result);
         }
+        let expected_state: Option<serde_json::Value> = row.try_get::<Option<String>, _>("expected_state_json")?
+            .map(|value| decode(&value)).transpose()?;
+        if let Some(state) = &expected_state {
+            if identity_diffs(state, &detail)? != preview.external_ids { return Err(RepositoryError::CorruptData); }
+        }
+        let correction = expected_state.is_some() && corrects_identity(&preview.external_ids);
+        if correction && automatic.is_some() { return Err(RepositoryError::Conflict); }
         if preview.fields.iter().any(|field| {
             required_source_field(&detail.identity().provider_id, &field.key)
                 && !field.selected
@@ -490,6 +523,8 @@ impl ScraperService {
         self.providers.detach_cancellation(run_id).await;
         self.session(run_id).await?;
         let mut tx = self.repo.pool().begin().await?;
+        sqlx::query("UPDATE media_items SET updated_at=updated_at WHERE id=?")
+            .bind(media.id.to_string()).execute(&mut *tx).await?;
         crate::review_queue::validate_bound_preview(&mut tx, id).await?;
         if let Some(context) = automatic {
             context.validate_tx(&mut tx, media.id).await?;
@@ -503,6 +538,12 @@ impl ScraperService {
             || current.try_get::<i64, _>("updated_at")? != expected.updated_at.timestamp_millis()
         {
             return Err(RepositoryError::Conflict);
+        }
+        if let Some(expected_state) = &expected_state {
+            let current_state = merge_state(&mut tx, media.id).await?;
+            if current_state["external_ids"] != expected_state["external_ids"]
+                || (correction && current_state != *expected_state)
+            { return Err(RepositoryError::Conflict); }
         }
         let mut applied = 0;
         let mut title = None;
@@ -534,6 +575,13 @@ impl ScraperService {
                 }
             } else if diff.old.is_some() {
                 return Err(RepositoryError::Conflict);
+            }
+            if diff.new.value.is_null() {
+                if !correction || diff.old.is_none() || diff.protected { return Err(RepositoryError::CorruptData); }
+                sqlx::query("DELETE FROM metadata_values WHERE media_item_id=? AND field_key=? AND locale=? AND is_locked=0 AND is_user_modified=0")
+                    .bind(media.id.to_string()).bind(&diff.key).bind(locale).execute(&mut *tx).await?;
+                applied += 1;
+                continue;
             }
             if empty_value(&diff.new.value) {
                 continue;
@@ -574,6 +622,13 @@ impl ScraperService {
         }
         // Canonical display title is changed only by this explicitly confirmed merge.
         sqlx::query("UPDATE media_items SET title=?,original_title=?,year=?,updated_at=MAX(updated_at,?) WHERE id=?").bind(title.as_ref().unwrap_or(&media.title)).bind(original.as_ref().or(media.original_title.as_ref())).bind(year.or(media.year)).bind(Utc::now().timestamp_millis()).bind(media.id.to_string()).execute(&mut *tx).await?;
+        if correction {
+            sqlx::query("DELETE FROM external_ids WHERE media_item_id=?")
+                .bind(media.id.to_string()).execute(&mut *tx).await?;
+            // Only remove database indices. Local images and source media remain read-only.
+            sqlx::query("DELETE FROM artworks WHERE media_item_id=? AND provider_id IS NOT NULL")
+                .bind(media.id.to_string()).execute(&mut *tx).await?;
+        }
         for external in &detail.identity().external_ids {
             let existing:Option<String>=sqlx::query_scalar("SELECT external_id FROM external_ids WHERE media_item_id=? AND namespace=? LIMIT 1").bind(media.id.to_string()).bind(&external.namespace).fetch_optional(&mut *tx).await?;
             if existing.as_ref().is_some_and(|v| v != &external.value) {
@@ -710,6 +765,69 @@ fn metadata_kind(m: &VideoMetadata) -> MediaKind {
         VideoMetadata::Anime(_) => MediaKind::Anime,
     }
 }
+fn validate_detail_identity(
+    query: &VideoQuery,
+    candidate: &VideoCandidate,
+    detail: &VideoMetadata,
+) -> Result<(), RepositoryError> {
+    if detail.identity().remote_id != candidate.data().remote_id
+        || detail.identity().provider_id != candidate.data().provider_id
+        || metadata_kind(detail) != query_kind(query)
+        || query.parts().2.iter().any(|id| {
+            crate::video_query::supports_id(&candidate.data().provider_id, &id.namespace)
+                && !detail.identity().external_ids.contains(id)
+        })
+    {
+        return Err(RepositoryError::InvalidInput);
+    }
+    validate_fields(detail.fields())
+}
+
+// Keep the exact rows the user reviewed: identity correction also removes stale
+// unprotected metadata and artwork indices, so concurrent edits must invalidate it.
+async fn merge_state(
+    connection: &mut sqlx::SqliteConnection,
+    media_id: Uuid,
+) -> Result<serde_json::Value, RepositoryError> {
+    let ids: Vec<String> = sqlx::query_scalar("SELECT json_object('id',id,'provider_id',provider_id,'namespace',namespace,'external_id',external_id,'is_primary',is_primary,'created_at',created_at) FROM external_ids WHERE media_item_id=? ORDER BY id")
+        .bind(media_id.to_string()).fetch_all(&mut *connection).await?;
+    let metadata: Vec<String> = sqlx::query_scalar("SELECT json_object('id',id,'field_key',field_key,'locale',locale,'value_json',value_json,'provider_id',provider_id,'source_url',source_url,'fetched_at',fetched_at,'confidence',confidence,'is_user_modified',is_user_modified,'is_locked',is_locked) FROM metadata_values WHERE media_item_id=? ORDER BY id")
+        .bind(media_id.to_string()).fetch_all(&mut *connection).await?;
+    let artwork: Vec<String> = sqlx::query_scalar("SELECT json_object('id',id,'kind',kind,'cache_path',cache_path,'source_url',source_url,'provider_id',provider_id,'width',width,'height',height,'content_hash',content_hash,'created_at',created_at) FROM artworks WHERE media_item_id=? ORDER BY id")
+        .bind(media_id.to_string()).fetch_all(&mut *connection).await?;
+    let ids = ids.iter().map(|value| decode::<serde_json::Value>(value)).collect::<Result<Vec<_>, _>>()?;
+    Ok(serde_json::json!({"external_ids":ids,"metadata":metadata,"artwork":artwork}))
+}
+
+fn identity_diffs(
+    state: &serde_json::Value,
+    detail: &VideoMetadata,
+) -> Result<Vec<ExternalIdDiff>, RepositoryError> {
+    let mut old = BTreeMap::<String, BTreeSet<String>>::new();
+    for id in state["external_ids"].as_array().ok_or(RepositoryError::CorruptData)? {
+        let namespace = id["namespace"].as_str().ok_or(RepositoryError::CorruptData)?;
+        let value = id["external_id"].as_str().ok_or(RepositoryError::CorruptData)?;
+        old.entry(namespace.into()).or_default().insert(value.into());
+    }
+    let mut incoming = BTreeMap::<String, BTreeSet<String>>::new();
+    for id in &detail.identity().external_ids {
+        incoming.entry(id.namespace.clone()).or_default().insert(id.value.clone());
+    }
+    let correction = incoming.iter().any(|(namespace, values)| old.get(namespace).is_some_and(|prior| prior != values));
+    let mut target = if correction { BTreeMap::new() } else { old.clone() };
+    for (namespace, values) in incoming { target.entry(namespace).or_default().extend(values); }
+    let namespaces = old.keys().chain(target.keys()).cloned().collect::<BTreeSet<_>>();
+    Ok(namespaces.into_iter().map(|namespace| ExternalIdDiff {
+        old: old.get(&namespace).map(|values| values.iter().cloned().collect()).unwrap_or_default(),
+        new: target.get(&namespace).map(|values| values.iter().cloned().collect()).unwrap_or_default(),
+        namespace,
+    }).collect())
+}
+
+fn corrects_identity(diffs: &[ExternalIdDiff]) -> bool {
+    diffs.iter().any(|diff| !diff.old.is_empty() && !diff.new.is_empty() && diff.old != diff.new)
+}
+
 fn empty_value(v: &serde_json::Value) -> bool {
     v.is_null()
         || v.as_str().is_some_and(|s| s.trim().is_empty())
@@ -742,7 +860,7 @@ fn validate_query(q: &VideoQuery) -> Result<(), RepositoryError> {
     Ok(())
 }
 fn required_source_field(provider: &str, key: &str) -> bool {
-    matches!(provider, "wikipedia.html" | "tvmaze")
+    matches!(provider, "wikipedia.html" | "tvmaze" | "bangumi" | "douban" | "omdb")
         && matches!(key, "attribution" | "source_license")
 }
 
@@ -757,6 +875,8 @@ fn validate_fields(fields: &[RemoteField]) -> Result<(), RepositoryError> {
             "runtime_minutes",
             "genres",
             "rating",
+            "ratings",
+            "tags",
             "votes",
             "premiered",
             "countries",
@@ -910,6 +1030,8 @@ mod tests {
                         r#"{"id":52,"name":"Confirmed show","original_name":"Example Show","first_air_date":"2020-01-01","adult":false,"overview":"Provider TV overview","genres":[{"name":"Drama"}],"production_companies":[],"credits":{"cast":[]},"images":{"posters":[],"backdrops":[]},"external_ids":{"tvdb_id":52},"seasons":[]}"#
                     } else if path.contains("/search/movie") {
                         r#"{"results":[{"id":42,"title":"Example","original_title":"Example","release_date":"2020-01-01","adult":false},{"id":43,"title":"Example","release_date":"1980-01-01","adult":false}]}"#
+                    } else if path.contains("/find/") {
+                        r#"{"movie_results":[{"id":42,"title":"Example","release_date":"2020-01-01","adult":false}]}"#
                     } else if path.contains("/movie/42") {
                         if delayed.load(Ordering::SeqCst) {
                             tokio::time::sleep(Duration::from_millis(500)).await;
@@ -1066,6 +1188,136 @@ mod tests {
             is_user_modified: true,
             is_locked: true,
         }
+    }
+    async fn wrong_identity(s: &Setup) {
+        for (namespace, value) in [("tmdb", "7"), ("imdb", "tt0000007"), ("wikidata", "Q7")] {
+            s.repo.save_external_id(&ExternalId {
+                id: Uuid::new_v4(), media_item_id: s.media.id, provider_id: "tmdb".into(),
+                namespace: namespace.into(), external_id: value.into(), is_primary: false, created_at: Utc::now(),
+            }).await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn explicit_imdb_correction_reviews_and_replaces_wrong_identity_and_stale_metadata() {
+        let s = setup().await;
+        wrong_identity(&s).await;
+        let mut stale = local_value(s.media.id, "runtime", None, serde_json::json!(95));
+        stale.provider_id = Some("tmdb".into());
+        stale.is_locked = false;
+        stale.is_user_modified = false;
+        s.repo.save_metadata_value(&stale, MetadataWriteMode::Provider).await.unwrap();
+        let protected = local_value(s.media.id, "tagline", None, serde_json::json!("My locked tagline"));
+        s.repo.save_metadata_value(&protected, MetadataWriteMode::User).await.unwrap();
+        std::fs::write(s.dir.path().join("old-poster.jpg"), b"old local picture remains read-only").unwrap();
+        let now = Utc::now();
+        for provider in [Some("tmdb"), None] {
+            s.repo.save_artwork(&Artwork {
+                id: Uuid::new_v4(), media_item_id: s.media.id, kind: ArtworkKind::Poster,
+                cache_path: None, source_url: Some("old-poster.jpg".into()), provider_id: provider.map(str::to_owned),
+                width: None, height: None, content_hash: None, created_at: now,
+            }).await.unwrap();
+        }
+        let mut exact = request();
+        if let VideoQuery::Movie { title, year, .. } = &mut exact.query {
+            *title = "https://www.imdb.com/title/tt0042/?ref_=copy".into();
+            *year = None;
+        }
+        let search = s.service.search(exact).await.unwrap();
+        let preview = s.service.preview(selection(search.run_id, s.media.id)).await.unwrap();
+        assert!(preview.external_ids.iter().any(|diff| diff.namespace == "imdb" && diff.old == ["tt0000007"] && diff.new == ["tt0042"]));
+        assert!(preview.external_ids.iter().any(|diff| diff.namespace == "wikidata" && diff.old == ["Q7"] && diff.new.is_empty()));
+        assert!(preview.fields.iter().any(|diff| diff.key == "runtime" && diff.selected && diff.new.value.is_null() && diff.old.is_some()));
+        assert!(!preview.fields.iter().any(|diff| diff.key == "tagline" && diff.new.value.is_null()));
+        assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 3);
+        s.service.confirm(preview.preview_id).await.unwrap();
+        let ids = s.repo.list_external_ids(s.media.id).await.unwrap();
+        assert_eq!(ids.len(), 2);
+        assert!(ids.iter().any(|id| id.namespace == "tmdb" && id.external_id == "42"));
+        assert!(ids.iter().any(|id| id.namespace == "imdb" && id.external_id == "tt0042"));
+        let values = s.repo.list_metadata_values(s.media.id).await.unwrap();
+        assert!(!values.iter().any(|value| value.field_key == "runtime"));
+        assert!(values.contains(&protected));
+        assert_eq!(s.repo.get_media(s.media.id).await.unwrap().unwrap().title, "Provider title");
+        let art = s.repo.list_artworks(s.media.id).await.unwrap();
+        assert_eq!(art.len(), 1);
+        assert_eq!(art[0].provider_id, None);
+        assert_eq!(std::fs::read(s.dir.path().join("old-poster.jpg")).unwrap(), b"old local picture remains read-only");
+        assert_eq!(std::fs::read(s.dir.path().join("Example.mkv")).unwrap(), b"synthetic source media must stay intact");
+        s.server.abort();
+    }
+
+    #[tokio::test]
+    async fn manual_identity_preview_rejects_concurrent_ids_and_automatic_overwrite() {
+        let s = setup().await;
+        wrong_identity(&s).await;
+        let search = s.service.search(request()).await.unwrap();
+        let preview = s.service.preview(selection(search.run_id, s.media.id)).await.unwrap();
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let context = automatic::AutomaticContext { root, exclusions: vec![], metadata_providers: None, task_id: Uuid::new_v4(), cancel: CancellationToken::new(), adult_access: None };
+        assert_eq!(s.service.confirm_inner(preview.preview_id, Some(&context)).await.unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 3);
+        s.repo.save_external_id(&ExternalId {
+            id: Uuid::new_v4(), media_item_id: s.media.id, provider_id: "manual".into(), namespace: "tvdb".into(), external_id: "999".into(), is_primary: false, created_at: Utc::now(),
+        }).await.unwrap();
+        assert_eq!(s.service.confirm(preview.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 4);
+        assert_eq!(s.repo.get_media(s.media.id).await.unwrap().unwrap().title, "Local title");
+        s.server.abort();
+    }
+
+    #[tokio::test]
+    async fn supplementary_id_preview_keeps_unrelated_ids_but_checks_unchanged_namespaces() {
+        let s = setup().await;
+        s.repo.save_external_id(&ExternalId { id: Uuid::new_v4(), media_item_id: s.media.id, provider_id: "other".into(), namespace: "wikidata".into(), external_id: "Q42".into(), is_primary: false, created_at: Utc::now() }).await.unwrap();
+        let search = s.service.search(request()).await.unwrap();
+        let preview = s.service.preview(selection(search.run_id, s.media.id)).await.unwrap();
+        assert!(preview.external_ids.iter().any(|diff| diff.namespace == "wikidata" && diff.old == ["Q42"] && diff.new == ["Q42"]));
+        assert!(!corrects_identity(&preview.external_ids));
+        s.service.confirm(preview.preview_id).await.unwrap();
+        assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 3);
+        s.server.abort();
+    }
+
+    #[tokio::test]
+    async fn legacy_preview_without_identity_snapshot_cannot_replace_existing_ids() {
+        let s = setup().await;
+        wrong_identity(&s).await;
+        let search = s.service.search(request()).await.unwrap();
+        let mut preview = s.service.preview(selection(search.run_id, s.media.id)).await.unwrap();
+        let detail: String = sqlx::query_scalar("SELECT detail_json FROM video_merge_previews WHERE id=?")
+            .bind(preview.preview_id.to_string()).fetch_one(s.repo.pool()).await.unwrap();
+        preview.preview_id = Uuid::new_v4();
+        preview.external_ids.clear();
+        preview.fields.retain(|field| !field.new.value.is_null());
+        let media = s.repo.get_media(s.media.id).await.unwrap().unwrap();
+        sqlx::query("INSERT INTO video_merge_previews(id,task_id,media_item_id,preview_json,detail_json,selected_artwork,expected_media_json,state,created_at) VALUES(?,?,?,?,?,'[]',?,'planned',?)")
+            .bind(preview.preview_id.to_string()).bind(search.run_id.to_string()).bind(s.media.id.to_string())
+            .bind(json(&preview).unwrap()).bind(detail).bind(json(&media).unwrap()).bind(Utc::now().timestamp_millis())
+            .execute(s.repo.pool()).await.unwrap();
+        assert_eq!(s.service.confirm(preview.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 3);
+        assert!(s.repo.list_metadata_values(s.media.id).await.unwrap().is_empty());
+        s.server.abort();
+    }
+
+    #[tokio::test]
+    async fn cached_details_cannot_bypass_explicit_query_identity_validation() {
+        let s = setup().await;
+        let mut exact = request();
+        if let VideoQuery::Movie { title, year, external_ids, .. } = &mut exact.query {
+            *title = String::new(); *year = None;
+            *external_ids = vec![RemoteId { namespace: "imdb".into(), value: "tt9999999".into() }];
+        }
+        let search = s.service.search(exact).await.unwrap();
+        let mut identity = search.candidates[0].candidate.data().clone();
+        identity.external_ids.retain(|id| id.namespace != "imdb");
+        identity.external_ids.push(RemoteId { namespace: "imdb".into(), value: "tt0042".into() });
+        let detail = VideoMetadata::Movie(MovieDetail { identity, fields: vec![], artwork: vec![], runtime_minutes: None });
+        sqlx::query("INSERT INTO video_scrape_details(task_id,candidate_index,detail_json) VALUES (?,0,?)")
+            .bind(search.run_id.to_string()).bind(json(&detail).unwrap()).execute(s.repo.pool()).await.unwrap();
+        assert_eq!(s.service.detail(search.run_id, 0).await.unwrap_err(), RepositoryError::InvalidInput);
+        s.server.abort();
     }
     async fn settle_automatic(
         scans: &crate::scan_service::ScanService,

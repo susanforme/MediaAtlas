@@ -1,6 +1,9 @@
 //! Built-in ordinary video adapters. Every HTTP operation uses the P3 engine.
 //! Fixtures exercise these adapters with injected test-only loopback endpoints.
 mod tvmaze;
+mod bangumi;
+mod douban;
+mod omdb;
 use crate::{
     credentials::{CredentialMode, CredentialStore},
     network::{parse_html, CancellationToken, EngineKind, NetworkEngine, RequestSpec},
@@ -26,6 +29,9 @@ pub struct VideoProviderHub {
     anilist_endpoint: String,
     wikipedia_base: String,
     tvmaze_base: String,
+    bangumi_base: String,
+    douban_base: String,
+    omdb_base: String,
 }
 impl VideoProviderHub {
     pub fn new(engine: Arc<NetworkEngine>, credentials: Arc<CredentialStore>) -> Self {
@@ -38,6 +44,9 @@ impl VideoProviderHub {
             anilist_endpoint: "https://graphql.anilist.co".into(),
             wikipedia_base: "https://en.wikipedia.org/wiki".into(),
             tvmaze_base: "https://api.tvmaze.com".into(),
+            bangumi_base: "https://api.bgm.tv".into(),
+            douban_base: "https://movie.douban.com".into(),
+            omdb_base: "https://www.omdbapi.com".into(),
         }
     }
     /// Trusted composition only. Session mode never falls back to disk or OS storage.
@@ -64,6 +73,9 @@ impl VideoProviderHub {
     pub fn descriptors() -> Vec<ProviderDescriptor> {
         vec![
             tvmaze::descriptor(),
+            bangumi::descriptor(),
+            douban::descriptor(),
+            omdb::descriptor(),
             descriptor(
                 "tmdb",
                 "TMDB",
@@ -100,11 +112,21 @@ impl VideoProviderHub {
         job: &ProviderJob,
         cancel: &CancellationToken,
     ) -> Result<Vec<VideoCandidate>, ProviderFailure> {
+        let normalized = crate::video_query::normalize(query)?;
+        let query = &normalized;
         validate_query(query)?;
         if provider != job.provider_id {
             return Err(ProviderFailure::IdentityMismatch);
         }
+        // An explicit identity must never fall back to a fuzzy title search.
+        let ids = query.parts().2;
+        if !ids.is_empty() && !ids.iter().any(|id| crate::video_query::supports_id(provider, &id.namespace)) {
+            return Ok(vec![]);
+        }
         match provider {
+            "douban" if matches!(query, VideoQuery::Movie { .. } | VideoQuery::Tv { .. }) => self.douban_search(query, job, cancel).await,
+            "omdb" if matches!(query, VideoQuery::Movie { .. } | VideoQuery::Tv { .. }) => self.omdb_search(query, job, cancel).await,
+            "bangumi" if matches!(query, VideoQuery::Anime { .. }) => self.bangumi_search(query, job, cancel).await,
             "tvmaze" if matches!(query, VideoQuery::Tv { .. }) => {
                 self.tvmaze_search(query, job, cancel).await
             }
@@ -126,6 +148,9 @@ impl VideoProviderHub {
             return Err(ProviderFailure::IdentityMismatch);
         }
         match candidate.data().provider_id.as_str() {
+            "douban" => self.douban_detail(candidate, job, cancel).await,
+            "omdb" => self.omdb_detail(candidate, job, cancel).await,
+            "bangumi" if matches!(candidate, VideoCandidate::Anime(_)) => self.bangumi_detail(candidate, job, cancel).await,
             "tvmaze" if matches!(candidate, VideoCandidate::Tv(_)) => {
                 self.tvmaze_detail(candidate, job, cancel).await
             }
@@ -152,6 +177,9 @@ impl VideoProviderHub {
             url.query_pairs_mut().append_pair(key, value);
         }
         if let Some(auth) = &self.auth {
+            if !job.config.credential_ref.as_deref().is_some_and(|reference| reference.starts_with("tmdb.auth.")) {
+                return Err(ProviderFailure::InvalidConfiguration);
+            }
             let resolved = auth.resolve(job.config.credential_ref.as_deref()).await?;
             let mut spec = RequestSpec::get(url.as_str(), EngineKind::Api);
             match resolved.method {
@@ -253,7 +281,17 @@ impl VideoProviderHub {
         }
         rows.iter()
             .filter(|v| v["adult"].as_bool() != Some(true))
-            .map(|v| tmdb_candidate(v, movie, language))
+            .map(|v| {
+                let mut candidate = tmdb_candidate(v, movie, language)?;
+                // The find endpoint establishes this mapping; detail rechecks it.
+                if let Some(id) = ids.iter().find(|id| matches!(id.namespace.as_str(), "imdb" | "tvdb")) {
+                    let data = match &mut candidate {
+                        VideoCandidate::Movie(data) | VideoCandidate::Tv(data) | VideoCandidate::Anime(data) => data,
+                    };
+                    data.external_ids.push(id.clone());
+                }
+                Ok(candidate)
+            })
             .collect()
     }
     async fn tmdb_detail(
@@ -1289,6 +1327,28 @@ mod tests {
         assert_eq!(tmdb_certification(&tv, false, "en-US"), Some("US:TV-14".into()));
         assert_eq!(tmdb_certification(&json!({}), true, "en-US"), None);
     }
+    #[tokio::test]
+    async fn complete_imdb_addresses_use_exact_lookup_and_foreign_ids_never_search_by_title() {
+        let (hub, requests, handle) = setup().await;
+        let job = job("tmdb");
+        let cancel = CancellationToken::new();
+        for input in ["https://www.imdb.com/title/tt123/?ref_=share%3D1", "tt123"] {
+            let query = VideoQuery::Movie { title: input.into(), year: None,
+                external_ids: vec![], language: "en-US".into() };
+            let found = hub.search("tmdb", &query, &job, &cancel).await.unwrap();
+            assert_eq!(found.len(), 1);
+            assert!(found[0].data().external_ids.contains(&RemoteId { namespace:"imdb".into(), value:"tt123".into() }));
+        }
+        let query = VideoQuery::Movie { title: "Wrong title".into(), year: None,
+            external_ids: vec![RemoteId { namespace:"douban".into(), value:"123".into() }], language:"en-US".into() };
+        assert!(hub.search("tmdb", &query, &job, &cancel).await.unwrap().is_empty());
+        let requests = requests.lock().await;
+        assert_eq!(requests.len(), 2);
+        assert!(requests.iter().all(|request| request.starts_with("GET /3/find/tt123?")));
+        assert!(requests.iter().all(|request| !request.contains("/search/movie")));
+        handle.abort();
+    }
+
     #[tokio::test]
     async fn mock_tmdb_tv_series_season_episode_keep_aired_identity() {
         let (hub, _, handle) = setup().await;

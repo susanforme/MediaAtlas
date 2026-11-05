@@ -2,8 +2,8 @@ import type { MediaKind } from "../../api/library";
 import type { AuthStatus } from "../../api/provider-auth";
 import type { ProviderView } from "../../api/providers";
 
-export type RootProviderId = "tmdb" | "anilist" | "tvmaze" | "dmm" | "wikidata";
-const rootProviderIds: RootProviderId[] = ["tmdb", "anilist", "tvmaze", "dmm", "wikidata"];
+export type RootProviderId = "tmdb" | "omdb" | "douban" | "anilist" | "bangumi" | "tvmaze" | "dmm" | "wikidata";
+const rootProviderIds: RootProviderId[] = ["tmdb", "omdb", "douban", "anilist", "bangumi", "tvmaze", "dmm", "wikidata"];
 
 export function directorySourceChoices(providers: ProviderView[], kind: MediaKind | null) {
   return providers.filter(({ descriptor }) =>

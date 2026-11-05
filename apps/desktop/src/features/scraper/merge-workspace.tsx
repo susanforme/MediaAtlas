@@ -94,7 +94,7 @@ function FieldChoice({
           )}
         </span>
         <span className="mt-1 line-clamp-2 block break-words text-xs text-muted-foreground">
-          {value(row.new.value) || t("none")}
+          {row.result === "removed" ? t("scraperIdRemoved") : value(row.new.value) || t("none")}
         </span>
       </span>
     </Label>
@@ -128,7 +128,7 @@ export function MetadataMergeWorkspace({
       ? current?.poster_uri
       : workspace.thumbnails[posterIndex];
   const overviewChange = projection.rows.find(
-    (row) => row.selected && ["overview", "plot"].includes(row.key),
+    (row) => row.selected && row.result !== "removed" && ["overview", "plot"].includes(row.key),
   );
   const overviews = projection.fields.filter((field) =>
     ["overview", "plot"].includes(field.key),
@@ -147,7 +147,13 @@ export function MetadataMergeWorkspace({
         row.key === overview.key &&
         row.language?.toLowerCase() === overview.language?.toLowerCase(),
     );
-  const count = projection.counts;
+  const identityChanges = workspace.identityChanges;
+  const count = {
+    ...projection.counts,
+    added: projection.counts.added + identityChanges.filter((id) => !id.old.length).length,
+    overwritten: projection.counts.overwritten + identityChanges.filter((id) => id.old.length).length,
+    total: projection.counts.total + identityChanges.length,
+  };
   return (
     <Card asChild className="overflow-clip rounded-2xl bg-surface/50 p-0 sm:p-0">
       <section aria-label={t("mergeTitle")}>
@@ -464,7 +470,7 @@ export function MetadataMergeWorkspace({
                         })}
                       </p>
                       <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-                        {value(row.value) || t("none")}
+                        {row.result === "removed" ? t("none") : value(row.value) || t("none")}
                       </p>
                     </div>
                   ))}
@@ -479,6 +485,9 @@ export function MetadataMergeWorkspace({
             <h2 id="merge-changes" className="mb-3 font-semibold">
               {t("mergeChanges")}
             </h2>
+            {identityChanges.some((id) => id.old.length > 0) && (
+              <p className="mb-3 text-sm text-muted-foreground">{t("scraperIdentityCorrection")}</p>
+            )}
             <div className="overflow-x-auto">
               <Table className="w-full table-fixed text-left text-sm">
                 <TableHeader className="text-xs text-muted-foreground">
@@ -490,6 +499,23 @@ export function MetadataMergeWorkspace({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
+                  {identityChanges.map((id) => (
+                    <TableRow key={`id:${id.namespace}`} className="border-t border-border align-top">
+                      <TableCell className="py-3 pr-3 break-words">
+                        {t("scraperExternalIds")}
+                        <span className="mt-1 block text-xs text-muted-foreground">{id.namespace}</span>
+                      </TableCell>
+                      <TableCell className="py-3 pr-3 whitespace-pre-wrap break-all text-muted-foreground">
+                        {id.old.join(" · ") || t("none")}
+                      </TableCell>
+                      <TableCell className="py-3 pr-3 whitespace-pre-wrap break-all">
+                        {id.new.join(" · ") || t("none")}
+                      </TableCell>
+                      <TableCell className="py-3">
+                        <Badge>{t(!id.new.length ? "scraperIdRemoved" : !id.old.length ? "mergeResult_added" : "mergeResult_overwritten")}</Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                   {projection.rows.map((row) => (
                     <TableRow
                       className="border-t border-border align-top"
@@ -509,20 +535,20 @@ export function MetadataMergeWorkspace({
                         {row.old ? value(row.old.value) : t("none")}
                       </TableCell>
                       <TableCell className="py-3 pr-3 whitespace-pre-wrap break-words">
-                        {value(row.value) || t("none")}
+                        {row.result === "removed" ? t("none") : value(row.value) || t("none")}
                       </TableCell>
                       <TableCell className="py-3">
                         <Badge
                           variant={
                             row.result === "added" ||
-                            row.result === "overwritten"
+                            row.result === "overwritten" || row.result === "removed"
                               ? "default"
                               : "outline"
                           }
                         >
                           {row.protected
                             ? t("locked")
-                            : t(`mergeResult_${row.result}`)}
+                            : row.result === "removed" ? t("scraperIdRemoved") : t(`mergeResult_${row.result}`)}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -607,7 +633,7 @@ export function MetadataMergeWorkspace({
                   (!preview.fields.some(
                     (field) => field.selected && !field.protected,
                   ) &&
-                    !preview.artwork.length) ||
+                    !preview.artwork.length && !identityChanges.length) ||
                   workspace.mergePreviewPending ||
                   Boolean(workspace.mergePreviewError) ||
                   count.total === 0

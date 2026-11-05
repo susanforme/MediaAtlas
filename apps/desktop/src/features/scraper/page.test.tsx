@@ -262,9 +262,9 @@ async function searchAndChoose() {
   await screen.findByRole("option", { name: "Local film · 2024" });
   chooseSelectOption(localItem, "media-1");
   await waitFor(() =>
-    expect(screen.getByLabelText("Title")).toHaveValue("Local film"),
+    expect(screen.getByLabelText("Title, link or ID")).toHaveValue("Local film"),
   );
-  fireEvent.change(screen.getByLabelText("Title"), {
+  fireEvent.change(screen.getByLabelText("Title, link or ID"), {
     target: { value: "Synthetic film" },
   });
   fireEvent.change(screen.getByLabelText("Release year (optional)"), {
@@ -412,12 +412,126 @@ it("does not search automatically and validates input before invoking providers"
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
   expect(scraperApi.search).not.toHaveBeenCalled();
 });
+it.each([
+  ["title", "https://www.imdb.com/title/tt35538033/?ref_=fn_all_ttl_1"],
+  ["title", "tt35538033"],
+  ["external", "https://www.imdb.com/title/tt35538033/"],
+  ["external", "tt35538033"],
+])("submits an IMDb %s lookup without requiring a namespace: %s", async (input, identifier) => {
+  show();
+  await screen.findByText("TMDB");
+  if (input === "external") {
+    fireEvent.click(screen.getByText("External identifiers (advanced)"));
+    expect(screen.getByLabelText("ID namespace (optional)")).toHaveValue("");
+  }
+  const field = screen.getByLabelText(
+    input === "title" ? "Title, link or ID" : "Link or external ID (optional)",
+  );
+  expect(field).toHaveAttribute("maxlength", "2048");
+  fireEvent.change(field, { target: { value: identifier } });
+  const search = screen.getByRole("button", { name: "Search providers" });
+  await waitFor(() => expect(search).toBeEnabled());
+  fireEvent.click(search);
+  await waitFor(() => expect(scraperApi.search).toHaveBeenCalledWith({
+    query: {
+      kind: "movie",
+      title: input === "title" ? identifier : "",
+      year: null,
+      external_ids: input === "external" ? [{ namespace: "", value: identifier }] : [],
+      language: "en-US",
+    },
+    providers: ["tmdb"],
+  }));
+});
+
+it("checks OMDb credentials before permitting a source search", async () => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor = {
+    ...snapshot.providers[0].descriptor,
+    id: "omdb", name: "OMDb", fixture: false, requires_api_key: true,
+  };
+  snapshot.providers[0].config.enabled = true;
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  vi.mocked(providerAuthApi.status).mockResolvedValue({
+    provider_id: "omdb", supported_methods: ["api_key"], method: "api_key",
+    storage: "system", configured: false, status: "not_configured",
+  });
+  show();
+  await waitFor(() => expect(providerAuthApi.status).toHaveBeenCalledWith("omdb"));
+  expect(screen.getByRole("checkbox", { name: /OMDb/ })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Search providers" })).toBeDisabled();
+  expect(scraperApi.search).not.toHaveBeenCalled();
+});
+it.each([
+  ["omdb", "OMDb", "movie"],
+  ["douban", "Douban", "movie"],
+  ["bangumi", "Bangumi", "anime"],
+])("offers the enabled %s source for compatible manual searches", async (id, name, kind) => {
+  const snapshot = fixtureSnapshot();
+  snapshot.providers[0].descriptor = {
+    ...snapshot.providers[0].descriptor,
+    id, name, fixture: false, media_kinds: [kind === "anime" ? "anime" : "movie"],
+    requires_api_key: id === "omdb",
+  };
+  snapshot.providers[0].config.enabled = true;
+  vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+  show();
+  await screen.findByText(name);
+  if (kind === "anime") chooseSelectOption(screen.getByLabelText("Media type"), "anime");
+  const checkbox = screen.getByRole("checkbox", { name: new RegExp(name) });
+  await waitFor(() => expect(checkbox).toBeEnabled());
+  fireEvent.click(checkbox);
+  fireEvent.change(screen.getByLabelText("Title, link or ID"), { target: { value: "Source lookup" } });
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  await waitFor(() => expect(scraperApi.search).toHaveBeenCalledWith(expect.objectContaining({
+    providers: [id], query: expect.objectContaining({ kind, title: "Source lookup" }),
+  })));
+});
+it("reviews corrected IDs and stale metadata removals before allowing an identity-only confirmation", async () => {
+  const stale = {
+    id: "stale-overview", field_key: "overview", locale: "en-US",
+    value: "Wrong film summary", provider_id: "tmdb", source_url: null,
+    is_locked: false, is_user_modified: false,
+  };
+  vi.mocked(libraryApi.toolsDetail).mockResolvedValue({ ...localDetail(), metadata_values: [stale] });
+  vi.mocked(scraperApi.detail).mockResolvedValue({ ...syntheticMetadata, data: { ...syntheticMetadata.data, fields: [] } });
+  vi.mocked(scraperApi.preview).mockResolvedValue({
+    ...syntheticMerge,
+    fields: [{ key: "overview", language: "en-US", old: stale,
+      new: { key: "overview", language: "en-US", value: null },
+      provider_id: "tmdb", source_url: syntheticMetadata.data.identity.source_url,
+      protected: false, needs_review: false, selected: true }],
+    external_ids: [
+      { namespace: "imdb", old: ["tt0000001"], new: ["tt35538033"] },
+      { namespace: "douban", old: ["old-douban-id"], new: [] },
+      { namespace: "tmdb", old: [], new: ["new-tmdb-id"] },
+      { namespace: "wikidata", old: ["Q123"], new: ["Q123"] },
+    ],
+  });
+  await searchAndChoose();
+  await waitForMergeReady();
+  expect(scraperApi.preview).toHaveBeenCalledWith(expect.objectContaining({ selected_fields: [], selected_artwork: [] }));
+  const table = screen.getByRole("table");
+  for (const namespace of ["imdb", "douban", "tmdb"]) expect(within(table).getByText(namespace)).toBeInTheDocument();
+  expect(within(table).queryByText("wikidata")).not.toBeInTheDocument();
+  const imdb = within(table).getByText("imdb").closest("tr")!;
+  expect(within(imdb).getByText("tt0000001")).toBeInTheDocument();
+  expect(within(imdb).getByText("tt35538033")).toBeInTheDocument();
+  const removal = within(table).getByText("old-douban-id").closest("tr")!;
+  expect(within(removal).getByText("Removed")).toBeInTheDocument();
+  const staleRow = within(table).getByText("Wrong film summary").closest("tr")!;
+  expect(within(staleRow).getByText("Removed")).toBeInTheDocument();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Confirm merge (4 changes)" })).toBeEnabled();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm merge (4 changes)" }));
+  await waitFor(() => expect(scraperApi.confirm).toHaveBeenCalledExactlyOnceWith("merge-1"));
+});
 it("localizes the workflow in Chinese and snapshots the query language", async () => {
   await i18n.changeLanguage("zh-CN");
   show();
   await screen.findByText("TMDB");
   expect(screen.getByText("刮削工作台")).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText("影片名称"), {
+  fireEvent.change(screen.getByLabelText("片名、链接或 ID"), {
     target: { value: "动画标题" },
   });
   fireEvent.click(screen.getByRole("button", { name: "检索来源" }));
@@ -504,7 +618,7 @@ it("renders TV seasons with their explicit aired numbering", async () => {
   show();
   await screen.findByText("TMDB");
   chooseSelectOption(screen.getByLabelText("Media type"), "tv");
-  fireEvent.change(screen.getByLabelText("Title"), {
+  fireEvent.change(screen.getByLabelText("Title, link or ID"), {
     target: { value: "Synthetic series" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
@@ -549,7 +663,7 @@ it("uses the independent Anime query and displays aliases", async () => {
   show();
   await screen.findByText(/AniList/);
   chooseSelectOption(screen.getByLabelText("Media type"), "anime");
-  fireEvent.change(screen.getByLabelText("Title"), {
+  fireEvent.change(screen.getByLabelText("Title, link or ID"), {
     target: { value: "Synthetic anime" },
   });
   fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
@@ -621,7 +735,7 @@ it("discards an abandoned output preview on component unmount without executing 
 it("prefills and locks an explicit local target without issuing a provider search", async () => {
   show("media-1");
   await waitFor(() =>
-    expect(screen.getByLabelText("Title")).toHaveValue("Local film"),
+    expect(screen.getByLabelText("Title, link or ID")).toHaveValue("Local film"),
   );
   expect(screen.getByLabelText("Release year (optional)")).toHaveValue(2024);
   expect(screen.getByLabelText("Media type")).toBeDisabled();
@@ -755,7 +869,7 @@ it("rejects adult and unsupported local targets instead of defaulting to movie",
   show("media-1");
   await screen.findByRole("alert");
   expect(screen.queryByText("PRIVATE TITLE")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Title")).toHaveValue("");
+  expect(screen.getByLabelText("Title, link or ID")).toHaveValue("");
   expect(
     screen.getByRole("button", { name: "Search providers" }),
   ).toBeDisabled();
@@ -812,7 +926,7 @@ it("keeps disabled sources disabled and allows an explicitly selected public sou
   expect(
     screen.getByRole("checkbox", { name: "TMDB (Disabled)" }),
   ).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Title"), {
+  fireEvent.change(screen.getByLabelText("Title, link or ID"), {
     target: { value: "Synthetic article" },
   });
   expect(
@@ -822,7 +936,7 @@ it("keeps disabled sources disabled and allows an explicitly selected public sou
     screen.queryByText("Wikipedia requires the exact article title."),
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("checkbox", { name: "Wikipedia" }));
-  expect(screen.getByLabelText("Title")).toHaveAccessibleDescription(
+  expect(screen.getByLabelText("Title, link or ID")).toHaveAccessibleDescription(
     "Wikipedia requires the exact article title.",
   );
   expect(

@@ -9,6 +9,7 @@ import type {
 export type MergeFieldResult =
   | "added"
   | "overwritten"
+  | "removed"
   | "unchanged"
   | "skipped";
 
@@ -98,7 +99,7 @@ export function buildMergePreview({
     preview?.media_item_id === target?.media.id ? preview : undefined;
   const rows: MergePreviewRow[] = metadata.data.fields.map((field) => {
     const mandatory =
-      ["tvmaze", "wikipedia.html"].includes(metadata.data.identity.provider_id) &&
+      ["tvmaze", "wikipedia.html", "bangumi", "douban", "omdb"].includes(metadata.data.identity.provider_id) &&
       ["attribution", "source_license"].includes(field.key);
     const language = locale(field.language);
     const existing = local.filter((value) => value.field_key === field.key);
@@ -151,8 +152,27 @@ export function buildMergePreview({
       value: apply ? field.value : (old?.value ?? canonical(target, field.key)),
     };
   });
+  for (const diff of authoritative?.fields ?? []) {
+    if (
+      diff.new.value !== null || !diff.selected || diff.protected || !diff.old ||
+      locale(diff.language) === undefined || diff.new.key !== diff.key ||
+      diff.old.field_key !== diff.key || locale(diff.new.language) !== locale(diff.language) ||
+      locale(diff.old.locale) !== locale(diff.language) ||
+      diff.old.is_locked || diff.old.is_user_modified ||
+      local.some((value) => value.field_key === diff.key && (value.is_locked || value.is_user_modified))
+    ) continue;
+    const index = rows.findIndex((row) => row.key === diff.key && locale(row.language) === locale(diff.language));
+    if (index !== -1 && rows[index].selected) continue;
+    const removal: MergePreviewRow = {
+      key: diff.key, language: diff.language, old: diff.old, new: diff.new,
+      selected: true, eligible: false, protected: false, mandatory: true,
+      result: "removed", value: null,
+    };
+    if (index === -1) rows.push(removal);
+    else rows[index] = removal;
+  }
   const effectiveFields = rows
-    .filter((row) => row.selected)
+    .filter((row) => row.selected && row.result !== "removed")
     .map((row) => row.key);
   const effectiveArtwork = [...new Set(selectedArtwork)].filter((index) => {
     const art = metadata.data.artwork[index];
@@ -180,7 +200,9 @@ export function buildMergePreview({
         field.key === row.key &&
         locale(field.language) === locale(row.language),
     );
-    if (index === -1) fields.push(row.new);
+    if (row.result === "removed") {
+      if (index !== -1) fields.splice(index, 1);
+    } else if (index === -1) fields.push(row.new);
     else fields[index] = row.new;
   }
   const media = {
@@ -191,6 +213,7 @@ export function buildMergePreview({
     year: target?.media.year ?? (target ? null : metadata.data.identity.year),
   };
   for (const row of rows.filter((row) => row.selected)) {
+    if (row.result === "removed") continue;
     if (row.key === "title" && typeof row.value === "string")
       media.title = row.value;
     if (row.key === "original_title" && typeof row.value === "string")
@@ -206,7 +229,7 @@ export function buildMergePreview({
   }
   const counts = {
     added: rows.filter((row) => row.result === "added").length,
-    overwritten: rows.filter((row) => row.result === "overwritten").length,
+    overwritten: rows.filter((row) => row.result === "overwritten" || row.result === "removed").length,
     unchanged: rows.filter((row) => row.result === "unchanged").length,
     skipped: rows.filter((row) => row.result === "skipped").length,
     artwork: artwork.length,

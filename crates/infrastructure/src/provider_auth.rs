@@ -78,7 +78,7 @@ impl ProviderAuthService {
     }
     async fn status_inner(&self, provider: &str) -> Result<AuthStatus, RepositoryError> {
         validate_provider(provider)?;
-        if !matches!(provider, "tmdb" | "dmm") {
+        if !matches!(provider, "tmdb" | "omdb" | "dmm") {
             return Ok(AuthStatus {
                 provider_id: provider.into(),
                 supported_methods: vec!["none".into()],
@@ -109,6 +109,8 @@ impl ProviderAuthService {
             (
                 if provider == "dmm" {
                     "affiliate"
+                } else if provider == "omdb" {
+                    "api_key"
                 } else {
                     "bearer"
                 }
@@ -122,6 +124,8 @@ impl ProviderAuthService {
             provider_id: provider.into(),
             supported_methods: if provider == "dmm" {
                 vec!["affiliate".into()]
+            } else if provider == "omdb" {
+                vec!["api_key".into()]
             } else {
                 vec!["bearer".into(), "api_key".into()]
             },
@@ -140,7 +144,7 @@ impl ProviderAuthService {
         let _gate = self.gate.lock().await;
         validate_provider(&input.provider_id)?;
         let valid = match (input.provider_id.as_str(), input.method.as_str()) {
-            ("tmdb", "bearer" | "api_key") => {
+            ("tmdb", "bearer" | "api_key") | ("omdb", "api_key") => {
                 !input.secret.is_empty()
                     && input.secret.len() <= 16384
                     && !input.secret.chars().any(char::is_whitespace)
@@ -285,7 +289,7 @@ impl ProviderAuthService {
         let reference = reference.ok_or(ProviderFailure::CredentialsUnavailable)?;
         let pieces = reference.split('.').collect::<Vec<_>>();
         if pieces.len() != 5
-            || !matches!(pieces[0], "tmdb" | "dmm")
+            || !matches!(pieces[0], "tmdb" | "omdb" | "dmm")
             || pieces[1] != "auth"
             || Uuid::parse_str(pieces[4]).is_err()
         {
@@ -294,6 +298,7 @@ impl ProviderAuthService {
         let method = match (pieces[0], pieces[2]) {
             ("tmdb", "bearer") => "bearer",
             ("tmdb", "api_key") => "api_key",
+            ("omdb", "api_key") => "api_key",
             ("dmm", "affiliate") => "affiliate",
             _ => return Err(ProviderFailure::InvalidConfiguration),
         };
@@ -345,7 +350,7 @@ pub(crate) fn parse_affiliate_credential(
 fn validate_provider(provider: &str) -> Result<(), RepositoryError> {
     if matches!(
         provider,
-        "tmdb" | "anilist" | "tvmaze" | "wikipedia.html" | "dmm" | "wikidata"
+        "tmdb" | "omdb" | "douban" | "bangumi" | "anilist" | "tvmaze" | "wikipedia.html" | "dmm" | "wikidata"
     ) {
         Ok(())
     } else {
@@ -376,6 +381,39 @@ mod tests {
             method: method.into(),
             storage: storage.into(),
             secret: secret.into(),
+        }
+    }
+    #[tokio::test]
+    async fn omdb_api_keys_rotate_independently_without_persisting_or_echoing_secrets() {
+        let (_dir, service) = service(Arc::new(CredentialStore::new())).await;
+        service.save(input("bearer", "session_only", "synthetic-tmdb-key")).await.unwrap();
+        let tmdb = service.snapshot_ref("tmdb").await.unwrap().unwrap();
+        let before = service.status("omdb").await.unwrap();
+        assert_eq!(before.method, "api_key");
+        assert_eq!(before.supported_methods, vec!["api_key"]);
+        assert!(!before.configured);
+        let mut omdb = input("api_key", "session_only", "synthetic-omdb-key");
+        omdb.provider_id = "omdb".into();
+        let status = service.save(omdb).await.unwrap();
+        let first = service.snapshot_ref("omdb").await.unwrap().unwrap();
+        assert!(first.starts_with("omdb.auth.api_key.session."));
+        assert_eq!(service.resolve(Some(&first)).await.unwrap().method, "api_key");
+        assert!(!serde_json::to_string(&status).unwrap().contains("synthetic-omdb-key"));
+        let mut replacement = input("api_key", "session_only", "synthetic-rotated-omdb-key");
+        replacement.provider_id = "omdb".into();
+        service.save(replacement).await.unwrap();
+        assert_eq!(service.resolve(Some(&first)).await.err(), Some(ProviderFailure::CredentialsUnavailable));
+        assert_eq!(service.snapshot_ref("tmdb").await.unwrap().as_deref(), Some(tmdb.as_str()));
+        let stored: Vec<String> = sqlx::query_scalar("SELECT credential_ref FROM provider_auth_settings")
+            .fetch_all(service.repo.pool()).await.unwrap();
+        assert!(stored.iter().all(|reference| !reference.contains("synthetic-")));
+        let mut unsupported = input("bearer", "session_only", "synthetic-invalid-method");
+        unsupported.provider_id = "omdb".into();
+        assert_eq!(service.save(unsupported).await, Err(RepositoryError::InvalidInput));
+        assert!(!service.clear("omdb").await.unwrap().configured);
+        assert!(service.status("tmdb").await.unwrap().configured);
+        for provider in ["douban", "bangumi"] {
+            assert_eq!(service.status(provider).await.unwrap().status, "not_required");
         }
     }
     #[tokio::test]

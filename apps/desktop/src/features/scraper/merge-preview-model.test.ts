@@ -454,7 +454,7 @@ describe("required source credits", () => {
     { key: "source_license", value: "CC BY-SA 4.0", language: null },
   ];
 
-  it.each(["tvmaze", "wikipedia.html"])("retains %s credits after deselection and onlyMissing filtering", (provider) => {
+  it.each(["tvmaze", "wikipedia.html", "bangumi", "douban", "omdb"])("retains %s credits after deselection and onlyMissing filtering", (provider) => {
     const remote = metadata([...fields, ...credits]);
     remote.data.identity = { ...remote.data.identity, provider_id: provider };
     const projection = project({
@@ -505,4 +505,35 @@ describe("required source credits", () => {
     expect(projection.rows.every((row) => !row.mandatory)).toBe(true);
     expect(projection.effectiveFields).toEqual([]);
   });
+});
+
+it("shows only authoritative unprotected correction removals without sending deletion keys as source selections", () => {
+  const stale = local("overview", "Wrong film summary");
+  const locked = local("genres", ["Manual genre"], { is_locked: true });
+  const detail = { ...target, metadata_values: [stale, locked] };
+  const proof = serverProof({ fields: [
+    { key: "overview", language: stale.locale, old: stale,
+      new: { key: "overview", language: stale.locale, value: null },
+      provider_id: "tmdb", source_url: syntheticIdentity.source_url,
+      protected: false, needs_review: false, selected: true },
+  ] });
+  const result = project({ target: detail, metadata: metadata([]), selectedFields: [], preview: proof, onlyMissing: true });
+  expect(result.rows).toHaveLength(1);
+  expect(result.rows[0]).toMatchObject({ result: "removed", selected: true, mandatory: true, eligible: false });
+  expect(result.counts.total).toBe(1);
+  expect(result.counts.overwritten).toBe(1);
+  expect(result.effectiveFields).toEqual([]);
+  expect(result.fields).toEqual([{ key: "genres", language: locked.locale, value: locked.value }]);
+  expect(mergeSelectionMatches(proof, result)).toBe(true);
+  const unselectedReplacement = project({
+    target: detail, metadata: metadata([{ key: "overview", language: stale.locale, value: "New film summary" }]),
+    selectedFields: [], preview: proof,
+  });
+  expect(unselectedReplacement.rows).toHaveLength(1);
+  expect(unselectedReplacement.rows[0].result).toBe("removed");
+  expect(mergeSelectionMatches(proof, unselectedReplacement)).toBe(true);
+  const protectedProof = { ...proof, fields: [{ ...proof.fields[0], old: { ...stale, is_locked: true } }] };
+  const rejected = project({ target: detail, metadata: metadata([]), selectedFields: [], preview: protectedProof });
+  expect(rejected.rows).toEqual([]);
+  expect(mergeSelectionMatches(protectedProof, rejected)).toBe(false);
 });

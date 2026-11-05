@@ -215,6 +215,12 @@ pub struct FieldDiff {
     pub needs_review: bool,
     pub selected: bool,
 }
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalIdDiff {
+    pub namespace: String,
+    pub old: Vec<String>,
+    pub new: Vec<String>,
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MergePreview {
     pub schema_version: u16,
@@ -222,6 +228,8 @@ pub struct MergePreview {
     pub media_item_id: Uuid,
     pub fields: Vec<FieldDiff>,
     pub artwork: Vec<ArtworkCandidate>,
+    #[serde(default)]
+    pub external_ids: Vec<ExternalIdDiff>,
     pub confirmed: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

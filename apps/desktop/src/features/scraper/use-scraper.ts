@@ -31,7 +31,7 @@ import {
   buildMergePreview,
   mergeSelectionMatches,
 } from "./merge-preview-model";
-import { scrapeKind } from "./scraper-model";
+import { changedExternalIds, identityMayChange, providerChoices, scrapeKind } from "./scraper-model";
 import { useLiveMergePreview } from "./use-live-merge-preview";
 
 type PreviewAction = { previewId: string; epoch: number };
@@ -151,11 +151,11 @@ export function useScraper(
     : undefined;
   const liveMerge = useLiveMergePreview(
     validTarget &&
-      metadata?.kind === targetKind &&
+      metadata && metadata.kind === targetKind &&
       search &&
       candidateIndex !== undefined &&
       draftProjection &&
-      draftProjection.counts.total > 0
+      (draftProjection.counts.total > 0 || identityMayChange(metadata, targetDetail.data))
       ? {
           run_id: search.run_id,
           candidate_index: candidateIndex,
@@ -179,6 +179,8 @@ export function useScraper(
   const mergeSelectionValid = Boolean(
     preview && projection && mergeSelectionMatches(preview, projection),
   );
+  const identityChanges = changedExternalIds(preview);
+  const mergeChangeCount = (projection?.counts.total ?? 0) + identityChanges.length;
   const latestActions = useRef({
     epoch: generation.current,
     mediaId: target,
@@ -196,7 +198,7 @@ export function useScraper(
       outputMode,
       mergeId: preview?.preview_id,
       mergeReady: Boolean(
-        mergeSelectionValid && !liveMerge.pending && projection?.counts.total,
+        mergeSelectionValid && !liveMerge.pending && mergeChangeCount,
       ),
       outputId: output?.preview_id,
     };
@@ -449,7 +451,7 @@ export function useScraper(
   const authProviders =
     snapshot.data?.providers.filter(
       (p) =>
-        ["tmdb", "anilist", "tvmaze", "wikipedia.html"].includes(p.descriptor.id) &&
+        providerChoices.includes(p.descriptor.id) &&
         (p.descriptor.requires_api_key || p.descriptor.requires_login),
     ) ?? [];
   const auth = useQueries({
@@ -494,7 +496,7 @@ export function useScraper(
     );
   const selectedProviders = providers.filter(available);
   const searchValid = Boolean(
-    (title.trim() || (namespace.trim() && externalId.trim())) &&
+    (title.trim() || externalId.trim()) &&
       (year === "" ||
         (Number.isInteger(Number(year)) &&
           Number(year) >= 1800 &&
@@ -594,6 +596,7 @@ export function useScraper(
     mergePreviewPending: liveMerge.pending,
     mergePreviewError: liveMerge.error,
     mergeSelectionValid,
+    identityChanges,
     retryMergePreview: () => {
       const epoch = generation.current;
       void targetDetail.refetch().then(() => {

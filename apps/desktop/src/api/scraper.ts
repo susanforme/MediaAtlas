@@ -122,6 +122,7 @@ export interface MergePreview {
   media_item_id: string;
   fields: FieldDiff[];
   artwork: ArtworkCandidate[];
+  external_ids?: { namespace: string; old: string[]; new: string[] }[];
   confirmed: boolean;
 }
 export interface MergeResult {
@@ -296,6 +297,14 @@ export function mergePreview(v: unknown): v is MergePreview {
         ),
     ) &&
     list(v.artwork, artwork) &&
+    (v.external_ids === undefined ||
+      list(v.external_ids, (entry): entry is NonNullable<MergePreview["external_ids"]>[number] =>
+        object(entry) &&
+        typeof entry.namespace === "string" && entry.namespace.length > 0 && entry.namespace.length <= 32 &&
+        !/[\u0000-\u0020\u007f]/.test(entry.namespace) &&
+        list(entry.old, (value): value is string => text(value) && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value)) &&
+        list(entry.new, (value): value is string => text(value) && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value)),
+      )) &&
     typeof v.confirmed === "boolean"
   );
 }

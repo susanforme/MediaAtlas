@@ -368,6 +368,11 @@ impl NetworkEngine {
         }
         // MusicBrainz policy is a site minimum, independent of saved UI limits.
         let mut bounded_job = job.clone();
+        if matches!(job.provider_id.as_str(), "douban" | "bangumi" | "omdb") {
+            let minimum = if job.provider_id == "douban" { 6000 } else { 1000 };
+            bounded_job.config.interval_ms = bounded_job.config.interval_ms.max(minimum);
+            bounded_job.config.concurrency = 1;
+        }
         if job.provider_id == "musicbrainz"
             || Url::parse(&spec.url)
                 .ok()
@@ -695,9 +700,9 @@ impl NetworkEngine {
             let mut response = tokio::select! {_=cancel.cancelled()=>return Err(ProviderFailure::Cancelled.into()),r=request.send()=>r.map_err(|e|classify_transport(&e))?};
             let status = response.status().as_u16();
             if response.status().is_redirection() {
-                // MB endpoints are canonical. Refuse redirects so a redirect cannot
-                // cause an extra request inside its mandatory one-second site slot.
-                if hop == 5 || spec.method != RequestMethod::Get || job.provider_id == "musicbrainz"
+                // Canonical metadata endpoints must not follow verification pages
+                // or issue extra requests inside a mandatory site interval.
+                if hop == 5 || spec.method != RequestMethod::Get || matches!(job.provider_id.as_str(), "musicbrainz" | "douban" | "bangumi" | "omdb")
                 {
                     return Err(http_failure(ProviderFailure::UnsafeTarget, status));
                 }

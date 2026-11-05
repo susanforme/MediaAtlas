@@ -4,9 +4,11 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DesktopError } from "../../api/desktop";
 import { type AuthStatus, providerAuthApi } from "../../api/provider-auth";
+import { providerApi } from "../../api/providers";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { chooseSelectOption } from "../../test/select";
+import { fixtureSnapshot } from "../providers/fixtures";
 import { ProviderAuthSettings } from "./provider-auth";
 
 vi.mock("../../components/ui/sonner", () => ({
@@ -15,6 +17,10 @@ vi.mock("../../components/ui/sonner", () => ({
 vi.mock("../../api/provider-auth", async (original) => ({
   ...(await original<typeof import("../../api/provider-auth")>()),
   providerAuthApi: { status: vi.fn(), save: vi.fn(), clear: vi.fn() },
+}));
+vi.mock("../../api/providers", async (original) => ({
+  ...(await original<typeof import("../../api/providers")>()),
+  providerApi: { snapshot: vi.fn(), setEnabled: vi.fn() },
 }));
 const status: AuthStatus = {
   provider_id: "tmdb",
@@ -40,6 +46,8 @@ function show() {
 beforeEach(async () => {
   vi.clearAllMocks();
   await i18n.changeLanguage("en-US");
+  vi.mocked(providerApi.snapshot).mockResolvedValue(fixtureSnapshot());
+  vi.mocked(providerApi.setEnabled).mockResolvedValue(null);
   vi.mocked(providerAuthApi.status).mockImplementation(async (provider) =>
     provider === "tmdb"
       ? status
@@ -60,6 +68,60 @@ beforeEach(async () => {
     status: "configured",
   }));
   vi.mocked(providerAuthApi.clear).mockResolvedValue(status);
+});
+it("saves an OMDb API key only through its explicit authentication form", async () => {
+  vi.mocked(providerAuthApi.status).mockImplementation(async (provider) => ({
+    ...status, provider_id: provider,
+    supported_methods: provider === "omdb" ? ["api_key"] : ["bearer", "api_key"],
+    method: provider === "omdb" ? "api_key" : "bearer",
+  }));
+  vi.mocked(providerAuthApi.save).mockImplementation(async (input) => ({
+    ...status, provider_id: input.provider_id, supported_methods: ["api_key"],
+    method: input.method, storage: input.storage, configured: true, status: "configured",
+  }));
+  show();
+  await screen.findByLabelText("Credential");
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), "omdb");
+  const credential = await screen.findByLabelText("Credential");
+  await waitFor(() => expect(screen.getByLabelText("Authentication method")).toHaveValue("api_key"));
+  expect(credential).toHaveAttribute("type", "password");
+  expect(providerAuthApi.save).not.toHaveBeenCalled();
+  fireEvent.change(credential, { target: { value: "synthetic-omdb-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save authentication" }));
+  await waitFor(() => expect(providerAuthApi.save).toHaveBeenCalledWith({
+    provider_id: "omdb", method: "api_key", storage: "system", secret: "synthetic-omdb-key",
+  }));
+  expect(credential).toHaveValue("");
+  expect(providerApi.setEnabled).not.toHaveBeenCalled();
+});
+
+it.each(["douban", "bangumi"])("enables the public %s source only after an explicit action", async (provider) => {
+  let enabled = false;
+  vi.mocked(providerApi.snapshot).mockImplementation(async () => {
+    const snapshot = fixtureSnapshot();
+    snapshot.providers[0].descriptor = {
+      ...snapshot.providers[0].descriptor,
+      id: provider, name: provider, fixture: false,
+      media_kinds: [provider === "bangumi" ? "anime" : "movie"],
+    };
+    snapshot.providers[0].config.enabled = enabled;
+    return snapshot;
+  });
+  vi.mocked(providerApi.setEnabled).mockImplementation(async () => {
+    enabled = true;
+    return null;
+  });
+  show();
+  await screen.findByLabelText("Credential");
+  chooseSelectOption(screen.getByLabelText("Authentication provider"), provider);
+  await screen.findByText("Source disabled");
+  expect(screen.queryByLabelText("Credential")).not.toBeInTheDocument();
+  expect(providerAuthApi.save).not.toHaveBeenCalled();
+  expect(providerApi.setEnabled).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Enable source" }));
+  await waitFor(() => expect(providerApi.setEnabled).toHaveBeenCalledExactlyOnceWith(provider, true));
+  await screen.findByText("Source enabled");
+  expect(providerAuthApi.save).not.toHaveBeenCalled();
 });
 it("defaults to OS storage, clears the password before saving and never enables providers", async () => {
   const stored = vi.spyOn(Storage.prototype, "setItem");

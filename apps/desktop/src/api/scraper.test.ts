@@ -6,7 +6,7 @@ import {
   syntheticOutput,
   syntheticSearch,
 } from "../features/scraper/fixtures";
-import { scraperApi, scraperOutputApi } from "./scraper";
+import { mergePreview, scraperApi, scraperOutputApi } from "./scraper";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn(), isTauri: vi.fn() }));
 beforeEach(() => {
@@ -16,6 +16,23 @@ beforeEach(() => {
 function respond(data: unknown) {
   vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data });
 }
+it("accepts legacy previews and complete ID before/after arrays but rejects malformed identity changes", () => {
+  expect(mergePreview(syntheticMerge)).toBe(true);
+  expect(mergePreview({ ...syntheticMerge, external_ids: [
+    { namespace: "imdb", old: ["tt1"], new: ["tt2"] },
+    { namespace: "douban", old: ["1"], new: [] },
+    { namespace: "tmdb", old: [], new: ["2"] },
+  ] })).toBe(true);
+  for (const external_ids of [
+    null,
+    {},
+    [{ namespace: "imdb", old: "tt1", new: ["tt2"] }],
+    [{ namespace: "imdb", old: ["tt1"], new: [null] }],
+    [{ namespace: "", old: [], new: ["tt2"] }],
+    [{ namespace: "imdb", old: [], new: ["bad\nvalue"] }],
+    [{ namespace: "imdb", old: [], new: ["x".repeat(257)] }],
+  ]) expect(mergePreview({ ...syntheticMerge, external_ids })).toBe(false);
+});
 it("uses versioned typed search/detail/merge envelopes with immutable snapshot indices", async () => {
   respond(syntheticSearch);
   const query = {

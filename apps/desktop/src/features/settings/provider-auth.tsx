@@ -390,6 +390,9 @@ function ProviderAuthForm({
             onChange={(event) => setProvider(event.target.value)}
           >
             <option value="tmdb">TMDB</option>
+            <option value="omdb">OMDb</option>
+            <option value="douban">Douban</option>
+            <option value="bangumi">Bangumi</option>
             <option value="anilist">AniList</option>
             <option value="tvmaze">TVmaze</option>
             <option value="wikipedia.html">Wikipedia</option>
@@ -403,7 +406,7 @@ function ProviderAuthForm({
             )}
           </Select>
         </Label>
-        {["musicbrainz", "coverartarchive", "tvmaze"].includes(selectedProvider) ? (
+        {["musicbrainz", "coverartarchive", "tvmaze", "douban", "bangumi"].includes(selectedProvider) ? (
           <PublicSourceEditor
             key={selectedProvider}
             providerId={selectedProvider}

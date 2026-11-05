@@ -482,6 +482,11 @@ impl MediaOutputService {
         let source_fingerprint = source_fingerprint(&source_dir, source_name)?;
         let mut metadata = self.repo.list_metadata_values(media_id).await?;
         let mut ids = self.repo.list_external_ids(media_id).await?;
+        // Once an identity was corrected, old sidecars cannot refill metadata
+        // from the misidentified work, even before that NFO is explicitly updated.
+        let corrected_identity: bool = if self.channel == OutputChannel::Ordinary && update_existing {
+            self.had_identity_correction(media_id).await?
+        } else { false };
         let name = relative
             .file_stem()
             .and_then(|v| v.to_str())
@@ -517,7 +522,7 @@ impl MediaOutputService {
                 .bind(media_id.to_string()).fetch_one(self.repo.pool()).await?;
             if pending { return Err(RepositoryError::Conflict); }
         }
-        if let Some(existing) = &old_text {
+        if let Some(existing) = old_text.as_ref().filter(|_| !corrected_identity) {
             let local = mediaatlas_media_scanner::parse_nfo(existing)
                 .map_err(|_| RepositoryError::InvalidInput)?;
             let saved_keys = metadata.iter().map(|field| field.field_key.clone()).collect::<std::collections::HashSet<_>>();
@@ -584,7 +589,7 @@ impl MediaOutputService {
                 }
             }
             if update_existing {
-                merge_kodi_export(old, &generated)?
+                merge_kodi_export(old, &generated, corrected_identity)?
             } else {
                 old.clone()
             }
@@ -1070,6 +1075,11 @@ impl MediaOutputService {
         }
         Ok(())
     }
+    async fn had_identity_correction(&self, media_id: Uuid) -> Result<bool, RepositoryError> {
+        Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM video_merge_previews p, json_each(p.preview_json,'$.external_ids') d WHERE p.media_item_id=? AND p.state='succeeded' AND json_array_length(json_extract(d.value,'$.old'))>0 AND json_extract(d.value,'$.old')!=json_extract(d.value,'$.new'))")
+            .bind(media_id.to_string()).fetch_one(self.repo.pool()).await?)
+    }
+
     pub async fn execute(&self, preview_id: Uuid) -> Result<OutputResult, RepositoryError> {
         self.execute_cancellable(preview_id, None).await
     }
@@ -1609,6 +1619,7 @@ fn validate_nfo(value: &str) -> Result<(), RepositoryError> {
 fn merge_kodi_export(
     existing: &str,
     generated: &str,
+    clear_missing: bool,
 ) -> Result<String, RepositoryError> {
     validate_nfo(existing)?;
     validate_nfo(generated)?;
@@ -1631,7 +1642,7 @@ fn merge_kodi_export(
         let replacement = source.root_element().children()
             .filter(|node| node.is_element() && node.tag_name().name() == tag)
             .map(|node| &generated[node.range()]).collect::<Vec<_>>().join("\n  ");
-        if replacement.is_empty() && !matches!(tag, "thumb" | "fanart" | "actor") {
+        if replacement.is_empty() && !clear_missing && !matches!(tag, "thumb" | "fanart" | "actor") {
             continue;
         }
         let nodes = root.children().filter(|node| node.is_element() && node.tag_name().name() == tag).collect::<Vec<_>>();
@@ -1640,6 +1651,15 @@ fn merge_kodi_export(
         } else {
             for (index, node) in nodes.iter().enumerate() {
                 replacements.push((node.range(), if index == 0 { replacement.clone() } else { String::new() }));
+            }
+        }
+    }
+    if clear_missing {
+        for tag in ["originaltitle", "plot", "outline", "sorttitle", "showtitle", "runtime", "year", "premiered", "aired", "tagline", "mpaa", "status", "sourceattribution", "sourcelicense", "rating", "votes"] {
+            if !source.root_element().children().any(|node| node.is_element() && node.tag_name().name() == tag) {
+                for node in root.children().filter(|node| node.is_element() && node.tag_name().name() == tag) {
+                    replacements.push((node.range(), String::new()));
+                }
             }
         }
     }
@@ -2237,8 +2257,22 @@ mod tests {
     }
 
     #[test]
+    fn identity_correction_does_not_retain_the_wrong_movies_metadata_in_nfo() {
+        let old = "<movie><title>Wrong</title><plot>Wrong plot</plot><genre>Wrong genre</genre><runtime>99</runtime><uniqueid type=\"imdb\">tt1</uniqueid><playcount>2</playcount><extension>keep</extension></movie>";
+        let generated = "<movie><title>Correct</title><uniqueid type=\"imdb\" default=\"true\">tt2</uniqueid></movie>";
+        let merged = merge_kodi_export(old, generated, true).unwrap();
+        assert!(merged.contains("<title>Correct</title>"));
+        assert!(merged.contains(">tt2</uniqueid>"));
+        assert!(merged.contains("<playcount>2</playcount>"));
+        assert!(merged.contains("<extension>keep</extension>"));
+        for obsolete in ["Wrong plot", "Wrong genre", "<runtime>", ">tt1</uniqueid>"] {
+            assert!(!merged.contains(obsolete), "{obsolete}");
+        }
+    }
+
+    #[test]
     fn nfo_publication_never_clobbers_a_file_created_after_the_before_image_was_captured() {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = crate::test_support::tempdir().unwrap();
         let dir = open_absolute_dir(temp.path(), false).unwrap();
         let old = b"<movie><title>Old</title></movie>";
         let new = b"<movie><title>Exported</title></movie>";

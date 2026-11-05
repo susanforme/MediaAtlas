@@ -29,6 +29,21 @@ it("preserves only supported library setup context and settings tabs", () => {
     }),
   ).toEqual({ from: "library" });
 });
+it.each([
+  ["omdb", "movie"], ["douban", "tv_series"], ["bangumi", "anime"],
+])("preserves the %s source and its original media destination", (provider, kind) => {
+  const search = validateProviderSetupSearch({
+    from: "library", kind, provider, tab: "auth", return: { to: "media", media: "media-1" },
+  });
+  expect(search.provider).toBe(provider);
+  expect(search.kind).toBe(kind);
+  expect(setupReturnLocation(search)).toEqual({
+    to: "/media/$mediaId", params: { mediaId: "media-1" }, search: {},
+  });
+  expect(validateProviderSetupSearch({
+    from: "scraper", media: "media-1", provider, queue: ["media-1", "media-2"],
+  })).toMatchObject({ from: "scraper", media: "media-1", provider, queue: ["media-1", "media-2"] });
+});
 
 it("preserves library filters and pagination through setup using a fixed destination", () => {
   const search = {

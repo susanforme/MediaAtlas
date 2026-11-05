@@ -30,6 +30,7 @@ pub mod scraper;
 pub mod tasks;
 pub mod video_open;
 pub mod video_providers;
+pub(crate) mod video_query;
 pub mod watcher;
 
 use std::{io, path::Path};

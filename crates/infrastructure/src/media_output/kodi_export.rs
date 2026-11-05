@@ -60,6 +60,9 @@ fn remote_provider(reference: &str) -> Result<&'static str, RepositoryError> {
         Some("image.tmdb.org") => Ok("tmdb"),
         Some("s4.anilist.co") => Ok("anilist"),
         Some("static.tvmaze.com") => Ok("tvmaze"),
+        Some("lain.bgm.tv") => Ok("bangumi"),
+        Some("img1.doubanio.com" | "img2.doubanio.com" | "img3.doubanio.com" | "img9.doubanio.com") => Ok("douban"),
+        Some("m.media-amazon.com" | "images-na.ssl-images-amazon.com") => Ok("omdb"),
         _ => Err(RepositoryError::Provider(ProviderFailure::UnsafeTarget)),
     }
 }
@@ -180,8 +183,11 @@ impl MediaOutputService {
         {
             format!("mediaatlas-{}", &hash(stem.as_bytes())[..12])
         } else { stem.to_owned() };
+        let corrected_identity = self.had_identity_correction(item.id).await?;
         let mut sources = Vec::new();
         for artwork in self.repo.list_artworks(item.id).await? {
+            // A local image may be a sidecar of the previously misidentified work.
+            if corrected_identity && artwork.provider_id.is_none() { continue; }
             let Some(kind) = kind(artwork.kind.as_str()) else { continue; };
             let reference = if let Some(reference) = artwork.source_url {
                 if let Some(library) = reference.strip_prefix("library://") {
@@ -284,7 +290,7 @@ mod tests {
     use std::fs;
 
     async fn fixture() -> (tempfile::TempDir, MediaOutputService, MediaItem, Dir) {
-        let temp = tempfile::tempdir().unwrap();
+        let temp = crate::test_support::tempdir().unwrap();
         let parent = temp.path().join("电影/无敌破坏王/无敌破坏1");
         fs::create_dir_all(&parent).unwrap();
         fs::write(parent.join("无敌破坏1.mp4"), b"readonly source video").unwrap();
@@ -505,6 +511,10 @@ mod tests {
         }
         assert_eq!(remote_provider("https://static.tvmaze.com/image.jpg").unwrap(),"tvmaze");
         assert_eq!(remote_provider("https://s4.anilist.co/image.jpg").unwrap(),"anilist");
+        assert_eq!(remote_provider("https://lain.bgm.tv/pic/cover/l/image.jpg").unwrap(),"bangumi");
+        assert_eq!(remote_provider("https://img9.doubanio.com/view/photo/l/public/image.jpg").unwrap(),"douban");
+        assert_eq!(remote_provider("https://m.media-amazon.com/images/M/image.jpg").unwrap(),"omdb");
+        assert!(remote_provider("https://img9.doubanio.com.evil.test/image.jpg").is_err());
         assert!(local_path(".actors/person.jpg").is_ok());
     }
 
@@ -546,6 +556,70 @@ mod tests {
         let prepared=service.prepare_kodi_images(&item,&[],"Film",&dir,NfoExportMode::Offline,root,parent).await.unwrap();
         assert_eq!(prepared.artwork,vec![(ArtworkKind::Poster,"Film-poster.png".into())]);
         assert_eq!(prepared.images.len(),1);
+    }
+
+    #[tokio::test]
+    async fn corrected_identity_does_not_reuse_the_previous_movies_local_sidecars() {
+        let (temp,service,item,dir)=fixture().await;
+        let root=Uuid::new_v4();
+        let parent=Path::new("电影/无敌破坏王/无敌破坏1");
+        let mut old_buffer=Cursor::new(Vec::new());
+        image::DynamicImage::new_rgb8(2,1).write_to(&mut old_buffer,ImageFormat::Png).unwrap();
+        let old=old_buffer.into_inner();
+        for (kind,name) in [(ArtworkKind::Poster,"wrong-poster.png"),(ArtworkKind::Backdrop,"wrong-fanart.png")] {
+            fs::write(temp.path().join(parent).join(name),&old).unwrap();
+            service.repo.save_artwork(&mediaatlas_domain::Artwork {
+                id:Uuid::new_v4(),media_item_id:item.id,kind,provider_id:None,
+                source_url:Some(format!("library://{root}/{}/{name}",parent.to_str().unwrap())),
+                cache_path:None,content_hash:None,width:None,height:None,created_at:Utc::now(),
+            }).await.unwrap();
+        }
+        let urls=["https://image.tmdb.org/t/p/original/correct-poster.png","https://image.tmdb.org/t/p/original/correct-fanart.png"];
+        let detail=VideoMetadata::Movie(mediaatlas_domain::MovieDetail {
+            identity:mediaatlas_domain::CandidateData {provider_id:"tmdb".into(),remote_id:"2".into(),title:item.title.clone(),
+                original_title:None,year:None,aliases:Vec::new(),external_ids:vec![mediaatlas_domain::RemoteId {namespace:"tmdb".into(),value:"2".into()}],
+                source_url:"https://www.themoviedb.org/movie/2".into(),language:"zh-CN".into()},
+            fields:Vec::new(),runtime_minutes:None,
+            artwork:vec![
+                mediaatlas_domain::ArtworkCandidate {url:urls[0].into(),source_provider:"tmdb".into(),kind:"poster".into(),language:None},
+                mediaatlas_domain::ArtworkCandidate {url:urls[1].into(),source_provider:"tmdb".into(),kind:"backdrop".into(),language:None},
+            ],
+        });
+        let task=Uuid::new_v4();
+        sqlx::query("INSERT INTO scrape_tasks(id,kind,state,input_snapshot,created_at,updated_at) VALUES(?,'search_providers','succeeded','{}',1,1)")
+            .bind(task.to_string()).execute(service.repo.pool()).await.unwrap();
+        sqlx::query("INSERT INTO video_scrape_sessions(task_id,query_json,jobs_json,created_at) VALUES(?,'{}','{}',1)")
+            .bind(task.to_string()).execute(service.repo.pool()).await.unwrap();
+        let preview=json!({"external_ids":[{"namespace":"tmdb","old":["1"],"new":["2"]}]});
+        sqlx::query("INSERT INTO video_merge_previews(id,task_id,media_item_id,preview_json,detail_json,selected_artwork,expected_media_json,state,created_at) VALUES(?,?,?,?,?,'[]',?,'succeeded',1)")
+            .bind(Uuid::new_v4().to_string()).bind(task.to_string()).bind(item.id.to_string()).bind(preview.to_string())
+            .bind(serde_json::to_string(&detail).unwrap()).bind(serde_json::to_string(&item).unwrap())
+            .execute(service.repo.pool()).await.unwrap();
+        let bytes=png();
+        let digest=hash(&bytes);
+        let cache=temp.path().join("cache");
+        fs::create_dir(&cache).unwrap();
+        let image=cache.join(format!("{digest}.png"));
+        fs::write(&image,&bytes).unwrap();
+        let cached=CachedArtwork {cache_path:image.to_string_lossy().into_owned(),
+            thumbnail_path:cache.join(format!("{digest}.thumb.png")).to_string_lossy().into_owned(),
+            content_hash:digest,width:1,height:1,mime:"image/png".into()};
+        for url in urls {
+            fs::write(cache.join(format!("url-{}.json",hash(url.as_bytes()))),serde_json::to_vec(&cached).unwrap()).unwrap();
+        }
+        let online=service.prepare_kodi_images(&item,&[],"Film",&dir,NfoExportMode::Online,root,parent).await.unwrap();
+        assert_eq!(online.artwork,vec![(ArtworkKind::Poster,urls[0].into()),(ArtworkKind::Backdrop,urls[1].into())]);
+        assert!(online.images.is_empty());
+        let offline=service.prepare_kodi_images(&item,&[],"Film",&dir,NfoExportMode::Offline,root,parent).await.unwrap();
+        assert_eq!(offline.artwork,vec![(ArtworkKind::Poster,"Film-poster.png".into()),(ArtworkKind::Backdrop,"Film-fanart.png".into())]);
+        assert_eq!(offline.images.len(),2);
+        assert!(offline.images.iter().all(|image|image.bytes==bytes));
+        let nfo=crate::kodi_nfo::render_nfo(&item,&[],&[],&offline.artwork,offline.actor_thumbs.as_ref()).unwrap();
+        assert!(!nfo.contains("wrong-"));
+        for name in ["wrong-poster.png","wrong-fanart.png"] {
+            assert_eq!(fs::read(temp.path().join(parent).join(name)).unwrap(),old);
+        }
+        assert!(!temp.path().join(parent).join("Film-poster.png").exists());
     }
 
     #[test]

@@ -360,7 +360,7 @@ function ScraperWorkspace({
                       ? "scraper-wikipedia-title-hint"
                       : undefined
                   }
-                  maxLength={256}
+                  maxLength={2048}
                   onChange={(e) => setTitle(e.target.value)}
                   disabled={busy}
                 />
@@ -401,7 +401,7 @@ function ScraperWorkspace({
                   <span>{t("scraperExternalId")}</span>
                   <Input
                     value={externalId}
-                    maxLength={128}
+                    maxLength={2048}
                     onChange={(e) => setExternalId(e.target.value)}
                     disabled={busy}
                   />
