@@ -1,6 +1,6 @@
 //! Public Douban subject pages; no login, challenge bypass or private API.
 use super::*;
-use scraper::{Html, Selector};
+use ::scraper::{Html, Selector};
 use std::collections::BTreeSet;
 
 const IMAGE_HOSTS: &[&str] = &["img1.doubanio.com", "img2.doubanio.com", "img3.doubanio.com", "img9.doubanio.com"];
