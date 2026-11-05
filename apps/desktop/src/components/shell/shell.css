@@ -71,6 +71,7 @@
   display: flex;
   align-items: center;
   min-width: 0;
+  border-radius: 10px;
 }
 .app-nav-heading > .app-nav-item {
   flex: 1;
@@ -110,20 +111,27 @@
 .app-nav-item[data-section-active="true"] {
   color: var(--color-foreground);
 }
-.app-nav-item.active {
+.app-nav-item.active,
+.app-nav-heading:has(> .app-nav-item.active) {
   background: var(--sidebar-active);
   color: var(--color-foreground);
 }
 .app-nav-item[data-section-active="true"] svg,
-.app-nav-item.active svg {
+.app-nav-item.active svg,
+.app-nav-heading:has(> .app-nav-item.active) > .app-nav-collapse svg {
   color: var(--color-ring);
 }
 .app-nav-item:hover {
   color: var(--color-foreground);
   background: var(--color-hover);
 }
-.app-nav-item.active:hover {
+.app-nav-item.active:hover,
+.app-nav-heading:has(> .app-nav-item.active):hover {
   background: var(--sidebar-active-hover);
+}
+.app-nav-heading:has(> .app-nav-item.active) > .app-nav-item,
+.app-nav-heading:has(> .app-nav-item.active) > .app-nav-collapse {
+  background: transparent;
 }
 .app-sidebar-bottom {
   flex-shrink: 0;
