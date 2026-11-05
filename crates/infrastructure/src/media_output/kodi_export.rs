@@ -78,12 +78,12 @@ fn remote(reference: &str) -> bool {
     reference.get(..6).is_some_and(|scheme| scheme.eq_ignore_ascii_case("https:"))
 }
 
-fn local_bytes(dir: &Dir, reference: &str) -> Result<Option<Vec<u8>>, RepositoryError> {
+async fn local_bytes(dir: &Dir, reference: &str, cancel: &CancellationToken) -> Result<Option<Vec<u8>>, RepositoryError> {
     let path = local_path(reference)?;
     let parent = descend(dir.try_clone().map_err(io_error)?, path.parent().unwrap_or_else(|| Path::new("")), false)
         .map_err(io_error)?;
     let bytes = read_optional(&parent, path.file_name().ok_or(RepositoryError::InvalidInput)?, MAX_IMAGE)?;
-    if let Some(bytes) = &bytes { decode_image(bytes).map_err(RepositoryError::Provider)?; }
+    if let Some(bytes) = &bytes { decode_image(bytes, Some(cancel)).await.map_err(RepositoryError::Provider)?; }
     Ok(bytes)
 }
 
@@ -109,7 +109,7 @@ fn image_name(dir: &Dir, requested: &str, bytes: &[u8]) -> Result<String, Reposi
 }
 
 impl MediaOutputService {
-    fn export_cached_bytes(&self, path: &str, digest: &str) -> Result<Option<Vec<u8>>, RepositoryError> {
+    async fn export_cached_bytes(&self, path: &str, digest: &str, cancel: &CancellationToken) -> Result<Option<Vec<u8>>, RepositoryError> {
         if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) {
             return Err(RepositoryError::InvalidInput);
         }
@@ -123,7 +123,7 @@ impl MediaOutputService {
         let bytes = read_optional(&cache, path.file_name().ok_or(RepositoryError::InvalidInput)?, MAX_IMAGE)?;
         if let Some(bytes) = &bytes {
             if hash(bytes) != digest { return Err(RepositoryError::Conflict); }
-            let (format, _, _) = decode_image(bytes).map_err(RepositoryError::Provider)?;
+            let (format, _, _) = decode_image(bytes, Some(cancel)).await.map_err(RepositoryError::Provider)?;
             let name = format!("{digest}.{}", extension(format).ok_or(RepositoryError::InvalidInput)?);
             if path.file_name().and_then(|name| name.to_str()) != Some(name.as_str()) {
                 return Err(RepositoryError::InvalidInput);
@@ -139,7 +139,7 @@ impl MediaOutputService {
             Ok(cache) => {
                 if let Some(bytes) = read_optional(&cache, format!("url-{}.json", hash(reference.as_bytes())), 4096)? {
                     let cached: CachedArtwork = serde_json::from_slice(&bytes).map_err(|_| RepositoryError::CorruptData)?;
-                    if let Some(bytes) = self.export_cached_bytes(&cached.cache_path, &cached.content_hash)? {
+                    if let Some(bytes) = self.export_cached_bytes(&cached.cache_path, &cached.content_hash, cancel).await? {
                         let format = image::guess_format(&bytes).map_err(|_| RepositoryError::InvalidInput)?;
                         if mime(format) != Some(cached.mime.as_str()) { return Err(RepositoryError::CorruptData); }
                         return Ok(bytes);
@@ -167,7 +167,7 @@ impl MediaOutputService {
         let downloader = Self::new(self.repo.clone(), self.base_cache.clone());
         let cached = downloader.cache_artwork(network, &job, reference, cancel).await
             .map_err(RepositoryError::Provider)?;
-        self.export_cached_bytes(&cached.cache_path, &cached.content_hash)?.ok_or(RepositoryError::NotFound)
+        self.export_cached_bytes(&cached.cache_path, &cached.content_hash, cancel).await?.ok_or(RepositoryError::NotFound)
     }
 
     #[cfg(test)]
@@ -261,14 +261,14 @@ impl MediaOutputService {
                     break;
                 }
                 let bytes = if let Some((path, digest)) = &source.cache {
-                    self.export_cached_bytes(path, digest)?
+                    self.export_cached_bytes(path, digest, cancel).await?
                 } else { None };
                 let bytes = if let Some(bytes) = bytes { bytes } else {
                     let Some(reference) = &source.reference else { continue; };
                     if remote(reference) { self.export_remote_bytes(item, reference, cancel).await? }
-                    else { let Some(bytes) = local_bytes(dir, reference)? else { continue; }; bytes }
+                    else { let Some(bytes) = local_bytes(dir, reference, cancel).await? else { continue; }; bytes }
                 };
-                let (format, _, _) = decode_image(&bytes).map_err(RepositoryError::Provider)?;
+                let (format, _, _) = decode_image(&bytes, Some(cancel)).await.map_err(RepositoryError::Provider)?;
                 let image_kind = if target == ArtworkKind::Poster { "poster" } else { "fanart" };
                 let name = image_name(dir, &format!("{image_stem}-{image_kind}.{}", extension(format).ok_or(RepositoryError::InvalidInput)?), &bytes)?;
                 output.artwork.push((target, name.clone()));
@@ -285,8 +285,8 @@ impl MediaOutputService {
             }
             if remote(&reference) { remote_provider(&reference)?; }
             let bytes = if remote(&reference) { self.export_remote_bytes(item, &reference, cancel).await? }
-                else { local_bytes(dir, &reference)?.ok_or(RepositoryError::NotFound)? };
-            let (format, _, _) = decode_image(&bytes).map_err(RepositoryError::Provider)?;
+                else { local_bytes(dir, &reference, cancel).await?.ok_or(RepositoryError::NotFound)? };
+            let (format, _, _) = decode_image(&bytes, Some(cancel)).await.map_err(RepositoryError::Provider)?;
             let name = image_name(dir, &format!("{image_stem}-actor-{}.{}", &hash(reference.as_bytes())[..12], extension(format).ok_or(RepositoryError::InvalidInput)?), &bytes)?;
             output.actor_thumbs.as_mut().ok_or(RepositoryError::InvalidInput)?.insert(reference, name.clone());
             output.push_image(PreparedImage { kind: "actor_thumb".into(), name, bytes })?;
@@ -649,7 +649,8 @@ mod tests {
         let outside=temp.path().join("outside.png");
         fs::write(&outside,png()).unwrap();
         std::os::unix::fs::symlink(&outside,temp.path().join("电影/无敌破坏王/无敌破坏1/linked.png")).unwrap();
-        assert!(local_bytes(&dir,"linked.png").is_err());
-        assert!(local_bytes(&dir,"../outside.png").is_err());
+        let cancel = CancellationToken::new();
+        assert!(local_bytes(&dir,"linked.png",&cancel).await.is_err());
+        assert!(local_bytes(&dir,"../outside.png",&cancel).await.is_err());
     }
 }

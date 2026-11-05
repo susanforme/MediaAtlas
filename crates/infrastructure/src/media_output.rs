@@ -689,7 +689,10 @@ impl MediaOutputService {
                 }
                 let existing = read_optional(&dir, &relative_name, MAX_IMAGE)?;
                 if let Some(bytes) = &existing {
-                    decode_image(bytes).map_err(|_| RepositoryError::InvalidInput)?;
+                    decode_image(bytes, cancel).await.map_err(|error| match error {
+                        ProviderFailure::Cancelled => RepositoryError::Provider(error),
+                        _ => RepositoryError::InvalidInput,
+                    })?;
                     if bytes != &image.bytes {
                         return Err(RepositoryError::Conflict);
                     }
@@ -737,7 +740,10 @@ impl MediaOutputService {
             if hash(&bytes) != *expected_hash {
                 return Err(RepositoryError::Conflict);
             }
-            let (format, _, _) = decode_image(&bytes).map_err(|_| RepositoryError::InvalidInput)?;
+            let (format, _, _) = decode_image(&bytes, cancel).await.map_err(|error| match error {
+                ProviderFailure::Cancelled => RepositoryError::Provider(error),
+                _ => RepositoryError::InvalidInput,
+            })?;
             let extension = extension(format).ok_or(RepositoryError::InvalidInput)?;
             let kind = art.kind.as_str();
             let count = artwork_counts.entry(kind.to_owned()).or_default();
@@ -1955,11 +1961,18 @@ fn decode_budget() -> Arc<Semaphore> {
     static BUDGET: OnceLock<Arc<Semaphore>> = OnceLock::new();
     BUDGET.get_or_init(|| Arc::new(Semaphore::new(2))).clone()
 }
-fn decode_image(bytes: &[u8]) -> Result<(ImageFormat, u32, u32), ProviderFailure> {
-    let _permit = decode_budget()
-        .try_acquire_owned()
-        .map_err(|_| ProviderFailure::ResponseTooLarge)?;
+async fn decode_image(bytes: &[u8], cancel: Option<&CancellationToken>) -> Result<(ImageFormat, u32, u32), ProviderFailure> {
+    let uncancelled = CancellationToken::new();
+    let cancel = cancel.unwrap_or(&uncancelled);
+    let _permit = tokio::select! {
+        biased;
+        _ = cancel.cancelled() => return Err(ProviderFailure::Cancelled),
+        permit = decode_budget().acquire_owned() => permit.map_err(|_| ProviderFailure::Cancelled)?,
+    };
     let (format, image) = decode_validated(bytes)?;
+    if cancel.is_cancelled() {
+        return Err(ProviderFailure::Cancelled);
+    }
     Ok((format, image.width(), image.height()))
 }
 struct DecodedArtwork {
@@ -3468,17 +3481,31 @@ mod tests {
     }
     #[tokio::test]
     async fn decode_global_budget_limits_independent_services_and_cancellation() {
-        let budget = decode_budget();
-        let permit1 = budget.clone().acquire_owned().await.unwrap();
-        let permit2 = budget.acquire_owned().await.unwrap();
+        let permit = decode_budget().acquire_many_owned(2).await.unwrap();
         let cancelled = CancellationToken::new();
         cancelled.cancel();
         assert!(matches!(
             decode_thumbnail(png(), &cancelled).await,
             Err(ProviderFailure::Cancelled)
         ));
-        drop(permit1);
-        drop(permit2);
+        let bytes = png();
+        assert!(matches!(decode_image(&bytes, Some(&cancelled)).await, Err(ProviderFailure::Cancelled)));
+        let queued = decode_image(&bytes, None);
+        tokio::pin!(queued);
+        assert!(std::future::poll_fn(|context| std::task::Poll::Ready(
+            std::future::Future::poll(queued.as_mut(), context)
+        )).await.is_pending());
+        let cancel = CancellationToken::new();
+        let cancelled_queue = decode_image(&bytes, Some(&cancel));
+        tokio::pin!(cancelled_queue);
+        assert!(std::future::poll_fn(|context| std::task::Poll::Ready(
+            std::future::Future::poll(cancelled_queue.as_mut(), context)
+        )).await.is_pending());
+        cancel.cancel();
+        assert!(matches!(cancelled_queue.await, Err(ProviderFailure::Cancelled)));
+        drop(permit);
+        let (_, width, height) = queued.await.unwrap();
+        assert_eq!((width, height), (32, 48));
         let decoded = decode_thumbnail(png(), &CancellationToken::new())
             .await
             .unwrap();
@@ -3721,7 +3748,7 @@ mod tests {
             server.abort();
         }
         assert_eq!(
-            decode_image(&vec![0; MAX_IMAGE + 1]).unwrap_err(),
+            decode_image(&vec![0; MAX_IMAGE + 1], None).await.unwrap_err(),
             ProviderFailure::ResponseTooLarge
         );
     }
