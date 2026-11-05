@@ -80,6 +80,7 @@ pub(super) async fn import_file(
     tx: &mut Transaction<'_, Sqlite>,
     root: &LibraryRoot,
     file: &ScannedFile,
+    selected_only: bool,
 ) -> Result<Uuid, RepositoryError> {
     let normalized = normalize_relative_path(&file.relative_path, root.path_style)
         .map_err(|_| RepositoryError::InvalidInput)?;
@@ -269,7 +270,7 @@ pub(super) async fn import_file(
         };
         crate::library_ready::record_local(tx, id, source_kind, &source).await?;
     }
-    prune_stale_companion_indexes(tx, root, id).await?;
+    prune_stale_companion_indexes(tx, root, id, selected_only.then_some(file)).await?;
     add_hierarchy(tx, root, file, id, now).await?;
     Ok(id)
 }
@@ -280,6 +281,7 @@ async fn prune_stale_companion_indexes(
     tx: &mut Transaction<'_, Sqlite>,
     root: &LibraryRoot,
     media_id: Uuid,
+    selected_source: Option<&ScannedFile>,
 ) -> Result<(), RepositoryError> {
     let rows =
         sqlx::query("SELECT id,relative_path FROM media_files WHERE root_id=? AND media_item_id=?")
@@ -297,6 +299,10 @@ async fn prune_stale_companion_indexes(
             .and_then(|value| value.to_str())
             .unwrap_or("")
             .to_ascii_lowercase();
+        if selected_source.is_some_and(|source| !super::watched::companion_matches(&source.relative_path, &relative)
+            && source.series_nfo.as_ref().is_none_or(|nfo| nfo != &relative)) {
+            continue;
+        }
         if matches!(
             extension.as_str(),
             "nfo" | "srt" | "ass" | "ssa" | "sub" | "idx" | "vtt" | "jpg" | "jpeg" | "png" | "webp"
@@ -324,6 +330,7 @@ async fn prune_stale_companion_indexes(
             .as_deref()
             .and_then(|value| value.strip_prefix(&prefix))
         {
+            if selected_source.is_some_and(|source| !super::watched::companion_matches(&source.relative_path, relative)) { continue; }
             artworks.push((
                 row.try_get::<String, _>("id")
                     .map_err(|_| RepositoryError::CorruptData)?,

@@ -8,6 +8,7 @@ pub(crate) struct AutomaticContext {
     pub exclusions: Vec<String>,
     pub metadata_providers: Option<Vec<String>>,
     pub nfo_export_mode: NfoExportMode,
+    pub selected_sources: Option<Vec<String>>,
     pub task_id: Uuid,
     pub cancel: CancellationToken,
     pub adult_access: Option<crate::media_output::AdultOutputAccess>,
@@ -58,6 +59,22 @@ impl AutomaticContext {
         }
         let running: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM scrape_tasks t JOIN scan_sessions s ON s.task_id=t.id WHERE t.id=? AND t.state='running' AND s.mode='automatic' AND s.root_id=?)")
             .bind(self.task_id.to_string()).bind(self.root.id.to_string()).fetch_one(&mut **tx).await?;
+        if !running || self.cancel.is_cancelled() { return Err(RepositoryError::Conflict); }
+        let saved: String = sqlx::query_scalar("SELECT root_snapshot_json FROM scan_sessions WHERE task_id=?")
+            .bind(self.task_id.to_string()).fetch_one(&mut **tx).await?;
+        let saved: serde_json::Value = serde_json::from_str(&saved).map_err(|_| RepositoryError::CorruptData)?;
+        let selected: Option<Vec<String>> = serde_json::from_value(saved.get("selected_sources").cloned().unwrap_or(serde_json::Value::Null))
+            .map_err(|_| RepositoryError::CorruptData)?;
+        if selected != self.selected_sources { return Err(RepositoryError::Conflict); }
+        if let Some(paths) = &selected {
+            let paths = paths.iter().map(|path| mediaatlas_domain::normalize_relative_path(path, self.root.path_style)
+                .map_err(|_| RepositoryError::CorruptData)).collect::<Result<Vec<_>, _>>()?;
+            let candidates: Vec<String> = sqlx::query_scalar("SELECT normalized_relative_path FROM scan_candidates WHERE task_id=? AND status IN ('imported','unchanged')")
+                .bind(self.task_id.to_string()).fetch_all(&mut **tx).await?;
+            if candidates.is_empty() || candidates.iter().any(|path| !paths.contains(path)) {
+                return Err(RepositoryError::Conflict);
+            }
+        }
         let typed = crate::library_ready::typed_descendant("m", "child");
         let ancestor = crate::library_ready::ancestor_isolation("m");
         let child_ancestor = crate::library_ready::ancestor_isolation("child");
@@ -71,7 +88,7 @@ impl AutomaticContext {
             .bind(self.task_id.to_string())
             .fetch_one(&mut **tx)
             .await?;
-        if !running || !target || self.cancel.is_cancelled() {
+        if !target || self.cancel.is_cancelled() {
             return Err(RepositoryError::Conflict);
         }
         if let Some(access) = &self.adult_access {

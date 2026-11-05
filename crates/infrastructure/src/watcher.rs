@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use std::{
     collections::{HashMap, HashSet},
-    path::Path,
+    path::{Path, PathBuf},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex, Weak,
@@ -24,6 +24,7 @@ use uuid::Uuid;
 const MAX_WATCHERS: usize = 32;
 const QUEUE_CAPACITY: usize = 256;
 const DEBOUNCE: Duration = Duration::from_millis(350);
+const MAX_CHANGED_PATHS: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WatcherStatus {
@@ -38,6 +39,54 @@ pub struct WatcherStatus {
 struct Signal {
     root_id: Uuid,
     generation: Uuid,
+}
+#[derive(Debug)]
+struct Change {
+    signal: Signal,
+    paths: Option<HashSet<PathBuf>>,
+}
+impl From<Signal> for Change {
+    fn from(signal: Signal) -> Self { Self { signal, paths: None } }
+}
+impl Change {
+    fn from_event(signal: Signal, event: Event) -> Self {
+        let file_only = matches!(event.kind,
+            EventKind::Create(notify::event::CreateKind::File)
+            | EventKind::Remove(notify::event::RemoveKind::File)
+            | EventKind::Modify(notify::event::ModifyKind::Data(_) | notify::event::ModifyKind::Metadata(_)));
+        let paths = if event.need_rescan() || event.paths.is_empty() || event.paths.len() > MAX_CHANGED_PATHS {
+            None
+        } else {
+            Some(event.paths.into_iter().filter(|path| !private_path(path) && (!file_only || media_path(path))).collect())
+        };
+        Self { signal, paths }
+    }
+}
+fn media_path(path: &Path) -> bool {
+    path.extension().and_then(|extension| extension.to_str()).is_some_and(|extension| {
+        let extension = extension.to_ascii_lowercase();
+        crate::library_ready::VIDEO_EXTENSIONS.contains(&extension.as_str()) || matches!(extension.as_str(),
+            "strm" | "mp3" | "flac" | "m4a" | "ogg" | "opus" | "wav" | "aiff" | "ape" | "wv"
+            | "nfo" | "srt" | "ass" | "ssa" | "sub" | "idx" | "vtt" | "jpg" | "jpeg" | "png" | "webp")
+    })
+}
+struct PendingChange {
+    ready_at: Instant,
+    paths: Option<HashSet<PathBuf>>,
+}
+fn merge_change(pending: &mut HashMap<Signal, PendingChange>, change: Change) {
+    let entry = pending.entry(change.signal).or_insert_with(|| PendingChange {
+        ready_at: Instant::now() + DEBOUNCE,
+        paths: Some(HashSet::new()),
+    });
+    entry.ready_at = Instant::now() + DEBOUNCE;
+    match (&mut entry.paths, change.paths) {
+        (Some(paths), Some(incoming)) => {
+            paths.extend(incoming);
+            if paths.len() > MAX_CHANGED_PATHS { entry.paths = None; }
+        }
+        _ => entry.paths = None,
+    }
 }
 struct LiveWatcher {
     _watcher: RecommendedWatcher,
@@ -86,7 +135,7 @@ struct LiveState {
 }
 struct Runtime {
     live: Mutex<LiveState>,
-    sender: mpsc::Sender<Signal>,
+    sender: mpsc::Sender<Change>,
     overflow: Arc<Mutex<HashSet<Signal>>>,
     dispatch: tokio::sync::Mutex<()>,
     stopped: AtomicBool,
@@ -136,7 +185,7 @@ impl WatcherService {
             .lock()
             .map_err(|_| RepositoryError::Database)?;
         for handle in live.handles.values() {
-            if self.runtime.sender.try_send(handle.signal).is_err() {
+            if self.runtime.sender.try_send(handle.signal.into()).is_err() {
                 record_live_overflow(&self.runtime.overflow, handle.signal, &handle.active);
             }
         }
@@ -297,7 +346,7 @@ async fn reconcile_unlocked(
                 }
                 match result {
                     Ok(event) if event_relevant(&event) => {
-                        if sender.try_send(signal).is_err() {
+                        if sender.try_send(Change::from_event(signal, event)).is_err() {
                             record_live_overflow(&callback_overflow, signal, &callback_active);
                         }
                     }
@@ -350,8 +399,8 @@ fn record_live_overflow(overflow: &Mutex<HashSet<Signal>>, signal: Signal, activ
     }
 }
 #[cfg(test)]
-fn enqueue(sender: &mpsc::Sender<Signal>, overflow: &Mutex<HashSet<Signal>>, signal: Signal) {
-    if sender.try_send(signal).is_err() {
+fn enqueue(sender: &mpsc::Sender<Change>, overflow: &Mutex<HashSet<Signal>>, signal: Signal) {
+    if sender.try_send(signal.into()).is_err() {
         record_overflow(overflow, signal);
     }
 }
@@ -367,8 +416,8 @@ fn current(live: &LiveState, signal: Signal) -> bool {
 fn event_relevant(event: &Event) -> bool {
     // Access events caused by scanning are not changes. Hidden user content and
     // Git files keep the existing scanner/exclusion semantics.
-    !matches!(event.kind, EventKind::Access(_))
-        && (event.paths.is_empty() || event.paths.iter().any(|p| !private_path(p)))
+    event.need_rescan() || (!matches!(event.kind, EventKind::Access(_))
+        && (event.paths.is_empty() || event.paths.iter().any(|p| !private_path(p))))
 }
 fn private_path(path: &Path) -> bool {
     path.components().any(|component| {
@@ -382,14 +431,14 @@ async fn worker(
     runtime: Weak<Runtime>,
     repo: LibraryRepository,
     scans: ScanService,
-    mut receiver: mpsc::Receiver<Signal>,
+    mut receiver: mpsc::Receiver<Change>,
 ) {
     let mut tick = tokio::time::interval(Duration::from_millis(100));
-    let mut due = HashMap::<Signal, Instant>::new();
+    let mut due = HashMap::<Signal, PendingChange>::new();
     let mut last_reconcile = Instant::now();
     loop {
         tokio::select! {
-            event=receiver.recv()=> { if let Some(id)=event { due.insert(id,Instant::now()+DEBOUNCE); } else { break; } },
+            event=receiver.recv()=> { if let Some(change)=event { merge_change(&mut due, change); } else { break; } },
             _=tick.tick()=>{}
         }
         let Some(runtime) = runtime.upgrade() else {
@@ -404,7 +453,7 @@ async fn worker(
         }
         if let Ok(mut overflow) = runtime.overflow.lock() {
             for signal in overflow.drain() {
-                due.insert(signal, Instant::now() + DEBOUNCE);
+                merge_change(&mut due, signal.into());
             }
         }
         if let Ok(mut live) = runtime.live.lock() {
@@ -413,7 +462,7 @@ async fn worker(
         }
         let ready: Vec<Signal> = due
             .iter()
-            .filter(|(_, when)| **when <= Instant::now())
+            .filter(|(_, change)| change.ready_at <= Instant::now())
             .map(|(id, _)| *id)
             .collect();
         for signal in ready {
@@ -443,8 +492,18 @@ async fn worker(
             if !matches!(active, Ok(0)) {
                 continue;
             }
-            match scans.start_watched(&expected).await {
-                Ok(task) => {
+            let paths = due.get(&signal).and_then(|change| change.paths.as_ref()).map(|paths| {
+                let mut paths = paths.iter().cloned().collect::<Vec<_>>();
+                paths.sort();
+                paths
+            });
+            let started = if let Some(paths) = paths.filter(|_| matches!(expected.kind, Some(MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime))) {
+                scans.start_watched_paths(&expected, &paths).await
+            } else {
+                scans.start_watched(&expected).await.map(Some)
+            };
+            match started {
+                Ok(Some(task)) => {
                     due.remove(&signal);
                     let _ = sqlx::query(
                         "INSERT INTO watcher_roots(root_id,opted_in,last_task_id,updated_at) VALUES(?,1,?,?) ON CONFLICT(root_id) DO UPDATE SET last_task_id=excluded.last_task_id,updated_at=excluded.updated_at",
@@ -455,6 +514,7 @@ async fn worker(
                     .execute(repo.pool())
                     .await;
                 }
+                Ok(None) => { due.remove(&signal); }
                 Err(RepositoryError::Conflict) => {}
                 Err(_) => {
                     due.remove(&signal);

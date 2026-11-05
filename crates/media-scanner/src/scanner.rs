@@ -4,12 +4,12 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use globset::{Glob, GlobSet, GlobSetBuilder};
-use mediaatlas_domain::{normalize_relative_path, ArtworkKind, MediaKind};
+use mediaatlas_domain::{normalize_relative_path, ArtworkKind, MediaKind, PathStyle};
 use serde_json::json;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{HashMap, HashSet, VecDeque},
     fs,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     sync::atomic::{AtomicBool, Ordering},
 };
 use walkdir::WalkDir;
@@ -365,19 +365,14 @@ pub fn run_scan(
     root: &Path,
     options: &ScanOptions,
     cancel: &AtomicBool,
-    mut on_entry: impl FnMut(ScannedFile) -> bool,
-    mut on_progress: impl FnMut(ScanStats),
+    on_entry: impl FnMut(ScannedFile) -> bool,
+    on_progress: impl FnMut(ScanStats),
 ) -> Result<ScanStats, ScanError> {
     let root_info = fs::symlink_metadata(root).map_err(|_| ScanError::InvalidRoot)?;
     if !root_info.is_dir() || root_info.file_type().is_symlink() {
         return Err(ScanError::InvalidRoot);
     }
-    let canonical_root = root.canonicalize().map_err(|_| ScanError::InvalidRoot)?;
     let excludes = exclude_set(&options.exclude_patterns)?;
-    let mut stats = ScanStats::default();
-    // Depth-first walking usually visits a directory contiguously. Keep at most
-    // eight sidecar-only indexes for interleaved parent/child entries.
-    let mut sidecar_cache: VecDeque<(PathBuf, DirectorySidecars)> = VecDeque::new();
     let walker = WalkDir::new(root)
         .follow_links(false)
         .into_iter()
@@ -388,7 +383,117 @@ pub fn run_scan(
                         excludes.is_match(&path) || excludes.is_match(format!("{path}/"))
                     }))
         });
-    for next in walker {
+    scan_entries(
+        root,
+        options,
+        &excludes,
+        cancel,
+        walker.map(|entry| entry.map_err(|_| ScanError::Io)),
+        on_entry,
+        on_progress,
+    )
+}
+
+fn selected_path(
+    root: &Path,
+    relative_path: &str,
+    excludes: &GlobSet,
+    path_style: PathStyle,
+) -> Result<Option<PathBuf>, ScanError> {
+    let selected = Path::new(relative_path);
+    if relative_path.is_empty()
+        || (path_style == PathStyle::Windows && relative_path.contains('\\'))
+        || relative_path
+            .split('/')
+            .any(|part| part.is_empty() || part == "." || part == "..")
+        || selected
+            .components()
+            .any(|part| !matches!(part, Component::Normal(_)))
+    {
+        return Err(ScanError::Io);
+    }
+    let mut path = root.to_owned();
+    for part in selected.components() {
+        path.push(part.as_os_str());
+        let rel = relative(root, &path)?;
+        if private_name(&path) || excludes.is_match(&rel) || excludes.is_match(format!("{rel}/")) {
+            return Ok(None);
+        }
+        if fs::symlink_metadata(&path)
+            .map_err(|_| ScanError::Io)?
+            .file_type()
+            .is_symlink()
+        {
+            return Err(ScanError::Io);
+        }
+    }
+    Ok(Some(path))
+}
+
+/// Re-read only selected source files and their local companions, never a subtree.
+pub fn run_scan_selected(
+    root: &Path,
+    options: &ScanOptions,
+    selected: &[String],
+    cancel: &AtomicBool,
+    on_entry: impl FnMut(ScannedFile) -> bool,
+    mut on_progress: impl FnMut(ScanStats),
+) -> Result<ScanStats, ScanError> {
+    if selected.is_empty() {
+        let stats = ScanStats::default();
+        on_progress(stats);
+        return Ok(stats);
+    }
+    let root_info = fs::symlink_metadata(root).map_err(|_| ScanError::InvalidRoot)?;
+    if !root_info.is_dir() || root_info.file_type().is_symlink() {
+        return Err(ScanError::InvalidRoot);
+    }
+    let excludes = exclude_set(&options.exclude_patterns)?;
+    let mut seen = HashSet::new();
+    let entries = selected.iter().filter_map(|relative_path| {
+        if cancel.load(Ordering::Relaxed) {
+            return Some(Err(ScanError::Io));
+        }
+        if !seen.insert(relative_path) {
+            return None;
+        }
+        match selected_path(root, relative_path, &excludes, options.path_style) {
+            Ok(Some(path)) => WalkDir::new(path)
+                .follow_links(false)
+                .max_depth(0)
+                .into_iter()
+                .next()
+                .map(|entry| entry.map_err(|_| ScanError::Io)),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        }
+    });
+    scan_entries(
+        root,
+        options,
+        &excludes,
+        cancel,
+        entries,
+        on_entry,
+        on_progress,
+    )
+}
+
+fn scan_entries(
+    root: &Path,
+    options: &ScanOptions,
+    excludes: &GlobSet,
+    cancel: &AtomicBool,
+    entries: impl IntoIterator<Item = Result<walkdir::DirEntry, ScanError>>,
+    mut on_entry: impl FnMut(ScannedFile) -> bool,
+    mut on_progress: impl FnMut(ScanStats),
+) -> Result<ScanStats, ScanError> {
+    let canonical_root = root.canonicalize().map_err(|_| ScanError::InvalidRoot)?;
+    let mut stats = ScanStats::default();
+    // Depth-first walking usually visits a directory contiguously. Keep at most
+    // eight sidecar-only indexes for interleaved parent/child entries.
+    let mut sidecar_cache: VecDeque<(PathBuf, DirectorySidecars)> = VecDeque::new();
+    for next in entries {
         if cancel.load(Ordering::Relaxed) {
             stats.cancelled = true;
             break;
@@ -490,7 +595,7 @@ pub fn run_scan(
         let companions = if let Some(position) = cached {
             sidecar_cache[position].1.for_media(path)
         } else {
-            match DirectorySidecars::read(root, parent, &excludes, cancel) {
+            match DirectorySidecars::read(root, parent, excludes, cancel) {
                 Ok(index) => {
                     let result = index.for_media(path);
                     if sidecar_cache.len() == 8 {
@@ -516,7 +621,7 @@ pub fn run_scan(
             }
         };
         if let Err(error) =
-            include_series_sidecar(root, path, parsed.kind, &excludes, cancel, &mut companions)
+            include_series_sidecar(root, path, parsed.kind, excludes, cancel, &mut companions)
         {
             stats.warnings += 1;
             parsed.warnings.push(error.code().into());

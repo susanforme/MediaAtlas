@@ -250,7 +250,7 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
     watcher.configure(root.id, true).await.unwrap();
     let current = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     assert_ne!(old, current);
-    watcher.runtime.sender.send(old).await.unwrap();
+    watcher.runtime.sender.send(old.into()).await.unwrap();
     record_overflow(&watcher.runtime.overflow, old);
     tokio::time::sleep(Duration::from_millis(650)).await;
     assert_eq!(task_count(&repo).await, 0);
@@ -262,7 +262,7 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
     repo.save_root(&root).await.unwrap();
     root = repo.get_root(root.id).await.unwrap().unwrap();
     watcher.reconcile().await.unwrap();
-    watcher.runtime.sender.send(current).await.unwrap();
+    watcher.runtime.sender.send(current.into()).await.unwrap();
     record_overflow(&watcher.runtime.overflow, current);
     tokio::time::sleep(Duration::from_millis(650)).await;
     assert_eq!(task_count(&repo).await, 0);
@@ -274,7 +274,7 @@ async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfig
     // accepts the new generation; disabling native delivery did not disable it.
     let fresh = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     assert_ne!(current, fresh);
-    watcher.runtime.sender.send(fresh).await.unwrap();
+    watcher.runtime.sender.send(fresh.into()).await.unwrap();
     wait_tasks(&repo, 1).await;
     let snapshot: String =
         sqlx::query_scalar("SELECT root_snapshot_json FROM scan_sessions LIMIT 1")
@@ -333,6 +333,69 @@ fn scanner_prunes_private_staging_without_implicit_git_or_hidden_exclusions() {
 }
 
 #[test]
+fn path_batches_deduplicate_and_never_narrow_a_required_full_rescan() {
+    let signal = Signal { root_id: Uuid::new_v4(), generation: Uuid::new_v4() };
+    let mut due = HashMap::new();
+    let first = PathBuf::from("library/one.mkv");
+    let second = PathBuf::from("library/two.nfo");
+    merge_change(&mut due, Change { signal, paths: Some(HashSet::from([first.clone()])) });
+    merge_change(&mut due, Change { signal, paths: Some(HashSet::from([first.clone(), second.clone()])) });
+    assert_eq!(due[&signal].paths.as_ref().unwrap(), &HashSet::from([first.clone(), second]));
+    merge_change(&mut due, signal.into());
+    merge_change(&mut due, Change { signal, paths: Some(HashSet::from([first])) });
+    assert!(due[&signal].paths.is_none());
+}
+
+#[test]
+fn too_many_paths_and_native_loss_fall_back_without_losing_the_generation() {
+    let signal = Signal { root_id: Uuid::new_v4(), generation: Uuid::new_v4() };
+    let mut due = HashMap::new();
+    for index in 0..=MAX_CHANGED_PATHS {
+        merge_change(&mut due, Change { signal, paths: Some(HashSet::from([PathBuf::from(format!("{index}.mkv"))])) });
+    }
+    assert!(due[&signal].paths.is_none());
+    let event = Event::new(EventKind::Other)
+        .add_path(PathBuf::from("library/.mediaatlas-staged.tmp"))
+        .set_flag(notify::event::Flag::Rescan);
+    assert!(event_relevant(&event));
+    let change = Change::from_event(signal, event);
+    assert_eq!(change.signal, signal);
+    assert!(change.paths.is_none());
+}
+
+#[test]
+fn known_non_media_file_removal_is_a_noop_but_directory_removal_remains_visible() {
+    let signal = Signal { root_id: Uuid::new_v4(), generation: Uuid::new_v4() };
+    let file = Event::new(EventKind::Remove(notify::event::RemoveKind::File))
+        .add_path(PathBuf::from("library/.DS_Store"));
+    assert!(Change::from_event(signal, file).paths.unwrap().is_empty());
+    let directory = Event::new(EventKind::Remove(notify::event::RemoveKind::Folder))
+        .add_path(PathBuf::from("library/Collection"));
+    assert_eq!(Change::from_event(signal, directory).paths.unwrap(), HashSet::from([PathBuf::from("library/Collection")]));
+}
+
+#[test]
+fn directory_metadata_does_not_expand_a_file_batch_to_the_entire_root() {
+    let signal = Signal { root_id: Uuid::new_v4(), generation: Uuid::new_v4() };
+    let event = Event::new(EventKind::Modify(notify::event::ModifyKind::Metadata(notify::event::MetadataKind::Any)))
+        .add_path(PathBuf::from("library/films"))
+        .add_path(PathBuf::from("library/films/movie.nfo"));
+    let change = Change::from_event(signal, event);
+    assert_eq!(change.paths.unwrap(), HashSet::from([PathBuf::from("library/films/movie.nfo")]));
+}
+
+#[test]
+fn ordinary_native_file_events_keep_only_visible_changed_paths() {
+    let signal = Signal { root_id: Uuid::new_v4(), generation: Uuid::new_v4() };
+    let visible = PathBuf::from("library/film.nfo");
+    let event = Event::new(EventKind::Remove(notify::event::RemoveKind::File))
+        .add_path(visible.clone())
+        .add_path(PathBuf::from("library/.mediaatlas-staged.tmp"));
+    let change = Change::from_event(signal, event);
+    assert_eq!(change.paths.unwrap(), HashSet::from([visible]));
+}
+
+#[test]
 fn bounded_queue_overflow_retains_full_rescan_signal_with_bounded_memory() {
     let (sender, mut receiver) = mpsc::channel(QUEUE_CAPACITY);
     let overflow = Mutex::new(HashSet::new());
@@ -347,7 +410,7 @@ fn bounded_queue_overflow_retains_full_rescan_signal_with_bounded_memory() {
     enqueue(&sender, &overflow, signal);
     assert!(overflow.lock().unwrap().contains(&signal));
     for _ in 0..QUEUE_CAPACITY {
-        assert_eq!(receiver.try_recv().unwrap(), signal);
+        assert_eq!(receiver.try_recv().unwrap().signal, signal);
     }
     for _ in 0..QUEUE_CAPACITY + 20 {
         record_overflow(
@@ -374,7 +437,7 @@ async fn shutdown_acknowledgement_waits_for_dispatch_and_rejects_queued_events()
     });
     // Tokio's mutex queues the stop request before the debounced event dispatch.
     tokio::time::sleep(Duration::from_millis(30)).await;
-    watcher.runtime.sender.send(signal).await.unwrap();
+    watcher.runtime.sender.send(signal.into()).await.unwrap();
     tokio::time::sleep(Duration::from_millis(450)).await;
     assert!(!stop.is_finished());
     drop(barrier);
@@ -448,13 +511,13 @@ async fn replaced_or_missing_filesystem_root_retires_native_generation_and_can_r
     watcher.reconcile().await.unwrap();
     let new = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
     assert_ne!(old, new);
-    watcher.runtime.sender.send(old).await.unwrap();
+    watcher.runtime.sender.send(old.into()).await.unwrap();
     record_overflow(&watcher.runtime.overflow, old);
     tokio::time::sleep(Duration::from_millis(650)).await;
     assert_eq!(task_count(&repo).await, 0);
     // The fresh generation still dispatches through the real read-only scan
     // pipeline and is bound to the replacement directory, not the old handle.
-    watcher.runtime.sender.send(new).await.unwrap();
+    watcher.runtime.sender.send(new.into()).await.unwrap();
     wait_tasks(&repo, 1).await;
     let task = scans.list_tasks(false).await.unwrap().remove(0);
     settled(&scans, task.id).await;

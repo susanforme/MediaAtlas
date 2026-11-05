@@ -1203,6 +1203,7 @@ mod tests {
         sqlx::query("INSERT INTO metadata_values(id,media_item_id,field_key,locale,value_json,provider_id,is_user_modified,is_locked) VALUES(?,?,'catalog_number','','\"SYN-001\"','local',0,0)")
             .bind(Uuid::new_v4().to_string()).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
         crate::scraper::automatic::AutomaticContext {
+            selected_sources: None,
             metadata_providers: None,
             nfo_export_mode: NfoExportMode::Online,
             root: s.root.clone(),

@@ -96,6 +96,7 @@ impl ScanService {
             exclusions: snapshot.exclude_patterns.clone(),
             metadata_providers: snapshot.metadata_providers.clone(),
             nfo_export_mode: snapshot.nfo_export_mode,
+            selected_sources: snapshot.selected_sources.clone(),
             task_id: id,
             cancel: network_cancel.clone(),
             adult_access: adult_access.cloned(),
@@ -152,6 +153,9 @@ impl ScanService {
             // merge may receive the subsequent artwork result annotation.
             sqlx::query("UPDATE library_refresh_items SET state=?,reason=?,run_id=?,updated_at=? WHERE task_id=? AND media_item_id=? AND (state='pending' OR (state='matched' AND run_id=?))")
                 .bind(outcome.state).bind(outcome.reason).bind(outcome.run_id.map(|v|v.to_string())).bind(Utc::now().timestamp_millis()).bind(id.to_string()).bind(media_id.to_string()).bind(outcome.run_id.map(|v|v.to_string())).execute(self.repo.pool()).await?;
+            if snapshot.selected_sources.is_some() {
+                self.reconcile_selected_reviews(id, snapshot.root.id, media_id).await?;
+            }
             self.refresh_counts(id).await?;
             self.emit(id).await;
         }

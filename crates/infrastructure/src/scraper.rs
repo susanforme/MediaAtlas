@@ -1255,7 +1255,7 @@ mod tests {
         let search = s.service.search(request()).await.unwrap();
         let preview = s.service.preview(selection(search.run_id, s.media.id)).await.unwrap();
         let root = s.repo.list_roots().await.unwrap().remove(0);
-        let context = automatic::AutomaticContext { root, exclusions: vec![], metadata_providers: None, nfo_export_mode: NfoExportMode::Online, task_id: Uuid::new_v4(), cancel: CancellationToken::new(), adult_access: None };
+        let context = automatic::AutomaticContext { root, exclusions: vec![], metadata_providers: None, nfo_export_mode: NfoExportMode::Online, selected_sources: None, task_id: Uuid::new_v4(), cancel: CancellationToken::new(), adult_access: None };
         assert_eq!(s.service.confirm_inner(preview.preview_id, Some(&context)).await.unwrap_err(), RepositoryError::Conflict);
         assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 3);
         s.repo.save_external_id(&ExternalId {
@@ -1545,9 +1545,9 @@ mod tests {
         }).await.expect("watcher catch-up was not completed");
         // The review must come from a native event, not restore's catch-up signal.
         std::fs::write(media_dir.join("Unmatched.2021.mkv"), b"unmatched local video").unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
+        let review_task = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
-                if scans.list_tasks(false).await.unwrap().iter().any(|task| task.id != first.id && task.state == TaskState::WaitingForUser) { break; }
+                if let Some(task) = scans.list_tasks(false).await.unwrap().iter().find(|task| task.id != first.id && task.state == TaskState::WaitingForUser) { return task.id; }
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
         }).await.expect("automatic review was not reached");
@@ -1568,6 +1568,10 @@ mod tests {
         }
         watcher.shutdown().await;
         for task in scans.list_tasks(false).await.unwrap() { settle_automatic(&scans, task.id).await; }
+        assert_eq!(scans.list_tasks(false).await.unwrap().into_iter().find(|task| task.id == review_task).unwrap().state, TaskState::WaitingForUser);
+        let exact_refreshes: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND t.state='succeeded' AND s.visited_files=1 AND s.candidate_count=1 AND json_extract(s.root_snapshot_json,'$.selected_sources[0]')='Example.mkv'")
+            .bind(root.id.to_string()).fetch_one(s.repo.pool()).await.unwrap();
+        assert!(exact_refreshes > 0, "NFO deletion must refresh only its source file");
         assert!(std::fs::read_to_string(&nfo).unwrap().contains("Provider title"));
         assert_eq!(s.service.history().await.unwrap().len(), searches);
         assert_eq!(std::fs::read(media_dir.join("Example.mkv")).unwrap(), b"synthetic source media must stay intact");

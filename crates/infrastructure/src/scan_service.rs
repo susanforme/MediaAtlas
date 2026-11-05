@@ -3,13 +3,14 @@
 
 mod automatic;
 mod importer;
+mod watched;
 
 use chrono::{DateTime, Utc};
 use mediaatlas_application::library::{
     ConfirmInput, ConfirmResult, PreviewInput, PreviewPageView, ScanCandidateView, ScanTaskView,
 };
 use mediaatlas_domain::{LibraryRoot, MediaKind, NfoExportMode, TaskState};
-use mediaatlas_media_scanner::{run_scan, FileStamp, ScanOptions, ScanStats, ScannedFile};
+use mediaatlas_media_scanner::{run_scan, run_scan_selected, FileStamp, ScanOptions, ScanStats, ScannedFile};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqliteRow, Row};
 use std::{
@@ -48,6 +49,9 @@ struct RootSnapshot {
     metadata_providers: Option<Vec<String>>,
     #[serde(default)]
     nfo_export_mode: NfoExportMode,
+    /// None scans the root; an explicit selection never expands to the whole root.
+    #[serde(default)]
+    selected_sources: Option<Vec<String>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -87,7 +91,7 @@ impl ScanService {
     /// A user-requested library refresh indexes local files and enriches metadata
     /// and creates missing NFOs using the directory's saved export mode.
     pub async fn start_automatic(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
-        self.start_inner(root_id, None, true, None).await
+        self.start_inner(root_id, None, true, None, None).await
     }
 
     /// Adult refresh uses a revocable grant, isolated adapters and cache. Merely
@@ -104,12 +108,13 @@ impl ScanService {
             None,
             true,
             Some((scraper.with_access(access.clone()), access)),
+            None,
         )
         .await
     }
 
     pub async fn start(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
-        self.start_inner(root_id, None, false, None).await
+        self.start_inner(root_id, None, false, None, None).await
     }
 
     /// Watcher refresh pipeline. Revalidate its exact live Root generation and
@@ -118,7 +123,7 @@ impl ScanService {
         &self,
         expected: &LibraryRoot,
     ) -> Result<ScanTaskView, RepositoryError> {
-        self.start_inner(expected.id, Some(expected), self.scraper.is_some(), None)
+        self.start_inner(expected.id, Some(expected), self.scraper.is_some(), None, None)
             .await
     }
 
@@ -128,6 +133,7 @@ impl ScanService {
         expected: Option<&LibraryRoot>,
         automatic: bool,
         adult: Option<AdultAutomatic>,
+        selected_sources: Option<Vec<String>>,
     ) -> Result<ScanTaskView, RepositoryError> {
         let _gate = self.gate.lock().await;
         if let Some((_, access)) = &adult {
@@ -140,7 +146,9 @@ impl ScanService {
             .bind(root_id.to_string())
             .execute(&mut *tx)
             .await?;
-        let snapshot = snapshot_tx(&mut tx, root_id).await?;
+        let mut snapshot = snapshot_tx(&mut tx, root_id).await?;
+        snapshot.selected_sources = selected_sources;
+        watched::validate_selection(&snapshot)?;
         if !snapshot.root.enabled {
             return Err(RepositoryError::InvalidInput);
         }
@@ -173,12 +181,12 @@ impl ScanService {
                 return Err(RepositoryError::Conflict);
             }
         }
-        let active: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND (t.state IN ('queued','running') OR (? AND t.state='waiting_for_user'))")
+        let active: i64 = sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND (t.state IN ('queued','running') OR (? AND t.state='waiting_for_user' AND s.mode<>'automatic'))")
             .bind(root_id.to_string()).bind(expected.is_some() && !automatic).fetch_one(&mut *tx).await?;
         if active > 0 {
             return Err(RepositoryError::Conflict);
         }
-        if automatic {
+        if automatic && snapshot.selected_sources.is_none() {
             // Replace stale discovery/review sessions. Their candidates and
             // metadata results remain history, not an extra approval gate.
             sqlx::query("UPDATE scrape_tasks SET state='cancelled',updated_at=? WHERE state='waiting_for_user' AND id IN (SELECT task_id FROM scan_sessions WHERE root_id=?)")
@@ -425,6 +433,9 @@ impl ScanService {
             let view = candidate_from_row(&row)?;
             let file: ScannedFile = serde_json::from_str(&text(&row, "payload_json")?)
                 .map_err(|_| RepositoryError::CorruptData)?;
+            if !watched::selected(&saved, &file.normalized_relative_path)? {
+                return Err(RepositoryError::Conflict);
+            }
             selected.push((view, file));
         }
         let root_path = saved.root.path.clone();
@@ -440,6 +451,8 @@ impl ScanService {
         if let Some(access) = adult_access {
             access.ensure()?;
         }
+        sqlx::query("UPDATE library_roots SET updated_at=updated_at WHERE id=?")
+            .bind(saved.root.id.to_string()).execute(&mut *tx).await?;
         // Config is checked once more after acquiring the SQLite write transaction.
         let root_row =
             sqlx::query("SELECT path,path_style,kind,enabled FROM library_roots WHERE id=?")
@@ -479,6 +492,12 @@ impl ScanService {
             .bind(input.task_id.to_string())
             .fetch_one(&mut *tx)
             .await?;
+        let stored_scope: String = sqlx::query_scalar("SELECT root_snapshot_json FROM scan_sessions WHERE task_id=?")
+            .bind(input.task_id.to_string()).fetch_one(&mut *tx).await?;
+        let stored_scope: RootSnapshot = serde_json::from_str(&stored_scope).map_err(|_| RepositoryError::CorruptData)?;
+        if stored_scope.selected_sources != saved.selected_sources {
+            return Err(RepositoryError::Conflict);
+        }
         if if automatic {
             current_state != "running"
         } else {
@@ -492,7 +511,7 @@ impl ScanService {
                 result.unchanged += 1;
                 continue;
             }
-            let imported = importer::import_file(&mut tx, &saved.root, &file).await?;
+            let imported = importer::import_file(&mut tx, &saved.root, &file, saved.selected_sources.is_some()).await?;
             sqlx::query("UPDATE scan_candidates SET status='imported',existing_media_id=? WHERE id=? AND task_id=? AND status='pending'")
                 .bind(imported.to_string()).bind(view.id.to_string()).bind(input.task_id.to_string()).execute(&mut *tx).await?;
             sqlx::query("INSERT INTO scan_source_fingerprints(root_id,normalized_relative_path,signature) VALUES(?,?,?) ON CONFLICT(root_id,normalized_relative_path) DO UPDATE SET signature=excluded.signature")
@@ -540,6 +559,7 @@ impl ScanService {
             exclude_patterns,
             metadata_providers: crate::root_sources::load(self.repo.pool(), root_id).await?,
             nfo_export_mode: crate::root_sources::load_nfo_export_mode(self.repo.pool(), root_id).await?,
+            selected_sources: None,
         })
     }
 
@@ -584,7 +604,11 @@ impl ScanService {
             return Ok(());
         }
         self.emit(id).await;
-        let rows=sqlx::query("SELECT normalized_relative_path,size_bytes,modified_at FROM media_files WHERE root_id=?").bind(snapshot.root.id.to_string()).fetch_all(self.repo.pool()).await?;
+        let selected_json = watched::normalized_selection(&snapshot)?
+            .map(|values| serde_json::to_string(&values).map_err(|_| RepositoryError::CorruptData))
+            .transpose()?;
+        let rows=sqlx::query("SELECT normalized_relative_path,size_bytes,modified_at FROM media_files WHERE root_id=? AND (? IS NULL OR normalized_relative_path IN (SELECT value FROM json_each(?)))")
+            .bind(snapshot.root.id.to_string()).bind(&selected_json).bind(&selected_json).fetch_all(self.repo.pool()).await?;
         let mut known_files = HashMap::new();
         for row in rows {
             known_files.insert(
@@ -595,7 +619,8 @@ impl ScanService {
                 },
             );
         }
-        let signature_rows=sqlx::query("SELECT normalized_relative_path,signature FROM scan_source_fingerprints WHERE root_id=?").bind(snapshot.root.id.to_string()).fetch_all(self.repo.pool()).await?;
+        let signature_rows=sqlx::query("SELECT normalized_relative_path,signature FROM scan_source_fingerprints WHERE root_id=? AND (? IS NULL OR normalized_relative_path IN (SELECT value FROM json_each(?)))")
+            .bind(snapshot.root.id.to_string()).bind(&selected_json).bind(&selected_json).fetch_all(self.repo.pool()).await?;
         let signatures: HashMap<String, String> = signature_rows
             .iter()
             .map(|row| {
@@ -614,20 +639,17 @@ impl ScanService {
         let (sender, mut receiver) = mpsc::channel(128);
         let progress = sender.clone();
         let root_path = snapshot.root.path.clone();
+        let selected_sources = snapshot.selected_sources.clone();
         let worker_cancel = Arc::clone(&cancel);
         let worker = tokio::task::spawn_blocking(move || {
             let mut last = Instant::now();
             let mut visited = 0;
-            run_scan(
-                std::path::Path::new(&root_path),
-                &options,
-                &worker_cancel,
-                |file| {
+            let on_entry = |file| {
                     sender
                         .blocking_send(WorkerMessage::Entry(Box::new(file)))
                         .is_ok()
-                },
-                |stats| {
+                };
+            let on_progress = |stats: ScanStats| {
                     if stats.visited_files.saturating_sub(visited) >= 100
                         || last.elapsed() >= Duration::from_millis(200)
                     {
@@ -635,8 +657,12 @@ impl ScanService {
                         last = Instant::now();
                         let _ = progress.blocking_send(WorkerMessage::Progress(stats));
                     }
-                },
-            )
+                };
+            if let Some(selected) = selected_sources {
+                run_scan_selected(std::path::Path::new(&root_path), &options, &selected, &worker_cancel, on_entry, on_progress)
+            } else {
+                run_scan(std::path::Path::new(&root_path), &options, &worker_cancel, on_entry, on_progress)
+            }
         });
         while let Some(message) = receiver.recv().await {
             if cancel.load(Ordering::Acquire) {
@@ -645,6 +671,13 @@ impl ScanService {
             }
             match message {
                 WorkerMessage::Entry(mut file) => {
+                    if !watched::selected(&snapshot, &file.normalized_relative_path)? {
+                        return Err(RepositoryError::Conflict);
+                    }
+                    // Native events can report an edit with unchanged coarse mtime/size.
+                    if snapshot.selected_sources.is_some() {
+                        file.unchanged = false;
+                    }
                     if file.unchanged
                         && signatures.get(&file.normalized_relative_path)
                             != Some(&file.sidecar_fingerprint)
@@ -667,6 +700,9 @@ impl ScanService {
                 self.store_progress(id, &stats).await?;
                 if cancel.load(Ordering::Acquire) || stats.cancelled {
                     return self.finish(id, "cancelled", None, None).await;
+                }
+                if automatic && snapshot.selected_sources.is_some() {
+                    self.remove_missing_selected(id, &snapshot, &cancel).await?;
                 }
                 if automatic {
                     return self
@@ -788,6 +824,7 @@ async fn snapshot_tx(
             sqlx::query_scalar::<_, String>("SELECT nfo_export_mode FROM root_settings WHERE root_id=?")
                 .bind(root_id.to_string()).fetch_optional(&mut **tx).await?.as_deref().unwrap_or("online"),
         )?,
+        selected_sources: None,
     })
 }
 
