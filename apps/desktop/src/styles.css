@@ -78,6 +78,18 @@
   --overlay: #000000b3;
   color-scheme: dark;
 }
+html,
+body,
+#root {
+  height: 100%;
+  overscroll-behavior: none;
+}
+/* Standalone NFO documents keep document scrolling. */
+html:has(.app-shell),
+body:has(.app-shell),
+#root:has(.app-shell) {
+  overflow: hidden;
+}
 body {
   margin: 0;
   min-width: 320px;
