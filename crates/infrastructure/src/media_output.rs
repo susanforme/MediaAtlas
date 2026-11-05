@@ -1568,6 +1568,17 @@ fn read_optional(
 fn atomic_create(dir: &Dir, name: impl AsRef<Path>, bytes: &[u8]) -> Result<bool, RepositoryError> {
     atomic_create_checked(dir, name, bytes, || Ok(()))
 }
+
+fn publish_new_file(dir: &Dir, temporary: &str, name: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "macos")]
+    {
+        // Keep the published name visible to FSEvents without clobbering another writer.
+        rustix::fs::renameat_with(dir, temporary, dir, name, rustix::fs::RenameFlags::NOREPLACE)
+            .map_err(Into::into)
+    }
+    #[cfg(not(target_os = "macos"))]
+    { dir.hard_link(temporary, dir, name) }
+}
 fn nfo_backup_name(preview_id: Uuid) -> String {
     format!(".mediaatlas-nfo-{preview_id}.backup")
 }
@@ -1612,7 +1623,7 @@ fn atomic_replace_nfo(
             if hash(&actual) != expected { return Err(RepositoryError::Conflict); }
         }
         check()?;
-        match dir.hard_link(&temporary, dir, name) {
+        match publish_new_file(dir, &temporary, name) {
             Ok(()) => Ok(true),
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let actual = read_optional(dir, name, MAX_NFO)?.ok_or(RepositoryError::Conflict)?;
@@ -1644,8 +1655,8 @@ fn atomic_create_checked(
         file.sync_all().map_err(io_error)?;
         // Recheck privacy/cancellation after staging and immediately before publication.
         check()?;
-        // Hard-link publication is atomic and cannot clobber an intervening file.
-        match dir.hard_link(&temporary, dir, name) {
+        // Publication is atomic and cannot clobber an intervening file.
+        match publish_new_file(dir, &temporary, name) {
             Ok(()) => Ok(true),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 let existing =
@@ -2717,6 +2728,19 @@ mod tests {
             b"untouched video bytes"
         );
     }
+    #[test]
+    fn atomic_publication_keeps_an_intervening_file_and_cleans_staging() {
+        let temp = crate::test_support::tempdir().unwrap();
+        let dir = open_absolute_dir(temp.path(), false).unwrap();
+        assert_eq!(atomic_create_checked(&dir, "movie.nfo", b"new output", || {
+            dir.write("movie.nfo", b"external edit").map_err(io_error)
+        }).unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(std::fs::read(temp.path().join("movie.nfo")).unwrap(), b"external edit");
+        assert!(!atomic_create(&dir, "movie.nfo", b"external edit").unwrap());
+        assert!(atomic_create(&dir, "other.nfo", b"new output").unwrap());
+        assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 2);
+    }
+
     #[test]
     fn revoked_grant_after_staging_cannot_publish_and_cleans_the_temporary_file() {
         let temp = crate::test_support::tempdir().unwrap();
