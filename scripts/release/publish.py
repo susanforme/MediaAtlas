@@ -144,6 +144,7 @@ def verify_remote_assets(github, identifier, paths):
 
 def publish_verified(github, tag, commit, paths):
     """Execute guarded mutations only after validate_assets has succeeded."""
+    prerelease = "-" in release.tag_version(tag)
     check_current(github, tag, commit)
     existing = github.get_release(tag)
     expected = {path.name for path in paths}
@@ -159,7 +160,7 @@ def publish_verified(github, tag, commit, paths):
         check_current(github, tag, commit)
         existing = github.create_release({"tag_name": tag, "target_commitish": commit,
                                            "name": f"MediaAtlas {tag}", "draft": True,
-                                           "prerelease": True, "make_latest": "false"})
+                                           "prerelease": prerelease, "make_latest": "false"})
         identifier = existing["id"]
     for path in paths:
         for attempt in range(3):
@@ -190,8 +191,8 @@ def publish_verified(github, tag, commit, paths):
     notes = next(path for path in paths if path.name == "RELEASE_NOTES.md").read_text()
     # This is a fresh read immediately before PATCH, not an atomic tag/ref CAS.
     check_current(github, tag, commit)
-    github.edit_release(identifier, {"tag_name": tag, "draft": False, "prerelease": True,
-                                     "make_latest": "false", "name": f"MediaAtlas {tag}",
+    github.edit_release(identifier, {"tag_name": tag, "draft": False, "prerelease": prerelease,
+                                     "make_latest": "false" if prerelease else "legacy", "name": f"MediaAtlas {tag}",
                                      "target_commitish": commit, "body": notes})
     print(f"Published verified complete build {commit} for {tag}")
 

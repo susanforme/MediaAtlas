@@ -1,8 +1,8 @@
-name: Tagged beta release
+name: Tagged release
 
 on:
   push:
-    tags: ["v*-beta.*"]
+    tags: ["v*"]
 
 permissions:
   contents: read
@@ -18,7 +18,7 @@ env:
 
 jobs:
   preflight:
-    name: Validate beta version and release tooling
+    name: Validate version and release tooling
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.preflight.outputs.matrix }}
@@ -113,7 +113,7 @@ jobs:
           retention-days: 14
 
   publish:
-    name: Verify complete release and publish beta
+    name: Verify complete release and publish
     needs: [preflight, build]
     runs-on: ubuntu-24.04
     permissions:

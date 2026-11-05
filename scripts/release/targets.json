@@ -20,7 +20,7 @@
       {
         "format": "AppImage",
         "state": "not_built",
-        "reason": "AppImage native-library provenance and same-place corresponding-source distribution gate is not complete for this beta"
+        "reason": "AppImage native-library provenance and same-place corresponding-source distribution gate is not complete for this release"
       }
     ]
   },
@@ -63,7 +63,7 @@
       {
         "format": "AppImage",
         "state": "not_built",
-        "reason": "AppImage native-library provenance and same-place corresponding-source distribution gate is not complete for this beta"
+        "reason": "AppImage native-library provenance and same-place corresponding-source distribution gate is not complete for this release"
       }
     ]
   }

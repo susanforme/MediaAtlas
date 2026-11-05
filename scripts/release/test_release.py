@@ -68,12 +68,30 @@ class ReleaseTests(unittest.TestCase):
 
     def test_versions_and_tag_must_agree(self):
         self.assertEqual(release.version(self.tag), self.version)
-        for tag in ("v0.1.0", "v0.1.0-beta.0", "x0.1.0-beta.1", "v0.1.0-beta.1;bad"):
+        for tag in ("v0.1.0-beta.0", "x0.1.0-beta.1", "v0.1.0-beta.1;bad"):
             with self.subTest(tag=tag), self.assertRaises(ValueError):
                 release.version(tag)
         (self.root / "package.json").write_text('{"version":"0.1.0"}')
         with self.assertRaisesRegex(ValueError, "mismatch"):
             release.version(self.tag)
+
+    def test_only_stable_and_positive_numbered_beta_tags_are_supported(self):
+        for tag in ("v0.1.0", "v1.0.0", "v0.1.0-beta.9"):
+            with self.subTest(tag=tag):
+                self.assertEqual(release.tag_version(tag), tag[1:])
+        for tag in ("v01.1.0", "v0.01.0", "v0.1.00", "v0.1.0-beta.01",
+                    "v0.1.0-beta.0", "v0.1.0-rc.1", "v0.1.0+build", "0.1.0", "v0.1.0\n"):
+            with self.subTest(tag=tag), self.assertRaisesRegex(ValueError, "expected"):
+                release.tag_version(tag)
+
+    def test_stable_release_requires_all_project_versions_to_match(self):
+        for filename in ("package.json", "apps/desktop/package.json", "apps/desktop/src-tauri/tauri.conf.json", "Cargo.toml", "Cargo.lock"):
+            path = self.root / filename
+            path.write_text(path.read_text().replace(self.version, "0.1.0"))
+        self.assertEqual(release.version("v0.1.0"), "0.1.0")
+        (self.root / "Cargo.lock").write_text(f'[[package]]\nname="mediaatlas-domain"\nversion="{self.version}"\n')
+        with self.assertRaisesRegex(ValueError, "mismatch"):
+            release.version("v0.1.0")
 
     def test_lockfile_versions_checked(self):
         (self.root / "Cargo.lock").write_text('[[package]]\nname="mediaatlas-domain"\nversion="0.0.0"\n')

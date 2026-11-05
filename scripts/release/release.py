@@ -40,9 +40,14 @@ def sha256(path):
         return hashlib.file_digest(handle, "sha256").hexdigest()
 
 
+def tag_version(tag):
+    require(re.fullmatch(r"v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-beta\.[1-9][0-9]*)?", tag),
+            "expected vX.Y.Z or vX.Y.Z-beta.N tag")
+    return tag[1:]
+
+
 def version(tag):
-    require(re.fullmatch(r"v\d+\.\d+\.\d+-beta\.[1-9]\d*", tag), "expected vX.Y.Z-beta.N tag")
-    expected = tag[1:]
+    expected = tag_version(tag)
     versions = {
         "package.json": json.loads((ROOT / "package.json").read_text())["version"],
         "apps/desktop/package.json": json.loads((ROOT / "apps/desktop/package.json").read_text())["version"],
@@ -330,7 +335,7 @@ def aggregate(args):
         manifest_path = directory / "manifest.json"
         if not manifest_path.is_file():
             require(not spec["required"], f"missing required target: {spec['target']}")
-            unavailable.append({"target": spec["target"], "state": "not_built", "reason": "outside the four required beta targets; no optional runner job was scheduled"})
+            unavailable.append({"target": spec["target"], "state": "not_built", "reason": "outside the four required release targets; no optional runner job was scheduled"})
             continue
         manifest = json.loads(manifest_path.read_text())
         require(manifest["schema"] == 1 and manifest["tag"] == args.tag and manifest["version"] == expected and manifest["commit"] == args.commit, "manifest provenance mismatch")
@@ -358,7 +363,7 @@ def aggregate(args):
     summary = {"schema": 1, "tag": args.tag, "version": expected, "commit": args.commit, "platforms": manifests, "unavailable_optional_targets": unavailable, "license_materials": [{"path": path.relative_to(ROOT).as_posix(), "bytes": path.stat().st_size, "sha256": sha256(path)} for path in license_paths]}
     (args.output / "release-manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
     source = f"https://github.com/{args.repository}/tree/{args.commit}"
-    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Beta packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP contains only MediaAtlas.exe, with complete license materials embedded at build time; use MediaAtlas.exe --export-licenses <new-directory> to export them explicitly. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this beta because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); MediaAtlas is licensed under the MIT License; third-party components retain their own licenses. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
+    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP contains only MediaAtlas.exe, with complete license materials embedded at build time; use MediaAtlas.exe --export-licenses <new-directory> to export them explicitly. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this release because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); MediaAtlas is licensed under the MIT License; third-party components retain their own licenses. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
     for manifest in manifests:
         lines.append(f"| `{manifest['target']}` | {', '.join(asset['format'] for asset in manifest['assets'])} |")
     for item in unavailable:
@@ -375,7 +380,7 @@ def aggregate(args):
 
 def build_matrix():
     # Schedule only the four required, mature combinations. Unavailable optional
-    # runners can remain queued indefinitely and must not delay the beta release.
+    # runners can remain queued indefinitely and must not delay the release.
     enabled = [item for item in TARGETS if item["required"]]
     require(all("AppImage" not in item["formats"] for item in enabled), "AppImage distribution requires the unfinished native source/license gate")
     return {"include": enabled}
@@ -399,7 +404,7 @@ def main():
             command_parser.add_argument("--repository", required=True)
     args = parser.parse_args()
     if args.command == "preflight":
-        print(f"Validated beta version: {version(args.tag)}")
+        print(f"Validated release version: {version(args.tag)}")
         licenses()
         output = os.environ.get("GITHUB_OUTPUT")
         if output:

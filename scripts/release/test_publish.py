@@ -93,6 +93,28 @@ class PublishTests(unittest.TestCase):
         self.assertTrue(github.changes[0][1]["draft"])
         self.assertFalse(github.release["draft"])
 
+    def test_stable_and_beta_publications_use_the_correct_release_type(self):
+        for tag, prerelease, latest in (("v0.1.0", False, "legacy"), (self.tag, True, "false")):
+            for existing in (False, True):
+                with self.subTest(tag=tag, existing=existing):
+                    github = FakeGitHub(self.commit, existing=existing)
+                    if existing:
+                        github.release["tag_name"] = tag
+                    publisher.publish_verified(github, tag, self.commit, self.paths)
+                    self.assertEqual(github.release["tag_name"], tag)
+                    self.assertIs(github.release["prerelease"], prerelease)
+                    self.assertEqual(github.release["make_latest"], latest)
+                    self.assertFalse(github.release["draft"])
+                    if not existing:
+                        self.assertIs(github.changes[0][1]["prerelease"], prerelease)
+                        self.assertEqual(github.changes[0][1]["make_latest"], "false")
+
+    def test_invalid_release_tag_is_rejected_without_remote_changes(self):
+        github = FakeGitHub(self.commit, existing=False)
+        with self.assertRaisesRegex(ValueError, "expected"):
+            publisher.publish_verified(github, "v0.1.0-rc.1", self.commit, self.paths)
+        self.assertEqual(github.changes, [])
+
     def test_draft_and_publication_updates_explicitly_preserve_tag_binding(self):
         for already_draft in [False, True]:
             with self.subTest(already_draft=already_draft):

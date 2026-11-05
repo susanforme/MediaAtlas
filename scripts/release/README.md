@@ -1,6 +1,10 @@
-# Tagged beta publication
+# Tagged publication
 
 `release.py` checks versions, inspects native payloads, stages each target and aggregates the complete required target set. `publish.py` performs the final publication gates and supports rebuilding a tag that already has a Release.
+
+Push `vX.Y.Z` for a stable release or `vX.Y.Z-beta.N` for a prerelease, with positive beta numbers and no leading zeros in numeric components. The workflow accepts `v*` tags, then preflight rejects unsupported tags and requires the version to match every project manifest and workspace entry in Cargo.lock. Alpha, RC and build-metadata tags are not supported. Stable releases set `prerelease=false` and use GitHub's `make_latest=legacy` selection by release date and semantic version; beta releases set `prerelease=true` and `make_latest=false`. Both stay drafts until all packages and remote assets pass verification.
+
+Updating workspace versions also changes Cargo.lock. Refresh its SHA-256 in `docs/dependency-licenses.json` even when third-party dependencies are unchanged; the release verifier still checks the exact lockfile inventory and all original license materials.
 
 The workflow checks out its event commit, cancels older runs in the same repository/tag concurrency group, and resolves the live GitHub tag before scheduling builds. Annotated tags are dereferenced to their actual commit. The publisher repeats that check before each release mutation and before publishing. A run whose tag moved stops without continuing uploads or publication.
 

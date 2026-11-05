@@ -1,4 +1,6 @@
-# Beta 发布矩阵与验证
+# 发布矩阵与验证
+
+发布标签支持 `vX.Y.Z` 正式版和 `vX.Y.Z-beta.N` 预发布版（N 为正整数，所有数字段不含前导零）。workflow 接收 `v*`，预检拒绝其他格式，继续要求包清单、Tauri、Cargo workspace 与本项目锁文件版本完全一致。正式版设为 `prerelease=false`，通过 GitHub `make_latest=legacy` 按发布时间和语义版本决定 latest；beta 保持 `prerelease=true`、`make_latest=false`。四平台、来源绑定、草稿上传及资产完整性门槛共用。此脚本扩展不移动正在构建的 beta.9 标签。
 
 2026-11-05：按用户要求准备发布 `v0.1.0-beta.9`。桌面业务样式全部迁移为 Tailwind 4，删除 9 个组件/feature CSS 文件和启动页内联样式；全局仅保留主题 token 与 Tailwind reset。保留现有测试使用的语义 class/id，更新下拉菜单坐标与主题测试的实现引用，以及 QA 来源文件清单。根与前端 `AGENTS.md` 加入仅使用 Tailwind、保留 UI 的约束。根/desktop 包、Tauri 配置、Cargo workspace 与锁文件的六个本项目 crate 同步为 beta.9；第三方依赖不变。按用户要求仅静态阅读、修改和 diff 核对，未运行本地项目、测试、lint、构建、格式化或安装包，未生成本轮截图，实际视觉一致性未经渲染验证。发布沿用 tag 触发的 GitHub Actions 原生四平台构建与验证，只有远端门槛全部通过才公开 Release。以下 beta.8 及更早版本记录为历史背景。
 
@@ -33,7 +35,7 @@ beta.9 首次云端预检在 `bf0cd14` 因许可清单的 Cargo.lock 指纹仍�
 
 ## 产物门槛
 
-`release.py preflight` 严格核对 tag 格式以及根 package.json、desktop package.json、workspace Cargo.toml、Cargo.lock 的所有本项目 crate、Tauri config 的版本一致。未经 P8 统一更新为 beta 版本时，此门槛会失败；不会忽略版本冲突。
+`release.py preflight` 严格核对正式版或 beta tag 格式以及根 package.json、desktop package.json、workspace Cargo.toml、Cargo.lock 的所有本项目 crate、Tauri config 的版本一致。任何版本冲突都会阻止发布。
 
 `release.py stage` 首先解析原生可执行文件头（PE/ELF/Mach-O），检查真正的 CPU 架构与非空文件；然后逐包验收：
 
@@ -43,7 +45,7 @@ beta.9 首次云端预检在 `bf0cd14` 因许可清单的 Cargo.lock 指纹仍�
 - AppImage：本次明确 `not_built`。Tauri AppImage 会带入 GTK/WebKit 等原生库；实际归属、逐项版权及同处对应源码分发 gate 尚未完成，不能以 Rust/npm notices 冒称覆盖。preflight/stage 显式禁止重新启用此格式。保留底层提取/架构检查工具供未来开发使用，不代表可分发。
 - DMG：`hdiutil` 只读挂载，检查 app 的 Info.plist 版本及实际 Mach-O；无论检查结果如何都卸载。
 
-原生安装包中的 LICENSE.md、THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 与 docs/third-party-licenses/** 全文也需逐文件与源码材料 SHA-256 一致；目录结构保留，避免同名 LICENSE 覆盖。Apple bundle short version 或 Windows product version 在工具链只支持数字版本时允许 SemVer core；完整 beta 版本仍由 tag/config/Cargo/manifest 保持一致。产物以完整版本和 Rust target 重命名，避免不同平台重名。
+原生安装包中的 LICENSE.md、THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 与 docs/third-party-licenses/** 全文也需逐文件与源码材料 SHA-256 一致；目录结构保留，避免同名 LICENSE 覆盖。Apple bundle short version 或 Windows product version 在工具链只支持数字版本时允许 SemVer core；完整发布版本仍由 tag/config/Cargo/manifest 保持一致。产物以完整版本和 Rust target 重命名，避免不同平台重名。
 
 `stage` 默认只记录 package validation，不宣称自动化测试通过；仅在 workflow 前端与 native Rust core 两步成功后传入 `--tests-passed`。聚合拒绝没有真实测试通过记录的包，本地打包 dryrun 不会自动生成可发布的测试声明。
 
@@ -70,7 +72,7 @@ $p.ExitCode
 
 ## 发布权限与恢复
 
-默认 `contents: read`，仅聚合发布 job 获得 `contents: write`。checkout 禁止保留 git credentials。只有全部必需构建成功且聚合校验通过，才先创建 draft prerelease，上传完整资产，最后公开；`--latest=false` 不替换正式版 latest。上传中断会留下未公开 draft，而非公开缺少资产的 Release。现有同 tag Release 不会被脚本静默覆盖；修复失败构建后可重跑 workflow，若已留下 draft，维护者应先核对 draft 并删除失败 draft 后重跑发布 job。不要覆盖已发布 tag；修复已公开 beta 时递增 beta.N。
+默认 `contents: read`，仅聚合发布 job 获得 `contents: write`。checkout 禁止保留 git credentials。只有全部必需构建成功且聚合校验通过，才先创建 draft，上传完整资产，最后按标签类型公开正式版或 prerelease；beta 不替换正式版 latest。上传中断会留下未公开 draft。重试复用同标签的 Release ID 并核对资产；遇到意外资产或 immutable Release 时拒绝替换。不要覆盖已发布 tag；修复已公开版本时递增对应版本号。
 
 不启用自动更新、updater artifacts、证书签名或 Apple notarization。未配置凭据时不会伪造签名；macOS 在完整应用资源复制后显式生成 ad-hoc 签名，并在只读挂载的 DMG 内强制验证资源签名完整性；此验证不等同可信分发签名或 Apple 公证，见 [资源签名修复](hotfix-macos-package.md)。Windows SmartScreen、macOS Gatekeeper 可能提示，发布说明明确这一状态。Windows NSIS 显式使用官方 downloadBootstrapper：系统缺少 WebView2 runtime 时在线安装，不捆绑 fixed/offline Chromium/WebView2 engine；ZIP 要求已有 WebView2 runtime。macOS 实际 app 用 otool 验证链接系统 WebKit/WKWebView，禁止内嵌 Chromium/WebKit framework；Debian 包显式依赖系统 WebKitGTK 4.1、GTK3、libdbus-1 与 xdg-utils，实际 ELF 的 DT_NEEDED 必须有 WebKitGTK/GTK/libdbus，readelf symbol versions 的最高 GLIBC 不得超过 2.35；AppImage 本次不分发，缺少其实际原生库归属和对应源码分发 gate；Ubuntu 22.04 构建的 glibc 基线为 2.35，不承诺旧发行版兼容。ffmpeg/ffprobe 仅为开发 fixture 工具，应用不调用或捆绑它们；拆包校验显式拒绝夹带这两个可执行文件。AppImage 候选 overlay 显式关闭 bundleMediaFramework，但此设置不能替代其未完成的原生库分发审查，也不使该格式进入本次矩阵。
 
