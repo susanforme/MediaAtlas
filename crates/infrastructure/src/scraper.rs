@@ -1545,9 +1545,19 @@ mod tests {
         }).await.expect("automatic review was not reached");
         let nfo = media_dir.join("Example.nfo");
         std::fs::remove_file(&nfo).unwrap();
-        tokio::time::timeout(Duration::from_secs(10), async {
+        let restored = tokio::time::timeout(Duration::from_secs(10), async {
             while !nfo.is_file() { tokio::time::sleep(Duration::from_millis(20)).await; }
-        }).await.expect("deleted NFO was not restored by the watcher");
+        }).await;
+        if restored.is_err() {
+            let watching = watcher.list().await.unwrap().into_iter()
+                .map(|status| (status.active, status.pending_rescan, status.error_code)).collect::<Vec<_>>();
+            let tasks = scans.list_tasks(false).await.unwrap().into_iter()
+                .map(|task| (task.mode, task.state, task.phase, task.error_code)).collect::<Vec<_>>();
+            let output: Option<(String, Option<String>)> = sqlx::query_as(
+                "SELECT state,error_code FROM automatic_nfo_exports WHERE media_item_id=?",
+            ).bind(s.media.id.to_string()).fetch_optional(s.repo.pool()).await.unwrap();
+            panic!("deleted NFO was not restored: watching={watching:?}, tasks={tasks:?}, output={output:?}");
+        }
         watcher.shutdown().await;
         for task in scans.list_tasks(false).await.unwrap() { settle_automatic(&scans, task.id).await; }
         assert!(std::fs::read_to_string(&nfo).unwrap().contains("Provider title"));

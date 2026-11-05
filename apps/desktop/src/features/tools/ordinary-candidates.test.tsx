@@ -323,7 +323,7 @@ it("sends every filter and sort to the backend instead of filtering only the vis
       name: `Select for scraping: ${first.media.title}`,
     }),
   );
-  fireEvent.change(screen.getByLabelText("Search local candidates"), {
+  fireEvent.change(screen.getByRole("searchbox", { name: "Search local candidates" }), {
     target: { value: "Server result" },
   });
   expect(screen.getByRole("checkbox", {
