@@ -7,6 +7,7 @@ pub mod adult_scraper;
 pub mod browse;
 pub mod credentials;
 pub mod health;
+pub(crate) mod kodi_nfo;
 pub mod library;
 pub mod library_ready;
 pub mod maintenance;

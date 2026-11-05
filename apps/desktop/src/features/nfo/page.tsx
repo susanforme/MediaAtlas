@@ -20,6 +20,16 @@ function text(value: unknown): string {
   return JSON.stringify(value) ?? "";
 }
 
+function castText(value: unknown): string {
+  if (Array.isArray(value)) return value.map(castText).filter(Boolean).join(" · ");
+  if (typeof value === "string") return value;
+  if (value !== null && typeof value === "object" && "name" in value && typeof value.name === "string") {
+    const role = "role" in value && typeof value.role === "string" ? value.role : "";
+    return role ? `${value.name} (${role})` : value.name;
+  }
+  return "";
+}
+
 export function NfoPage() {
   const { t, i18n } = useTranslation();
   const [document, setDocument] = useState<NfoDocument | null>(null);
@@ -141,7 +151,8 @@ export function NfoPage() {
               <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
                 {Object.entries(fields)
                   .filter(([key]) =>
-                    !["title", "original_title", "year", "overview", "genres"].includes(key),
+                    !["title", "original_title", "year", "overview", "genres"].includes(key) &&
+                    !(key === "people" && Array.isArray(fields.cast) && fields.cast.length > 0),
                   )
                   .map(([key, value]) => (
                     <div key={key} className="min-w-0">
@@ -149,7 +160,7 @@ export function NfoPage() {
                         {t(`nfoField_${key}`, { defaultValue: key })}
                       </dt>
                       <dd className="mt-1 whitespace-pre-wrap wrap-anywhere">
-                        {text(value)}
+                        {key === "cast" ? castText(value) : text(value)}
                       </dd>
                     </div>
                   ))}

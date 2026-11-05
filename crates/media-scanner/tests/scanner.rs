@@ -1,4 +1,4 @@
-use mediaatlas_domain::{MediaKind, PathStyle};
+use mediaatlas_domain::{ArtworkKind, MediaKind, PathStyle};
 use mediaatlas_media_scanner::{
     parse_filename, read_audio_tags, read_nfo, run_scan, sidecar_fingerprint, FileStamp, ScanError,
     ScanOptions, ScannedFile,
@@ -175,6 +175,62 @@ fn sidecars_local_priority_and_incremental_signatures_are_read_only() {
         first.sidecar_fingerprint
     );
     assert_eq!(fs::read(video).unwrap(), b"fixture-video");
+}
+
+#[test]
+fn deeply_nested_chinese_movie_directories_are_scanned_without_flattening() {
+    let dir = tempdir().unwrap();
+    for title in ["无敌破坏1", "无敌破坏2"] {
+        let parent = dir.path().join("电影/无敌破坏王").join(title);
+        fs::create_dir_all(&parent).unwrap();
+        fs::write(parent.join(format!("{title}.mp4")), title.as_bytes()).unwrap();
+    }
+    let entries = collect(dir.path(), &options(Some(MediaKind::Movie)));
+    assert_eq!(entries.len(), 2);
+    for title in ["无敌破坏1", "无敌破坏2"] {
+        let relative = format!("电影/无敌破坏王/{title}/{title}.mp4");
+        let entry = entries.iter().find(|entry| entry.relative_path == relative).unwrap();
+        assert_eq!(entry.parsed.kind, MediaKind::Movie);
+        assert_eq!(entry.parsed.title, title);
+        assert_eq!(fs::read(dir.path().join(&relative)).unwrap(), title.as_bytes());
+    }
+    assert_ne!(entries[0].parsed.group_key, entries[1].parsed.group_key);
+}
+
+#[test]
+fn same_named_movies_keep_nfo_and_artwork_with_their_own_nested_directory() {
+    let dir = tempdir().unwrap();
+    let collection = dir.path().join("电影/无敌破坏王");
+    fs::create_dir_all(&collection).unwrap();
+    fs::write(collection.join("movie.nfo"), "<movie><title>不应继承的合集资料</title><uniqueid type=\"tmdb\">999</uniqueid></movie>").unwrap();
+    for (part, title, id) in [("第一部", "第一部本地资料", "123"), ("第二部", "第二部本地资料", "456")] {
+        let parent = collection.join(part);
+        fs::create_dir_all(&parent).unwrap();
+        fs::write(parent.join("正片.mp4"), title.as_bytes()).unwrap();
+        fs::write(parent.join("正片.nfo"), format!("<movie><title>{title}</title><uniqueid type=\"tmdb\">{id}</uniqueid></movie>")).unwrap();
+        fs::write(parent.join("poster.jpg"), part.as_bytes()).unwrap();
+        fs::write(parent.join("fanart.jpg"), part.as_bytes()).unwrap();
+    }
+    let entries = collect(dir.path(), &options(Some(MediaKind::Movie)));
+    assert_eq!(entries.len(), 2);
+    assert_ne!(entries[0].parsed.group_key, entries[1].parsed.group_key);
+    for (part, title, id) in [("第一部", "第一部本地资料", "123"), ("第二部", "第二部本地资料", "456")] {
+        let parent = format!("电影/无敌破坏王/{part}");
+        let entry = entries.iter().find(|entry| entry.relative_path == format!("{parent}/正片.mp4")).unwrap();
+        assert_eq!(entry.parsed.title, title);
+        assert_eq!(entry.local_metadata.fields["title"], title);
+        assert_eq!(entry.local_metadata.external_ids.len(), 1);
+        assert_eq!(entry.local_metadata.external_ids[0].namespace, "tmdb");
+        assert_eq!(entry.local_metadata.external_ids[0].value, id);
+        assert_eq!(entry.associated_files.len(), 3);
+        assert!(entry.associated_files.iter().all(|file| file.starts_with(&format!("{parent}/"))));
+        assert!(entry.associated_files.contains(&format!("{parent}/正片.nfo")));
+        assert_eq!(entry.artworks.len(), 2);
+        assert!(entry.artworks.iter().any(|art| art.kind == ArtworkKind::Poster && art.relative_path == format!("{parent}/poster.jpg")));
+        assert!(entry.artworks.iter().any(|art| art.kind == ArtworkKind::Backdrop && art.relative_path == format!("{parent}/fanart.jpg")));
+        assert_eq!(sidecar_fingerprint(dir.path(), entry).unwrap(), entry.sidecar_fingerprint);
+        assert_eq!(fs::read(dir.path().join(format!("{parent}/正片.mp4"))).unwrap(), title.as_bytes());
+    }
 }
 
 #[test]

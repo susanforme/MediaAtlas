@@ -53,7 +53,7 @@ it("uses versioned typed search/detail/merge envelopes with immutable snapshot i
   respond(syntheticOutput);
   await scraperOutputApi.preview("media-1");
   expect(invoke).toHaveBeenLastCalledWith("scraper_output_preview", {
-    input: { media_id: "media-1" },
+    input: { media_id: "media-1", mode: "online" },
   });
   respond({
     schema_version: 1,
@@ -158,7 +158,7 @@ it("accepts only bounded backend data thumbnails and refuses remote or SVG image
     ).rejects.toMatchObject({ code: "invalid_response" });
   }
 });
-it("rejects missing protection flags and non-Preserve output plans", async () => {
+it("rejects missing protection flags and unsupported output strategies", async () => {
   respond({
     ...syntheticMerge,
     fields: [{ ...syntheticMerge.fields[0], protected: undefined }],
@@ -175,6 +175,32 @@ it("rejects missing protection flags and non-Preserve output plans", async () =>
   respond({ ...syntheticOutput, strategy: "move" });
   await expect(scraperOutputApi.preview("media-1")).rejects.toMatchObject({
     code: "invalid_response",
+  });
+});
+it("accepts an explicit update of an existing NFO without allowing media replacement", async () => {
+  respond({ ...syntheticOutput, strategy: "update_nfo" });
+  await expect(scraperOutputApi.preview("media-1")).resolves.toMatchObject({
+    strategy: "update_nfo",
+  });
+});
+it("sends explicit offline mode and accepts Kodi fanart and actor image plans", async () => {
+  const image = { ...syntheticOutput.files[0], old_text: null, new_text: null };
+  respond({
+    ...syntheticOutput,
+    files: [
+      ...syntheticOutput.files,
+      { ...image, destination: "/synthetic/film-fanart.jpg", kind: "fanart" },
+      { ...image, destination: "/synthetic/film-actor.jpg", kind: "actor_thumb" },
+    ],
+  });
+  await expect(scraperOutputApi.preview("media-1", "offline")).resolves.toMatchObject({
+    files: expect.arrayContaining([
+      expect.objectContaining({ kind: "fanart" }),
+      expect.objectContaining({ kind: "actor_thumb" }),
+    ]),
+  });
+  expect(invoke).toHaveBeenLastCalledWith("scraper_output_preview", {
+    input: { media_id: "media-1", mode: "offline" },
   });
 });
 it("keeps browser mode explicit without invoking the backend", async () => {

@@ -274,7 +274,14 @@ impl VideoProviderHub {
                 &format!("/{kind}/{}", input.remote_id),
                 &input.language,
                 &[
-                    ("append_to_response", "images,external_ids,credits"),
+                    (
+                        "append_to_response",
+                        if movie {
+                            "images,external_ids,credits,release_dates"
+                        } else {
+                            "images,external_ids,credits,content_ratings"
+                        },
+                    ),
                     ("include_image_language", "null,en,zh"),
                 ],
                 job,
@@ -308,8 +315,36 @@ impl VideoProviderHub {
                 .collect::<Vec<_>>()),
             Some(&input.language),
         ));
-        if let Some(rating) = data["vote_average"].as_f64() {
+        if let Some(rating) = data["vote_average"].as_f64().filter(|rating| (0.0..=10.0).contains(rating)) {
             fields.push(field("rating", json!(rating), None));
+        }
+        if let Some(votes) = data["vote_count"].as_u64() {
+            fields.push(field("votes", json!(votes), None));
+        }
+        if let Some(date) = data[if movie { "release_date" } else { "first_air_date" }].as_str()
+            .filter(|date| chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok())
+        {
+            fields.push(field("premiered", json!(date), None));
+        }
+        if let Some(tagline) = data["tagline"].as_str().filter(|text| !text.trim().is_empty()) {
+            fields.push(field("tagline", json!(tagline), Some(&input.language)));
+        }
+        if let Some(countries) = data["production_countries"].as_array() {
+            let countries = countries.iter().filter_map(|country| country["name"].as_str())
+                .filter(|name| !name.trim().is_empty()).collect::<Vec<_>>();
+            if !countries.is_empty() {
+                fields.push(field("countries", json!(countries), None));
+            }
+        }
+        if let Some(name) = data["belongs_to_collection"]["name"].as_str().filter(|name| !name.trim().is_empty()) {
+            let mut collection = json!({"name": name});
+            if let Some(id) = data["belongs_to_collection"]["id"].as_u64().filter(|id| *id > 0) {
+                collection["tmdb_id"] = json!(id);
+            }
+            fields.push(field("collection", collection, Some(&input.language)));
+        }
+        if let Some(certification) = tmdb_certification(&data, movie, &input.language) {
+            fields.push(field("mpaa", json!(certification), None));
         }
         let companies = data["production_companies"]
             .as_array()
@@ -321,17 +356,25 @@ impl VideoProviderHub {
             .unwrap_or_default();
         fields.push(field("production_companies", json!(companies), None));
         if let Some(credits) = data["credits"]["cast"].as_array() {
-            if credits.len() > 1000 {
+            fields.push(field("cast", json!(tmdb_cast(credits)?), None));
+        }
+        if let Some(crew) = data["credits"]["crew"].as_array() {
+            if crew.len() > 1000 {
                 return Err(ProviderFailure::ResponseTooLarge);
             }
-            fields.push(field(
-                "cast",
-                json!(credits
-                    .iter()
-                    .filter_map(|p| p["name"].as_str())
-                    .collect::<Vec<_>>()),
-                None,
-            ));
+            for (key, director) in [("directors", true), ("writers", false)] {
+                let mut names = Vec::new();
+                for person in crew.iter().filter(|person| if director {
+                    person["job"].as_str() == Some("Director")
+                } else {
+                    person["department"].as_str() == Some("Writing")
+                }) {
+                    if let Some(name) = person["name"].as_str().filter(|name| !name.trim().is_empty()) {
+                        if !names.contains(&name) { names.push(name); }
+                    }
+                }
+                if !names.is_empty() { fields.push(field(key, json!(names), None)); }
+            }
         }
         let artwork = tmdb_artwork(&data["images"])?;
         if movie {
@@ -816,6 +859,54 @@ fn field(key: &str, value: Value, language: Option<&str>) -> RemoteField {
         language: language.map(str::to_owned),
     }
 }
+fn tmdb_image(path: &str) -> Result<String, ProviderFailure> {
+    if !path.starts_with('/') || path.contains("..") || path.contains(['?', '#', '\\', '%'])
+        || path.chars().any(char::is_control)
+    {
+        return Err(ProviderFailure::UnsafeTarget);
+    }
+    let url = format!("https://image.tmdb.org/t/p/original{path}");
+    validate_image_url(&url, &["image.tmdb.org"])?;
+    Ok(url)
+}
+
+fn tmdb_cast(credits: &[Value]) -> Result<Vec<Value>, ProviderFailure> {
+    if credits.len() > 1000 { return Err(ProviderFailure::ResponseTooLarge); }
+    let mut result = Vec::new();
+    for source in credits {
+        let Some(name) = source["name"].as_str().filter(|name| !name.trim().is_empty()) else { continue; };
+        let mut person = json!({"name": name});
+        if let Some(role) = source["character"].as_str().filter(|role| !role.trim().is_empty()) {
+            person["role"] = json!(role);
+        }
+        if let Some(order) = source["order"].as_u64() { person["order"] = json!(order); }
+        if let Some(id) = source["id"].as_u64().filter(|id| *id > 0) { person["tmdb_id"] = json!(id); }
+        if let Some(path) = source["profile_path"].as_str().filter(|path| !path.is_empty()) {
+            person["thumb"] = json!(tmdb_image(path)?);
+        }
+        result.push(person);
+    }
+    Ok(result)
+}
+
+fn tmdb_certification(data: &Value, movie: bool, language: &str) -> Option<String> {
+    let regions = data[if movie { "release_dates" } else { "content_ratings" }]["results"].as_array()?;
+    let preferred = language.rsplit_once('-').map(|(_, country)| country).unwrap_or("US").to_ascii_uppercase();
+    for country in [preferred.as_str(), "US"] {
+        for region in regions.iter().filter(|region| region["iso_3166_1"].as_str() == Some(country)) {
+            let certification = if movie {
+                region["release_dates"].as_array().and_then(|dates| dates.iter().find_map(|date| {
+                    date["certification"].as_str().filter(|value| !value.trim().is_empty())
+                }))
+            } else {
+                region["rating"].as_str().filter(|value| !value.trim().is_empty())
+            };
+            if let Some(value) = certification { return Some(format!("{country}:{value}")); }
+        }
+    }
+    None
+}
+
 fn tmdb_artwork(images: &Value) -> Result<Vec<ArtworkCandidate>, ProviderFailure> {
     let mut result = Vec::new();
     for (key, kind) in [("posters", "poster"), ("backdrops", "backdrop")] {
@@ -825,12 +916,7 @@ fn tmdb_artwork(images: &Value) -> Result<Vec<ArtworkCandidate>, ProviderFailure
             }
             for value in values {
                 let path = required_str(value, "file_path")?;
-                if !path.starts_with('/') || path.contains("..") || path.contains(['?', '#', '\\'])
-                {
-                    return Err(ProviderFailure::UnsafeTarget);
-                }
-                let url = format!("https://image.tmdb.org/t/p/original{path}");
-                validate_image_url(&url, &["image.tmdb.org"])?;
+                let url = tmdb_image(path)?;
                 result.push(ArtworkCandidate {
                     url,
                     source_provider: "tmdb".into(),
@@ -1025,7 +1111,23 @@ mod tests {
                     } else if path.starts_with("/3/search/tv") {
                         ("application/json",json!({"results":[{"id":10,"name":"Fixture Series","first_air_date":"2020-02-01"}]}).to_string())
                     } else if path.starts_with("/3/movie/") {
-                        ("application/json",json!({"id":1,"title":"Fixture Film","original_title":"Fixture Original","release_date":"2024-01-01","overview":"Synthetic overview","runtime":110,"genres":[{"name":"Drama"}],"production_companies":[{"name":"Studio"}],"credits":{"cast":[{"name":"Actor"}]},"images":{"posters":[{"file_path":"/fixture.jpg","iso_639_1":"en"}],"backdrops":[]},"external_ids":{"imdb_id":"tt123","wikidata_id":"Q123"}}).to_string())
+                        ("application/json", json!({
+                            "id":1,"title":"Fixture Film","original_title":"Fixture Original",
+                            "release_date":"2024-01-01","overview":"Synthetic overview","runtime":110,
+                            "tagline":"An & ordinary story","vote_average":8.3,"vote_count":42,
+                            "genres":[{"name":"Drama"}],"production_companies":[{"name":"Studio"}],
+                            "production_countries":[{"iso_3166_1":"NZ","name":"New Zealand"}],
+                            "belongs_to_collection":{"id":40,"name":"Fixture Collection"},
+                            "release_dates":{"results":[{"iso_3166_1":"US","release_dates":[{"certification":""},{"certification":"PG-13"}]}]},
+                            "credits":{
+                                "cast":[{"id":11,"name":"Actor","character":"Hero","order":0,"profile_path":"/actor.jpg"}],
+                                "crew":[{"name":"Director","job":"Director","department":"Directing"},
+                                        {"name":"Writer","job":"Screenplay","department":"Writing"},
+                                        {"name":"Writer","job":"Story","department":"Writing"}]
+                            },
+                            "images":{"posters":[{"file_path":"/fixture.jpg","iso_639_1":"en"}],"backdrops":[]},
+                            "external_ids":{"imdb_id":"tt123","wikidata_id":"Q123"}
+                        }).to_string())
                     } else if path.starts_with("/3/tv/10/season/1/episode/1") {
                         ("application/json",json!({"id":101,"season_number":1,"episode_number":1,"name":"Pilot","overview":"Episode summary"}).to_string())
                     } else if path.starts_with("/3/tv/10/season/1") {
@@ -1102,6 +1204,22 @@ mod tests {
             panic!("movie expected")
         };
         assert_eq!(movie.runtime_minutes, Some(110));
+        for (key, expected) in [
+            ("cast", json!([{"name":"Actor","role":"Hero","order":0,"thumb":"https://image.tmdb.org/t/p/original/actor.jpg","tmdb_id":11}])),
+            ("directors", json!(["Director"])),
+            ("writers", json!(["Writer"])),
+            ("genres", json!(["Drama"])),
+            ("production_companies", json!(["Studio"])),
+            ("rating", json!(8.3)),
+            ("votes", json!(42)),
+            ("premiered", json!("2024-01-01")),
+            ("tagline", json!("An & ordinary story")),
+            ("countries", json!(["New Zealand"])),
+            ("collection", json!({"name":"Fixture Collection","tmdb_id":40})),
+            ("mpaa", json!("US:PG-13")),
+        ] {
+            assert_eq!(movie.fields.iter().find(|field| field.key == key).map(|field| &field.value), Some(&expected), "{key}");
+        }
         assert_eq!(
             movie.artwork[0].url,
             "https://image.tmdb.org/t/p/original/fixture.jpg"
@@ -1140,6 +1258,7 @@ mod tests {
         );
         let raw = requests.lock().await.join("\n");
         assert!(raw.contains("/3/find/tt123"));
+        assert!(raw.contains("release_dates"));
         assert!(raw
             .to_ascii_lowercase()
             .contains("authorization: bearer mock-session-token"));
@@ -1147,6 +1266,28 @@ mod tests {
         assert!(!logs.contains("mock-session-token"));
         assert!(!logs.contains("Fixture Film"));
         handle.abort();
+    }
+    #[test]
+    fn tmdb_actor_metadata_keeps_only_available_values_and_rejects_unsafe_portraits() {
+        assert_eq!(tmdb_cast(&[json!({"name":"Actor"}), json!({"name":""}), json!({"id":2})]).unwrap(), vec![json!({"name":"Actor"})]);
+        for path in ["/../../secret", "/%2e%2e/secret", "/actor.jpg?token=unsafe", "https://other.invalid/actor.jpg", "/actor.jpg#fragment", "/folder\\actor.jpg"] {
+            assert_eq!(tmdb_cast(&[json!({"name":"Actor","profile_path":path})]), Err(ProviderFailure::UnsafeTarget));
+        }
+        assert_eq!(tmdb_cast(&vec![json!({"name":"Actor"}); 1001]), Err(ProviderFailure::ResponseTooLarge));
+    }
+
+    #[test]
+    fn tmdb_certification_retains_region_and_omits_unknown_ratings() {
+        let movie = json!({"release_dates":{"results":[
+            {"iso_3166_1":"GB","release_dates":[{"certification":"15"}]},
+            {"iso_3166_1":"US","release_dates":[{"certification":"R"}]}
+        ]}});
+        assert_eq!(tmdb_certification(&movie, true, "en-GB"), Some("GB:15".into()));
+        assert_eq!(tmdb_certification(&movie, true, "en-gb"), Some("GB:15".into()));
+        assert_eq!(tmdb_certification(&movie, true, "zh-CN"), Some("US:R".into()));
+        let tv = json!({"content_ratings":{"results":[{"iso_3166_1":"US","rating":"TV-14"}]}});
+        assert_eq!(tmdb_certification(&tv, false, "en-US"), Some("US:TV-14".into()));
+        assert_eq!(tmdb_certification(&json!({}), true, "en-US"), None);
     }
     #[tokio::test]
     async fn mock_tmdb_tv_series_season_episode_keep_aired_identity() {
@@ -1166,6 +1307,7 @@ mod tests {
         assert_eq!(tv.order, EpisodeOrder::Aired);
         assert_eq!(tv.seasons[0].episodes[0].episode_number, 1);
         assert_eq!(tv.identity.external_ids[1].namespace, "tvdb");
+        assert!(!tv.fields.iter().any(|field| matches!(field.key.as_str(), "cast" | "directors" | "writers" | "votes" | "mpaa" | "collection")));
         let episode = hub.tv_episode("10", 1, 1, &job, &cancel).await.unwrap();
         assert_eq!(episode.remote_id, "101");
         let mut wrong = candidates[0].clone();

@@ -1,12 +1,14 @@
 import { ImageOff } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import type { NfoExportMode } from "../../api/scraper";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { Label } from "../../components/ui/label";
+import { Select } from "../../components/ui/select";
 import {
   Table,
   TableHeader,
@@ -564,6 +566,23 @@ export function MetadataMergeWorkspace({
         <div className="flex flex-wrap gap-3">
           {done ? (
             <>
+              <Label className="filter-field">
+                <span>{t("scraperOutputMode")}</span>
+                <Select
+                  value={workspace.outputMode}
+                  disabled={
+                    workspace.write.isPending ||
+                    workspace.discard.isPending ||
+                    workspace.confirm.isPending
+                  }
+                  onChange={(event) =>
+                    workspace.setOutputMode(event.target.value as NfoExportMode)
+                  }
+                >
+                  <option value="online">{t("scraperOutputOnline")}</option>
+                  <option value="offline">{t("scraperOutputOffline")}</option>
+                </Select>
+              </Label>
               <Button variant="outline" disabled={busy} onClick={onCancel}>
                 {t("mergeDone")}
               </Button>

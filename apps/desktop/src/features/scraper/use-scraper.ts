@@ -17,6 +17,7 @@ import { defaultBrowse, libraryApi } from "../../api/library";
 import { providerAuthApi } from "../../api/provider-auth";
 import { providerApi } from "../../api/providers";
 import {
+  type NfoExportMode,
   type OutputPreview,
   type SearchPreview,
   scraperApi,
@@ -34,6 +35,13 @@ import { scrapeKind } from "./scraper-model";
 import { useLiveMergePreview } from "./use-live-merge-preview";
 
 type PreviewAction = { previewId: string; epoch: number };
+type OutputAction = PreviewAction & { outputEpoch: number };
+type OutputPlanAction = {
+  mediaId: string;
+  mode: NfoExportMode;
+  epoch: number;
+  outputEpoch: number;
+};
 
 export function useScraper(
   mediaId?: string,
@@ -77,6 +85,8 @@ export function useScraper(
   const [localQuery, setLocalQuery] = useState("");
   const [onlyMissing, updateOnlyMissing] = useState(false);
   const [output, setOutput] = useState<OutputPreview>();
+  const [outputMode, updateOutputMode] = useState<NfoExportMode>("online");
+  const outputGeneration = useRef(0);
   const [invalid, setInvalid] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
   const outputReleases = useRef(new Map<string, Promise<null>>());
@@ -171,6 +181,8 @@ export function useScraper(
   );
   const latestActions = useRef({
     epoch: generation.current,
+    mediaId: target,
+    outputMode,
     mergeId: preview?.preview_id,
     mergeReady: false,
     outputId: output?.preview_id,
@@ -180,6 +192,8 @@ export function useScraper(
   useLayoutEffect(() => {
     latestActions.current = {
       epoch: generation.current,
+      mediaId: target,
+      outputMode,
       mergeId: preview?.preview_id,
       mergeReady: Boolean(
         mergeSelectionValid && !liveMerge.pending && projection?.counts.total,
@@ -353,16 +367,32 @@ export function useScraper(
     },
   });
   const outputPlan = useMutation({
-    mutationFn: (epoch: number) =>
-      guarded(() => scraperOutputApi.preview(target), epoch),
-    onSuccess: ({ value, epoch }) => {
-      if (current(epoch)) setOutput(value);
+    mutationFn: (action: OutputPlanAction) => {
+      const latest = latestActions.current;
+      if (
+        !current(action.epoch) ||
+        action.outputEpoch !== outputGeneration.current ||
+        action.mediaId !== latest.mediaId ||
+        action.mode !== latest.outputMode
+      )
+        throw new DesktopError("request_failed");
+      return guarded(
+        () => scraperOutputApi.preview(action.mediaId, action.mode),
+        action.epoch,
+      );
+    },
+    onSuccess: ({ value, epoch }, action) => {
+      if (current(epoch) && action.outputEpoch === outputGeneration.current)
+        setOutput(value);
       else void releaseOutput(value.preview_id).catch(() => {});
     },
   });
   const discard = useMutation({
-    mutationFn: (action: PreviewAction) => {
-      if (!validAction(action, "output"))
+    mutationFn: (action: OutputAction) => {
+      if (
+        action.outputEpoch !== outputGeneration.current ||
+        !validAction(action, "output")
+      )
         throw new DesktopError("request_failed");
       return guarded(() => releaseOutput(action.previewId), action.epoch);
     },
@@ -377,8 +407,11 @@ export function useScraper(
     },
   });
   const write = useMutation({
-    mutationFn: (action: PreviewAction) => {
-      if (!validAction(action, "output"))
+    mutationFn: (action: OutputAction) => {
+      if (
+        action.outputEpoch !== outputGeneration.current ||
+        !validAction(action, "output")
+      )
         throw new DesktopError("request_failed");
       return scraperOutputApi.execute(action.previewId);
     },
@@ -491,6 +524,19 @@ export function useScraper(
     confirm.reset();
     write.reset();
   }
+  function setOutputMode(mode: NfoExportMode) {
+    if (
+      mode === outputMode || write.isPending || discard.isPending || confirm.isPending
+    ) return;
+    outputGeneration.current += 1;
+    latestActions.current.outputId = undefined;
+    latestActions.current.outputMode = mode;
+    updateOutputMode(mode);
+    setOutput(undefined);
+    outputPlan.reset();
+    discard.reset();
+    write.reset();
+  }
   function chooseFields(fields: string[]) {
     if (busy) return;
     resetMergeResult();
@@ -556,6 +602,8 @@ export function useScraper(
     },
     output,
     setOutput,
+    outputMode,
+    setOutputMode,
     invalid,
     setInvalid,
     thumbnails,
@@ -584,7 +632,13 @@ export function useScraper(
     },
     outputPlan: {
       ...outputPlan,
-      mutate: () => outputPlan.mutate(generation.current),
+      mutate: () =>
+        outputPlan.mutate({
+          mediaId: target,
+          mode: outputMode,
+          epoch: generation.current,
+          outputEpoch: outputGeneration.current,
+        }),
     },
     discard: {
       ...discard,
@@ -592,6 +646,7 @@ export function useScraper(
         discard.mutate({
           previewId: output?.preview_id ?? "",
           epoch: generation.current,
+          outputEpoch: outputGeneration.current,
         }),
     },
     write: {
@@ -600,6 +655,7 @@ export function useScraper(
         write.mutate({
           previewId: output?.preview_id ?? "",
           epoch: generation.current,
+          outputEpoch: outputGeneration.current,
         }),
     },
     busy,

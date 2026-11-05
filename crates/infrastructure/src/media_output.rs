@@ -1,5 +1,5 @@
-//! Capability-confined Preserve-only sidecar output and bounded artwork cache.
-//! Existing sidecars are always protected; application code never replaces media.
+//! Capability-confined NFO exports and bounded artwork cache.
+//! Automatic sidecars are preserved; explicit NFO updates never replace media.
 use crate::{
     library::{LibraryRepository, RepositoryError},
     network::{CancellationToken, EngineKind, NetworkEngine, RequestSpec},
@@ -29,10 +29,20 @@ use std::{
 use tokio::sync::{Mutex, Semaphore};
 use uuid::Uuid;
 
+mod kodi_export;
+
 const MAX_NFO: usize = 2 * 1024 * 1024;
 const MAX_IMAGE: usize = 8 * 1024 * 1024;
 const MAX_PIXELS: u64 = 20_000_000;
 const MAX_ADULT_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum NfoExportMode {
+    #[default]
+    Online,
+    Offline,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputFileDiff {
@@ -316,6 +326,7 @@ pub struct MediaOutputService {
     gate: Arc<Mutex<()>>,
     channel: OutputChannel,
     adult_access: Option<AdultOutputAccess>,
+    network: Option<Arc<NetworkEngine>>,
 }
 impl MediaOutputService {
     pub fn new(repo: LibraryRepository, base_cache: PathBuf) -> Self {
@@ -325,6 +336,7 @@ impl MediaOutputService {
             gate: Arc::default(),
             channel: OutputChannel::Ordinary,
             adult_access: None,
+            network: None,
         }
     }
     /// Trusted backend composition only; IPC cannot turn an ordinary plan adult.
@@ -339,7 +351,12 @@ impl MediaOutputService {
             gate: Arc::default(),
             channel: OutputChannel::Adult,
             adult_access: Some(access),
+            network: None,
         }
+    }
+    pub fn with_network_engine(mut self, network: Arc<NetworkEngine>) -> Self {
+        self.network = Some(network);
+        self
     }
     #[cfg(test)]
     pub(crate) async fn lock_for_test(&self) -> tokio::sync::OwnedMutexGuard<()> {
@@ -360,13 +377,25 @@ impl MediaOutputService {
             .bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?.rows_affected())
     }
     pub async fn preview(&self, media_id: Uuid) -> Result<OutputPreview, RepositoryError> {
-        self.preview_inner(media_id, false, None).await
+        self.preview_inner(media_id, false, None, NfoExportMode::Offline, false).await
+    }
+    pub async fn preview_with_mode(
+        &self,
+        media_id: Uuid,
+        mode: NfoExportMode,
+    ) -> Result<OutputPreview, RepositoryError> {
+        if self.channel != OutputChannel::Ordinary {
+            return Err(RepositoryError::InvalidInput);
+        }
+        self.preview_inner(media_id, false, None, mode, true).await
     }
     async fn preview_inner(
         &self,
         media_id: Uuid,
         nfo_only: bool,
         source_id: Option<Uuid>,
+        mode: NfoExportMode,
+        update_existing: bool,
     ) -> Result<OutputPreview, RepositoryError> {
         let _gate = self.gate.lock().await;
         self.ensure_access()?;
@@ -431,7 +460,7 @@ impl MediaOutputService {
         } else {
             source_parent.clone()
         };
-        if nfo_only && matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason) {
+        if (nfo_only || update_existing) && matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason) {
             let mut connection = self.repo.pool().acquire().await?;
             self.ensure_series_directory(media_id, root.id, &parent, &mut connection)
                 .await?;
@@ -451,8 +480,8 @@ impl MediaOutputService {
         let windows_lease =
             windows_source_lease(Path::new(&root.path), &relative, self.adult_access.clone())?;
         let source_fingerprint = source_fingerprint(&source_dir, source_name)?;
-        let metadata = self.repo.list_metadata_values(media_id).await?;
-        let ids = self.repo.list_external_ids(media_id).await?;
+        let mut metadata = self.repo.list_metadata_values(media_id).await?;
+        let mut ids = self.repo.list_external_ids(media_id).await?;
         let name = relative
             .file_stem()
             .and_then(|v| v.to_str())
@@ -462,7 +491,7 @@ impl MediaOutputService {
         } else {
             format!("{name}.nfo")
         };
-        let nfo_name = if nfo_only {
+        let nfo_name = if nfo_only || update_existing {
             // Producer and filename casing do not authorize duplicate sidecars.
             // A generic movie.nfo represents all versions in this directory.
             existing_nfo_name(
@@ -483,9 +512,63 @@ impl MediaOutputService {
                     .map_err(|_| RepositoryError::InvalidInput)
             })
             .transpose()?;
-        // Existing local XML is the authoritative before-image, including every
-        // unknown element/attribute/comment and manual value. Do not roundtrip it
-        // through a lossy serializer and do not silently add provider fields.
+        if nfo_only && old.is_none() {
+            let pending: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM output_previews p JOIN file_operations f ON f.id=p.id WHERE p.media_item_id=? AND f.state IN ('running','failed','interrupted') AND json_extract(p.snapshot,'$.preview.strategy')='update_nfo')")
+                .bind(media_id.to_string()).fetch_one(self.repo.pool()).await?;
+            if pending { return Err(RepositoryError::Conflict); }
+        }
+        if let Some(existing) = &old_text {
+            let local = mediaatlas_media_scanner::parse_nfo(existing)
+                .map_err(|_| RepositoryError::InvalidInput)?;
+            let saved_keys = metadata.iter().map(|field| field.field_key.clone()).collect::<std::collections::HashSet<_>>();
+            for id in local.external_ids {
+                if !ids.iter().any(|known| known.namespace == id.namespace) {
+                    ids.push(mediaatlas_domain::ExternalId {
+                        id: Uuid::new_v4(), media_item_id: media_id,
+                        provider_id: id.provider_id, namespace: id.namespace,
+                        external_id: id.value, is_primary: false, created_at: Utc::now(),
+                    });
+                }
+            }
+            for (key, value) in local.fields {
+                let aliases: &[&str] = match key.as_str() {
+                    "cast" | "people" => &["cast", "people"],
+                    "ratings" | "rating" | "votes" => &["ratings", "rating", "votes"],
+                    "studios" | "production_companies" => &["studios", "production_companies"],
+                    "writers" | "credits" => &["writers", "credits"],
+                    "collection" | "series" => &["collection", "series"],
+                    "premiered" | "release_date" => &["premiered", "release_date"],
+                    "runtime" | "runtime_minutes" => &["runtime", "runtime_minutes"],
+                    _ => &[],
+                };
+                if !saved_keys.contains(&key) && !aliases.iter().any(|alias| saved_keys.contains(*alias)) {
+                    metadata.push(MetadataValue {
+                        id: Uuid::new_v4(), media_item_id: media_id, field_key: key,
+                        locale: None, value, provider_id: Some("local_nfo".into()),
+                        source_url: None, fetched_at: None, confidence: None,
+                        is_user_modified: false, is_locked: false,
+                    });
+                }
+            }
+        }
+        let prepared = if self.channel == OutputChannel::Ordinary && (update_existing || (nfo_only && old.is_none())) {
+            self.prepare_kodi_images(&item, &metadata, name, &dir, mode, source.root_id, &parent).await?
+        } else {
+            kodi_export::PreparedExport {
+                artwork: Vec::new(),
+                actor_thumbs: None,
+                images: Vec::new(),
+            }
+        };
+        let generated = crate::kodi_nfo::render_nfo(
+            &item,
+            &metadata,
+            &ids,
+            &prepared.artwork,
+            prepared.actor_thumbs.as_ref(),
+        )?;
+        // Automatic output preserves existing XML; explicit export reviews a
+        // merged before/after image while retaining unrelated top-level XML.
         let nfo = if let Some(old) = &old_text {
             validate_nfo(old)?;
             if nfo_only {
@@ -500,9 +583,13 @@ impl MediaOutputService {
                     return Err(RepositoryError::InvalidInput);
                 }
             }
-            old.clone()
+            if update_existing {
+                merge_kodi_export(old, &generated)?
+            } else {
+                old.clone()
+            }
         } else {
-            render_nfo(&item, &metadata, &ids)?
+            generated.clone()
         };
         let mut diffs = vec![OutputFileDiff {
             destination: parent.join(&nfo_name).to_string_lossy().replace('\\', "/"),
@@ -511,13 +598,12 @@ impl MediaOutputService {
             new_text: Some(nfo.clone()),
             expected_hash: old.as_ref().map(|b| hash(b)),
             content_hash: hash(nfo.as_bytes()),
-            protected: old.is_some(),
+            protected: old.is_some() && !update_existing,
         }];
         let mut payloads = vec![nfo.into_bytes()];
-        if let Some(existing) = old.as_ref().filter(|_| !nfo_only) {
+        if let Some(existing) = old.as_ref().filter(|_| !nfo_only && !update_existing) {
             let existing =
                 std::str::from_utf8(existing).map_err(|_| RepositoryError::InvalidInput)?;
-            let generated = render_nfo(&item, &metadata, &ids)?;
             let generated_doc = roxmltree::Document::parse(&generated)
                 .map_err(|_| RepositoryError::InvalidInput)?;
             let fields: BTreeMap<String, String> = generated_doc
@@ -561,6 +647,31 @@ impl MediaOutputService {
                 payloads.push(revised.into_bytes());
             }
         }
+        if self.channel == OutputChannel::Ordinary {
+            for image in prepared.images {
+                let relative_name = checked_relative(&image.name)?;
+                if relative_name.components().count() != 1 {
+                    return Err(RepositoryError::InvalidInput);
+                }
+                let existing = read_optional(&dir, &relative_name, MAX_IMAGE)?;
+                if let Some(bytes) = &existing {
+                    decode_image(bytes).map_err(|_| RepositoryError::InvalidInput)?;
+                    if bytes != &image.bytes {
+                        return Err(RepositoryError::Conflict);
+                    }
+                }
+                diffs.push(OutputFileDiff {
+                    destination: parent.join(&relative_name).to_string_lossy().replace('\\', "/"),
+                    kind: image.kind,
+                    old_text: None,
+                    new_text: None,
+                    expected_hash: existing.as_ref().map(|bytes| hash(bytes)),
+                    content_hash: hash(&image.bytes),
+                    protected: existing.is_some(),
+                });
+                payloads.push(image.bytes);
+            }
+        }
         // Selected artwork is persisted by the merge workflow. Only validated
         // content-addressed image bytes inside this service's cache are eligible.
         let mut artwork_counts = BTreeMap::<String, usize>::new();
@@ -569,7 +680,7 @@ impl MediaOutputService {
             .list_artworks(media_id)
             .await?
             .into_iter()
-            .filter(|_| !nfo_only)
+            .filter(|_| !nfo_only && (self.channel == OutputChannel::Adult || !update_existing))
         {
             if !self.artwork_allowed(art.kind) {
                 continue;
@@ -638,11 +749,14 @@ impl MediaOutputService {
             }
         }
         self.ensure_access()?;
+        if self.channel == OutputChannel::Ordinary && payloads.iter().map(Vec::len).sum::<usize>() > MAX_ADULT_OUTPUT_BYTES {
+            return Err(RepositoryError::Provider(ProviderFailure::ResponseTooLarge));
+        }
         let preview = OutputPreview {
             schema_version: 1,
             preview_id: Uuid::new_v4(),
             media_item_id: media_id,
-            strategy: "preserve".into(),
+            strategy: if update_existing && old.is_some() { "update_nfo" } else { "preserve" }.into(),
             files: diffs,
             state: "planned".into(),
         };
@@ -655,7 +769,7 @@ impl MediaOutputService {
             source_relative: source.relative_path.clone(),
             source_fingerprint,
             nfo_only,
-            series_target: nfo_only
+            series_target: (nfo_only || update_existing)
                 && matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason),
             relative_parent: parent,
             payloads,
@@ -776,7 +890,7 @@ impl MediaOutputService {
         if cancel.is_some_and(CancellationToken::is_cancelled) {
             return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
         }
-        let preview = self.preview_inner(media_id, true, Some(source.id)).await?;
+        let preview = self.preview_inner(media_id, true, Some(source.id), NfoExportMode::Online, false).await?;
         let execution = self
             .execute_inner(preview.preview_id, cancel, context)
             .await;
@@ -1166,7 +1280,12 @@ fn execute_plan(
     access: Option<&AdultOutputAccess>,
     cancel: Option<&CancellationToken>,
 ) -> Result<(usize, usize), RepositoryError> {
-    if plan.preview.strategy != "preserve" || plan.payloads.len() != plan.preview.files.len() {
+    let update_nfo = plan.preview.strategy == "update_nfo";
+    if (plan.preview.strategy != "preserve" && !update_nfo)
+        || (update_nfo && (plan.channel != OutputChannel::Ordinary || plan.nfo_only))
+        || (update_nfo && plan.preview.files.iter().filter(|file| file.kind == "nfo").count() != 1)
+        || plan.payloads.len() != plan.preview.files.len()
+    {
         return Err(RepositoryError::CorruptData);
     }
     let dir = descend(
@@ -1177,22 +1296,39 @@ fn execute_plan(
     .map_err(io_error)?;
     let mut written = 0;
     let mut preserved = 0;
-    // Check all before-images first. A changed existing file never becomes a
-    // successful retry merely because it coincidentally matches our payload.
+    // Check all before-images first; explicit NFO retries may resume publication
+    // of this same payload or a retained capture of the original bytes.
     for (diff, payload) in plan.preview.files.iter().zip(&plan.payloads) {
         if hash(payload) != diff.content_hash {
             return Err(RepositoryError::CorruptData);
         }
         let name = target_name(diff, &plan.relative_parent)?;
+        if update_nfo && diff.kind == "nfo" {
+            let source = checked_relative(&plan.source_relative)?;
+            let stem = source.file_stem().and_then(|value| value.to_str()).ok_or(RepositoryError::CorruptData)?;
+            let target = name.to_str().ok_or(RepositoryError::CorruptData)?;
+            let safe = if plan.series_target {
+                target.eq_ignore_ascii_case("tvshow.nfo")
+            } else {
+                target.eq_ignore_ascii_case(&format!("{stem}.nfo")) || target.eq_ignore_ascii_case("movie.nfo")
+            };
+            if !safe { return Err(RepositoryError::CorruptData); }
+        }
         let actual = read_optional(&dir, &name, MAX_IMAGE.max(MAX_NFO))?;
         match (&diff.expected_hash, &actual) {
             (Some(expected), Some(bytes)) if hash(bytes) == *expected => {}
+            (Some(_), Some(bytes)) if update_nfo && diff.kind == "nfo" && !diff.protected && hash(bytes) == diff.content_hash => {}
+            (Some(expected), None) if update_nfo && diff.kind == "nfo" && !diff.protected
+                && read_optional(&dir, nfo_backup_name(plan.preview.preview_id), MAX_NFO)?.is_some_and(|bytes| hash(&bytes) == *expected) => {}
             (None, None) => {}
             (None, Some(bytes)) if hash(bytes) == diff.content_hash => {} // completed pre-crash operation
             _ => return Err(RepositoryError::Conflict),
         }
     }
-    for (diff, payload) in plan.preview.files.iter().zip(&plan.payloads) {
+    // Publish referenced images before updating the NFO which points to them.
+    let mut entries = plan.preview.files.iter().zip(&plan.payloads).collect::<Vec<_>>();
+    entries.sort_by_key(|(diff, _)| diff.kind == "nfo");
+    for (diff, payload) in entries {
         if let Some(access) = access {
             access.ensure()?;
         }
@@ -1203,6 +1339,21 @@ fn execute_plan(
         if diff.protected {
             preserved += 1;
             continue;
+        }
+        if update_nfo && diff.kind == "nfo" {
+            if let Some(expected) = &diff.expected_hash {
+                match atomic_replace_nfo(&dir, &name, payload, expected, plan.preview.preview_id, || {
+                    verify_source(plan)?;
+                    if cancel.is_some_and(CancellationToken::is_cancelled) {
+                        return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
+                    }
+                    Ok(())
+                })? {
+                    true => written += 1,
+                    false => preserved += 1,
+                }
+                continue;
+            }
         }
         match atomic_create_checked(&dir, &name, payload, || {
             if let Some(access) = access {
@@ -1234,9 +1385,12 @@ fn target_name(diff: &OutputFileDiff, parent: &Path) -> Result<PathBuf, Reposito
         return Err(RepositoryError::CorruptData);
     }
     let name = relative.file_name().ok_or(RepositoryError::CorruptData)?;
+    if diff.kind == "nfo" && relative.extension().and_then(|value| value.to_str()).is_none_or(|value| !value.eq_ignore_ascii_case("nfo")) {
+        return Err(RepositoryError::CorruptData);
+    }
     if !matches!(
         diff.kind.as_str(),
-        "nfo" | "poster" | "cover" | "back_cover" | "sample"
+        "nfo" | "poster" | "fanart" | "actor_thumb" | "cover" | "back_cover" | "sample"
     ) {
         return Err(RepositoryError::CorruptData);
     }
@@ -1331,6 +1485,66 @@ fn read_optional(
 fn atomic_create(dir: &Dir, name: impl AsRef<Path>, bytes: &[u8]) -> Result<bool, RepositoryError> {
     atomic_create_checked(dir, name, bytes, || Ok(()))
 }
+fn nfo_backup_name(preview_id: Uuid) -> String {
+    format!(".mediaatlas-nfo-{preview_id}.backup")
+}
+fn atomic_replace_nfo(
+    dir: &Dir,
+    name: &Path,
+    bytes: &[u8],
+    expected: &str,
+    preview_id: Uuid,
+    check: impl Fn() -> Result<(), RepositoryError>,
+) -> Result<bool, RepositoryError> {
+    if name.components().count() != 1 || name.extension().and_then(|value| value.to_str()).is_none_or(|value| !value.eq_ignore_ascii_case("nfo")) {
+        return Err(RepositoryError::InvalidInput);
+    }
+    validate_nfo(std::str::from_utf8(bytes).map_err(|_| RepositoryError::InvalidInput)?)?;
+    let temporary = format!(".mediaatlas-{}.tmp", Uuid::new_v4());
+    let backup = nfo_backup_name(preview_id);
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    let mut file = dir.open_with(&temporary, &options).map_err(io_error)?;
+    let mut captured = false;
+    let result = (|| {
+        file.write_all(bytes).map_err(io_error)?;
+        file.sync_all().map_err(io_error)?;
+        drop(file);
+        check()?;
+        let current = read_optional(dir, name, MAX_NFO)?;
+        if current.as_deref() == Some(bytes) { return Ok(false); }
+        let prior_backup = read_optional(dir, &backup, MAX_NFO)?;
+        if let Some(prior) = prior_backup {
+            // A captured before-image survives process interruption. Resume only
+            // when the destination is still absent; never remove a new writer's file.
+            if current.is_some() || hash(&prior) != expected { return Err(RepositoryError::Conflict); }
+        } else {
+            let current = current.ok_or(RepositoryError::Conflict)?;
+            if hash(&current) != expected { return Err(RepositoryError::Conflict); }
+            // Capture whichever inode currently occupies the name before testing
+            // its bytes, then publish create-only so concurrent edits are retained.
+            dir.rename(name, dir, &backup).map_err(io_error)?;
+            captured = true;
+            let actual = read_optional(dir, &backup, MAX_NFO)?.ok_or(RepositoryError::Conflict)?;
+            if hash(&actual) != expected { return Err(RepositoryError::Conflict); }
+        }
+        check()?;
+        match dir.hard_link(&temporary, dir, name) {
+            Ok(()) => Ok(true),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let actual = read_optional(dir, name, MAX_NFO)?.ok_or(RepositoryError::Conflict)?;
+                if actual == bytes { Ok(false) } else { Err(RepositoryError::Conflict) }
+            }
+            Err(error) => Err(io_error(error)),
+        }
+    })();
+    if result.is_err() && captured {
+        // Create-only restoration cannot clobber a file created during export.
+        let _ = dir.hard_link(&backup, dir, name);
+    }
+    let _ = dir.remove_file(&temporary);
+    result
+}
 fn atomic_create_checked(
     dir: &Dir,
     name: impl AsRef<Path>,
@@ -1392,6 +1606,54 @@ fn validate_nfo(value: &str) -> Result<(), RepositoryError> {
     }
     Ok(())
 }
+fn merge_kodi_export(
+    existing: &str,
+    generated: &str,
+) -> Result<String, RepositoryError> {
+    validate_nfo(existing)?;
+    validate_nfo(generated)?;
+    let source = roxmltree::Document::parse(generated).map_err(|_| RepositoryError::InvalidInput)?;
+    let old = roxmltree::Document::parse(existing).map_err(|_| RepositoryError::InvalidInput)?;
+    if source.root_element().tag_name().name() != old.root_element().tag_name().name() {
+        return Err(RepositoryError::InvalidInput);
+    }
+    let compound = ["actor", "genre", "studio", "country", "director", "credits", "ratings", "set", "thumb", "fanart", "uniqueid", "episodeguide", "tag", "showlink"];
+    let fields = source.root_element().children().filter(roxmltree::Node::is_element)
+        .filter(|node| !compound.contains(&node.tag_name().name()))
+        .filter_map(|node| node.text().map(|text| (node.tag_name().name().to_owned(), text.to_owned())))
+        .collect();
+    let mut merged = merge_nfo_known_fields(existing, &fields, &[])?;
+    let document = roxmltree::Document::parse(&merged).map_err(|_| RepositoryError::InvalidInput)?;
+    let root = document.root_element();
+    let mut replacements = Vec::new();
+    let mut additions = String::new();
+    for tag in compound {
+        let replacement = source.root_element().children()
+            .filter(|node| node.is_element() && node.tag_name().name() == tag)
+            .map(|node| &generated[node.range()]).collect::<Vec<_>>().join("\n  ");
+        if replacement.is_empty() && !matches!(tag, "thumb" | "fanart" | "actor") {
+            continue;
+        }
+        let nodes = root.children().filter(|node| node.is_element() && node.tag_name().name() == tag).collect::<Vec<_>>();
+        if nodes.is_empty() {
+            if !replacement.is_empty() { additions.push_str(&format!("\n  {replacement}")); }
+        } else {
+            for (index, node) in nodes.iter().enumerate() {
+                replacements.push((node.range(), if index == 0 { replacement.clone() } else { String::new() }));
+            }
+        }
+    }
+    if !additions.is_empty() {
+        let closing = root.range().start + merged[root.range()].rfind("</").ok_or(RepositoryError::InvalidInput)?;
+        replacements.push((closing..closing, additions));
+    }
+    replacements.sort_by(|left, right| right.0.start.cmp(&left.0.start));
+    drop(document);
+    for (range, value) in replacements { merged.replace_range(range, &value); }
+    validate_nfo(&merged)?;
+    Ok(merged)
+}
+
 /// Merge a small allowlist of scalar NFO fields while preserving every byte
 /// outside changed known elements. Protected existing fields remain authoritative.
 /// Unknown elements, attributes, comments, namespaces and ordering survive.
@@ -1423,6 +1685,13 @@ pub fn merge_nfo_known_fields(
         "label",
         "set",
         "releasedate",
+        "tagline",
+        "sorttitle",
+        "mpaa",
+        "status",
+        "userrating",
+        "rating",
+        "votes",
     ];
     let mut replacements = Vec::new();
     let mut additions = String::new();
@@ -1483,147 +1752,13 @@ pub fn merge_nfo_known_fields(
     Ok(result)
 }
 
+#[cfg(test)]
 fn render_nfo(
     item: &MediaItem,
     values: &[MetadataValue],
     ids: &[mediaatlas_domain::ExternalId],
 ) -> Result<String, RepositoryError> {
-    let root = match item.kind {
-        MediaKind::TvSeries | MediaKind::TvSeason => "tvshow",
-        MediaKind::TvEpisode => "episodedetails",
-        _ => "movie",
-    };
-    let mut fields = BTreeMap::new();
-    fields.insert("title", item.title.clone());
-    if let Some(value) = &item.original_title {
-        fields.insert("originaltitle", value.clone());
-    }
-    if let Some(value) = item.year {
-        fields.insert("year", value.to_string());
-    }
-    if item.kind == MediaKind::AdultVideo {
-        if let Some(id) = ids.iter().find(|id| id.is_primary) {
-            fields.insert("catalognumber", id.external_id.clone());
-            fields.insert("catalognamespace", id.namespace.clone());
-        }
-    }
-    // Stable locale ordering is supplied by the repository; manual/locked values
-    // take precedence when multiple locales must project to a single NFO tag.
-    for protected in [false, true] {
-        for value in values.iter().filter(|v| v.is_protected() == protected) {
-            if item.kind == MediaKind::AdultVideo && value.field_key == "catalog_numbers" {
-                if let Some(number) = value.value.as_array().and_then(|numbers| {
-                    numbers
-                        .iter()
-                        .find(|number| {
-                            number
-                                .get("is_primary")
-                                .and_then(serde_json::Value::as_bool)
-                                == Some(true)
-                        })
-                        .or_else(|| numbers.first())
-                }) {
-                    if let Some(normalized) =
-                        number.get("normalized").and_then(serde_json::Value::as_str)
-                    {
-                        fields.insert("catalognumber", normalized.to_owned());
-                    }
-                    if let Some(namespace) =
-                        number.get("namespace").and_then(serde_json::Value::as_str)
-                    {
-                        fields.insert("catalognamespace", namespace.to_owned());
-                    }
-                }
-            }
-            let tag = match value.field_key.as_str() {
-                "title" => "title",
-                "original_title" => "originaltitle",
-                "overview" => "plot",
-                "runtime" | "runtime_minutes" => "runtime",
-                "year" => "year",
-                "season" => "season",
-                "episode" => "episode",
-                "attribution" => "sourceattribution",
-                "source_license" => "sourcelicense",
-                "catalog_number" if item.kind == MediaKind::AdultVideo => "catalognumber",
-                "namespace" | "catalog_namespace" if item.kind == MediaKind::AdultVideo => {
-                    "catalognamespace"
-                }
-                "studio" if item.kind == MediaKind::AdultVideo => "studio",
-                "label" if item.kind == MediaKind::AdultVideo => "label",
-                "series" if item.kind == MediaKind::AdultVideo => "set",
-                "release_date" if item.kind == MediaKind::AdultVideo => "releasedate",
-                _ => continue,
-            };
-            if let Some(text) = value
-                .value
-                .as_str()
-                .map(str::to_owned)
-                .or_else(|| value.value.as_i64().map(|v| v.to_string()))
-                .or_else(|| {
-                    value
-                        .value
-                        .get("normalized")
-                        .and_then(serde_json::Value::as_str)
-                        .map(str::to_owned)
-                })
-            {
-                if !text.trim().is_empty() {
-                    if matches!(tag, "sourceattribution" | "sourcelicense") {
-                        let credit = fields.entry(tag).or_default();
-                        if !credit.lines().any(|line| line == text) {
-                            if !credit.is_empty() {
-                                credit.push('\n');
-                            }
-                            credit.push_str(&text);
-                        }
-                    } else {
-                        fields.insert(tag, text);
-                    }
-                }
-            }
-        }
-    }
-    let mut result = format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<{root}>\n");
-    for (tag, value) in fields {
-        result.push_str(&format!("  <{tag}>{}</{tag}>\n", xml_escape(&value)));
-    }
-    if item.kind == MediaKind::AdultVideo {
-        for key in ["performers", "directors"] {
-            let chosen = values
-                .iter()
-                .filter(|value| value.field_key == key)
-                .max_by_key(|value| value.is_protected());
-            if let Some(people) = chosen.and_then(|value| value.value.as_array()) {
-                for person in people.iter().take(200) {
-                    if let Some(name) = person.get("name").and_then(serde_json::Value::as_str) {
-                        if key == "performers" {
-                            result.push_str(&format!(
-                                "  <actor><name>{}</name></actor>\n",
-                                xml_escape(name)
-                            ));
-                        } else {
-                            result.push_str(&format!(
-                                "  <director>{}</director>\n",
-                                xml_escape(name)
-                            ));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    for id in ids {
-        result.push_str(&format!(
-            "  <uniqueid type=\"{}\" default=\"{}\">{}</uniqueid>\n",
-            xml_escape(&id.namespace),
-            id.is_primary,
-            xml_escape(&id.external_id)
-        ));
-    }
-    result.push_str(&format!("</{root}>\n"));
-    validate_nfo(&result)?;
-    Ok(result)
+    crate::kodi_nfo::render_nfo(item, values, ids, &[], None)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1969,6 +2104,211 @@ mod tests {
         let service = MediaOutputService::new(repo.clone(), temporary.path().join("cache"));
         (temporary, repo, service, media_id)
     }
+    fn kodi_value(id: Uuid, key: &str, value: serde_json::Value) -> MetadataValue {
+        MetadataValue {
+            id: Uuid::new_v4(), media_item_id: id, field_key: key.into(), locale: None,
+            value, provider_id: Some("tmdb".into()), source_url: None, fetched_at: None,
+            confidence: None, is_user_modified: false, is_locked: false,
+        }
+    }
+    async fn save_kodi_value(repo: &LibraryRepository, value: MetadataValue) {
+        repo.save_metadata_value(&value, crate::library::MetadataWriteMode::User).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn online_kodi_export_writes_complete_metadata_and_https_artwork_without_images() {
+        let (temp, repo, service, id) = library().await;
+        save_kodi_value(&repo, kodi_value(id, "cast", serde_json::json!([
+            {"name":"Actor & Name", "role":"A <hero>", "order":0, "thumb":"https://image.tmdb.org/t/p/w185/actor.jpg"}
+        ]))).await;
+        save_kodi_value(&repo, kodi_value(id, "nfo_artwork", serde_json::json!([
+            {"kind":"poster","url":"https://image.tmdb.org/t/p/original/poster.jpg"},
+            {"kind":"backdrop","url":"https://image.tmdb.org/t/p/original/fanart.jpg"}
+        ]))).await;
+        let preview = service.preview_with_mode(id, NfoExportMode::Online).await.unwrap();
+        assert_eq!(preview.files.len(), 1);
+        let xml = preview.files[0].new_text.as_ref().unwrap();
+        assert!(xml.contains("<role>A &lt;hero&gt;</role>"));
+        assert!(xml.contains("<thumb aspect=\"poster\">https://image.tmdb.org/t/p/original/poster.jpg</thumb>"));
+        assert!(xml.contains("<fanart><thumb>https://image.tmdb.org/t/p/original/fanart.jpg</thumb></fanart>"));
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        let result = service.execute(preview.preview_id).await.unwrap();
+        assert_eq!(result.written, 1);
+        assert!(!temp.path().join("media/Example-poster.jpg").exists());
+        assert_eq!(std::fs::read(temp.path().join("media/Example.mkv")).unwrap(), b"untouched video bytes");
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn offline_kodi_export_writes_real_image_formats_and_only_local_references() {
+        let (temp, repo, service, id) = library().await;
+        let image = png();
+        for name in ["poster.png", "fanart.png", "actor.png"] {
+            std::fs::write(temp.path().join("media").join(name), &image).unwrap();
+        }
+        save_kodi_value(&repo, kodi_value(id, "nfo_artwork", serde_json::json!([
+            {"kind":"poster","url":"poster.png"}, {"kind":"backdrop","url":"fanart.png"}
+        ]))).await;
+        save_kodi_value(&repo, kodi_value(id, "cast", serde_json::json!([
+            {"name":"Actor", "role":"Lead", "thumb":"actor.png"}
+        ]))).await;
+        let preview = service.preview_with_mode(id, NfoExportMode::Offline).await.unwrap();
+        assert_eq!(preview.files.len(), 4);
+        assert!(preview.files.iter().any(|file| file.kind == "poster"));
+        assert!(preview.files.iter().any(|file| file.kind == "fanart"));
+        assert!(preview.files.iter().any(|file| file.kind == "actor_thumb"));
+        let nfo = preview.files.iter().find(|file| file.kind == "nfo").unwrap().new_text.as_ref().unwrap();
+        assert!(nfo.contains("<thumb aspect=\"poster\">Example-poster.png</thumb>"));
+        assert!(nfo.contains("<fanart><thumb>Example-fanart.png</thumb></fanart>"));
+        assert!(!nfo.contains("https://"));
+        assert!(!temp.path().join("media/Example-poster.png").exists());
+        assert_eq!(service.execute(preview.preview_id).await.unwrap().written, 4);
+        for file in preview.files.iter().filter(|file| file.kind != "nfo") {
+            assert_eq!(std::fs::read(temp.path().join("media").join(&file.destination)).unwrap(), image);
+        }
+        assert_eq!(std::fs::read(temp.path().join("media/Example.mkv")).unwrap(), b"untouched video bytes");
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn explicit_kodi_export_updates_existing_nfo_but_keeps_locks_and_unknown_xml() {
+        let (temp, repo, service, id) = library().await;
+        let path = temp.path().join("media/Example.nfo");
+        let old = "<movie custom=\"keep\"><title>Hand title</title><plot>Old plot</plot><!-- keep --><extension value=\"local\"/></movie>";
+        std::fs::write(&path, old).unwrap();
+        let mut title = kodi_value(id, "title", serde_json::json!("Hand title"));
+        title.is_locked = true;
+        title.is_user_modified = true;
+        save_kodi_value(&repo, title).await;
+        save_kodi_value(&repo, kodi_value(id, "overview", serde_json::json!("Updated plot"))).await;
+        save_kodi_value(&repo, kodi_value(id, "genres", serde_json::json!(["Drama"]))).await;
+        save_kodi_value(&repo, kodi_value(id, "cast", serde_json::json!([{"name":"Actor", "role":"Lead"}]))).await;
+        let preview = service.preview_with_mode(id, NfoExportMode::Online).await.unwrap();
+        assert_eq!(preview.strategy, "update_nfo");
+        assert_eq!(preview.files.len(), 1);
+        assert!(!preview.files[0].protected);
+        let xml = preview.files[0].new_text.as_ref().unwrap();
+        for expected in ["custom=\"keep\"", "<title>Hand title</title>", "<plot>Updated plot</plot>", "<!-- keep -->", "<extension value=\"local\"/>", "<genre>Drama</genre>", "<role>Lead</role>"] {
+            assert!(xml.contains(expected), "{expected}");
+        }
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), old);
+        assert_eq!(service.execute(preview.preview_id).await.unwrap().written, 1);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), *xml);
+        assert!(service.execute(preview.preview_id).await.unwrap().already_applied);
+        assert_eq!(std::fs::read(temp.path().join("media/Example.mkv")).unwrap(), b"untouched video bytes");
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn changed_nfo_after_export_preview_is_not_overwritten() {
+        let (temp, repo, service, id) = library().await;
+        let path = temp.path().join("media/Example.nfo");
+        std::fs::write(&path, "<movie><title>Original</title></movie>").unwrap();
+        save_kodi_value(&repo, kodi_value(id, "overview", serde_json::json!("New plot"))).await;
+        let preview = service.preview_with_mode(id, NfoExportMode::Online).await.unwrap();
+        let changed = "<movie><title>Concurrent manual edit</title></movie>";
+        std::fs::write(&path, changed).unwrap();
+        assert_eq!(service.execute(preview.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), changed);
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn manual_rescrape_does_not_reimport_old_runtime_or_keep_cleared_remote_cast() {
+        let (temp, repo, service, id) = library().await;
+        let old = "<movie><title>Old title</title><runtime>95</runtime><uniqueid type=\"tmdb\">1</uniqueid><actor><name>Old actor</name><thumb>https://image.tmdb.org/t/p/w185/old.jpg</thumb></actor></movie >";
+        std::fs::write(temp.path().join("media/Example.nfo"), old).unwrap();
+        repo.save_external_id(&mediaatlas_domain::ExternalId {
+            id: Uuid::new_v4(), media_item_id: id, provider_id: "tmdb".into(),
+            namespace: "tmdb".into(), external_id: "2".into(),
+            is_primary: true, created_at: Utc::now(),
+        }).await.unwrap();
+        save_kodi_value(&repo, kodi_value(id, "runtime_minutes", serde_json::json!(100))).await;
+        save_kodi_value(&repo, kodi_value(id, "cast", serde_json::json!([]))).await;
+        let preview = service.preview_with_mode(id, NfoExportMode::Offline).await.unwrap();
+        let xml = preview.files[0].new_text.as_ref().unwrap();
+        assert!(xml.contains("<runtime>100</runtime>"));
+        assert!(!xml.contains("<actor>"));
+        assert!(!xml.contains("https://"));
+        assert!(xml.contains("<uniqueid type=\"tmdb\" default=\"true\">2</uniqueid>"));
+        assert!(!xml.contains(">1</uniqueid>"));
+        assert!(roxmltree::Document::parse(xml).is_ok());
+        repo.pool().close().await;
+    }
+
+    #[test]
+    fn nfo_publication_never_clobbers_a_file_created_after_the_before_image_was_captured() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = open_absolute_dir(temp.path(), false).unwrap();
+        let old = b"<movie><title>Old</title></movie>";
+        let new = b"<movie><title>Exported</title></movie>";
+        let external = b"<movie><title>Concurrent editor</title></movie>";
+        std::fs::write(temp.path().join("movie.nfo"), old).unwrap();
+        let calls = std::cell::Cell::new(0);
+        let preview = Uuid::new_v4();
+        let result = atomic_replace_nfo(&dir, Path::new("movie.nfo"), new, &hash(old), preview, || {
+            calls.set(calls.get() + 1);
+            if calls.get() == 2 {
+                std::fs::write(temp.path().join("movie.nfo"), external).unwrap();
+            }
+            Ok(())
+        });
+        assert_eq!(result.unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(std::fs::read(temp.path().join("movie.nfo")).unwrap(), external);
+        assert_eq!(std::fs::read(temp.path().join(nfo_backup_name(preview))).unwrap(), old);
+    }
+
+    #[tokio::test]
+    async fn interrupted_nfo_capture_is_resumed_only_by_explicit_export_execution() {
+        let (temp, repo, service, id) = library().await;
+        let path = temp.path().join("media/Example.nfo");
+        let old = "<movie><title>Existing title</title></movie>";
+        std::fs::write(&path, old).unwrap();
+        save_kodi_value(&repo, kodi_value(id, "overview", serde_json::json!("New plot"))).await;
+        let preview = service.preview_with_mode(id, NfoExportMode::Online).await.unwrap();
+        let backup = temp.path().join("media").join(nfo_backup_name(preview.preview_id));
+        std::fs::rename(&path, &backup).unwrap();
+        sqlx::query("UPDATE file_operations SET state='interrupted' WHERE id=?")
+            .bind(preview.preview_id.to_string()).execute(repo.pool()).await.unwrap();
+        let source = repo.list_files(id).await.unwrap().remove(0);
+        assert_eq!(service.preview_inner(id, true, Some(source.id), NfoExportMode::Online, false).await.unwrap_err(), RepositoryError::Conflict);
+        assert!(!path.exists());
+        service.execute(preview.preview_id).await.unwrap();
+        assert!(std::fs::read_to_string(&path).unwrap().contains("<plot>New plot</plot>"));
+        assert_eq!(std::fs::read_to_string(backup).unwrap(), old);
+        assert!(service.execute(preview.preview_id).await.unwrap().already_applied);
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn nested_chinese_movie_exports_keep_same_named_files_in_their_own_directories() {
+        let (temp, repo, service, first) = library().await;
+        let original = repo.list_files(first).await.unwrap().remove(0);
+        let mut ids = Vec::new();
+        for (index, directory) in ["无敌破坏王/无敌破坏1", "无敌破坏王/无敌破坏2"].iter().enumerate() {
+            let id = if index == 0 { first } else { Uuid::new_v4() };
+            let mut item = repo.get_media(first).await.unwrap().unwrap();
+            item.id = id;
+            item.title = format!("无敌破坏{}", index + 1);
+            repo.save_media(&item).await.unwrap();
+            let relative = format!("{directory}/正片.mp4");
+            let parent = temp.path().join("media").join(directory);
+            std::fs::create_dir_all(&parent).unwrap();
+            std::fs::write(parent.join("正片.mp4"), b"unchanged nested movie").unwrap();
+            repo.save_file(&MediaFile { id: if index == 0 { original.id } else { Uuid::new_v4() }, media_item_id: id, root_id: original.root_id, relative_path: relative, size_bytes: 22, modified_at: None, part: None }).await.unwrap();
+            let preview = service.preview_with_mode(id, NfoExportMode::Online).await.unwrap();
+            assert_eq!(preview.files[0].destination, format!("{directory}/正片.nfo"));
+            ids.push((preview.preview_id, parent, item.title));
+        }
+        for (preview, parent, title) in ids {
+            service.execute(preview).await.unwrap();
+            assert!(std::fs::read_to_string(parent.join("正片.nfo")).unwrap().contains(&format!("<title>{title}</title>")));
+            assert_eq!(std::fs::read(parent.join("正片.mp4")).unwrap(), b"unchanged nested movie");
+        }
+        assert!(!temp.path().join("media/正片.nfo").exists());
+        repo.pool().close().await;
+    }
+
     async fn adult_library() -> (
         tempfile::TempDir,
         LibraryRepository,
@@ -2389,7 +2729,7 @@ mod tests {
         sqlx::query("UPDATE root_settings SET metadata_providers_json=NULL WHERE root_id=?")
             .bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
         let preview = service
-            .preview_inner(id, true, Some(source.id))
+            .preview_inner(id, true, Some(source.id), NfoExportMode::Online, false)
             .await
             .unwrap();
         sqlx::query("INSERT INTO root_settings(root_id,exclude_patterns_json) VALUES(?, '[\"**/*.mkv\"]') ON CONFLICT(root_id) DO UPDATE SET exclude_patterns_json=excluded.exclude_patterns_json").bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
@@ -2527,7 +2867,7 @@ mod tests {
     #[tokio::test]
     async fn automatic_nfo_preserves_a_late_external_sidecar_with_different_casing() {
         let (temp, _, service, id) = library().await;
-        let preview = service.preview_inner(id, true, None).await.unwrap();
+        let preview = service.preview_inner(id, true, None, NfoExportMode::Online, false).await.unwrap();
         let local = "<movie><title>Late external sidecar</title></movie>";
         std::fs::write(temp.path().join("media/MOVIE.NFO"), local).unwrap();
         assert_eq!(

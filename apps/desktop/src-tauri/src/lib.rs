@@ -239,7 +239,7 @@ pub(crate) fn initialize_desktop(app: &tauri::AppHandle) -> Result<(), Box<dyn s
         let output = mediaatlas_infrastructure::media_output::MediaOutputService::new(
             repository.clone(),
             cache.clone(),
-        );
+        ).with_network_engine(engine.clone());
         output.recover_interrupted().await?;
         let scraper = mediaatlas_infrastructure::scraper::ScraperService::new(
             repository.clone(),

@@ -52,3 +52,34 @@ it("serializes startup and opened events so an empty replay cannot discard the p
   await waitFor(() => expect(nfoApi.takeOpened).toHaveBeenCalledTimes(2));
   expect(screen.getByRole("heading", { name: "Atlas" })).toBeInTheDocument();
 });
+
+it("shows Kodi actor roles once and treats every image reference as inert text", async () => {
+  vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({
+    ...document,
+    metadata: {
+      external_ids: [],
+      fields: {
+        title: "Atlas",
+        cast: [
+          { name: "Actor A", role: "Lead", thumb: "https://image.tmdb.org/actor.jpg" },
+          { name: "Actor B", role: "<img src=x onerror=alert(1)>" },
+        ],
+        people: ["Actor A", "Actor B"],
+        writers: ["Writer"],
+        nfo_artwork: [
+          { kind: "poster", url: "https://image.tmdb.org/poster.jpg" },
+          { kind: "backdrop", url: "Atlas-fanart.jpg" },
+        ],
+      },
+    },
+  });
+  const { container } = render(<NfoPage />);
+  expect(await screen.findByText("Actor A (Lead)", { exact: false })).toBeInTheDocument();
+  expect(screen.getByText("Cast and roles")).toBeInTheDocument();
+  expect(screen.queryByText("People")).not.toBeInTheDocument();
+  expect(screen.getByText("Actor B (<img src=x onerror=alert(1)>)", { exact: false })).toBeInTheDocument();
+  expect(screen.queryByText(/actor\.jpg/)).not.toBeInTheDocument();
+  expect(screen.getByText("Image references")).toBeInTheDocument();
+  expect(screen.getByText(/https:\/\/image\.tmdb\.org\/poster\.jpg/)).toBeInTheDocument();
+  expect(container.querySelector("img,video,audio,iframe,object,embed,a[href]")).toBeNull();
+});

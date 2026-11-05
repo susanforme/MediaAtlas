@@ -333,6 +333,75 @@ it("loads only an explicitly requested validated thumbnail without changing artw
     ),
   );
 });
+it("discards the previous NFO preview when its export mode changes and writes only the new proof", async () => {
+  await searchAndChoose();
+  await confirmMerge();
+  await openOutputPreview();
+  await screen.findByText("/synthetic/library/film.nfo");
+  const mode = screen.getByRole("combobox", { name: "NFO export mode" });
+  expect(mode).toHaveValue("online");
+  chooseSelectOption(mode, "offline");
+  await waitFor(() =>
+    expect(scraperOutputApi.discard).toHaveBeenCalledExactlyOnceWith("output-1"),
+  );
+  expect(screen.queryByText("/synthetic/library/film.nfo")).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+  vi.mocked(scraperOutputApi.preview).mockResolvedValue({
+    ...syntheticOutput,
+    preview_id: "offline-output",
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Preview NFO and poster output" }));
+  await screen.findByText("/synthetic/library/film.nfo");
+  expect(scraperOutputApi.preview).toHaveBeenLastCalledWith("media-1", "offline");
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and write sidecars" }));
+  await waitFor(() =>
+    expect(scraperOutputApi.execute).toHaveBeenCalledExactlyOnceWith("offline-output"),
+  );
+});
+it("shows the existing-NFO update consequence before the same explicit write confirmation", async () => {
+  vi.mocked(scraperOutputApi.preview).mockResolvedValue({
+    ...syntheticOutput,
+    strategy: "update_nfo",
+  });
+  await searchAndChoose();
+  await confirmMerge();
+  await openOutputPreview();
+  expect(await screen.findByText(
+    "Confirmation updates the existing NFO. Video files are not modified.",
+  )).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Confirm and write sidecars" })).toBeEnabled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("releases an old mode's late preview without replacing the current NFO proof", async () => {
+  let finish!: (value: typeof syntheticOutput) => void;
+  vi.mocked(scraperOutputApi.preview)
+    .mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+    .mockResolvedValue({
+      ...syntheticOutput,
+      preview_id: "offline-output",
+      files: syntheticOutput.files.map((file) => ({ ...file, destination: "/synthetic/offline.nfo" })),
+    });
+  await searchAndChoose();
+  await confirmMerge();
+  await openOutputPreview();
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalledWith("media-1", "online"));
+  const mode = screen.getByRole("combobox", { name: "NFO export mode" });
+  expect(mode).toBeEnabled();
+  chooseSelectOption(mode, "offline");
+  fireEvent.click(screen.getByRole("button", { name: "Preview NFO and poster output" }));
+  await screen.findByText("/synthetic/offline.nfo");
+  await act(async () => finish(syntheticOutput));
+  await waitFor(() =>
+    expect(scraperOutputApi.discard).toHaveBeenCalledExactlyOnceWith("output-1"),
+  );
+  expect(screen.queryByText("/synthetic/library/film.nfo")).not.toBeInTheDocument();
+  expect(screen.getByText("/synthetic/offline.nfo")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm and write sidecars" }));
+  await waitFor(() =>
+    expect(scraperOutputApi.execute).toHaveBeenCalledExactlyOnceWith("offline-output"),
+  );
+});
 it("does not search automatically and validates input before invoking providers", async () => {
   show();
   await screen.findByText("TMDB");
@@ -959,7 +1028,7 @@ it("discards a late output preview from a queue item after an external route cha
   await act(async () => {
     fireEvent.click(outputButton);
   });
-  expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1");
+  expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1", "online");
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled(),
   );
@@ -1703,6 +1772,7 @@ it.each(["execute", "discard"] as const)(
     await waitFor(() =>
       expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith(
         "media-1",
+        "online",
       ),
     );
     const click = clickFirstEnabledCommit(

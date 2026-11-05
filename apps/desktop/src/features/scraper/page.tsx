@@ -587,7 +587,7 @@ function ScraperWorkspace({
               {t("scraperOutputTitle")}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              {t("scraperOutputHelp")}
+              {t(output.strategy === "update_nfo" ? "scraperOutputUpdateHelp" : "scraperOutputHelp")}
             </p>
             {output.files.map((file, index) => (
               <article key={index} className="scraper-output-file">

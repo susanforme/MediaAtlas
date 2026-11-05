@@ -359,7 +359,7 @@ export interface ScraperHistoryEntry {
 }
 export interface OutputFile {
   destination: string;
-  kind: "nfo" | "poster";
+  kind: "nfo" | "poster" | "fanart" | "actor_thumb";
   old_text: string | null;
   new_text: string | null;
   expected_hash: string | null;
@@ -370,7 +370,7 @@ export interface OutputPreview {
   schema_version: 1;
   preview_id: string;
   media_item_id: string;
-  strategy: "preserve";
+  strategy: "preserve" | "update_nfo";
   files: OutputFile[];
   state: string;
 }
@@ -382,20 +382,21 @@ export interface OutputResult {
   already_applied: boolean;
   state: string;
 }
+export type NfoExportMode = "online" | "offline";
 function outputPreview(v: unknown): v is OutputPreview {
   return (
     object(v) &&
     v.schema_version === 1 &&
     text(v.preview_id) &&
     text(v.media_item_id) &&
-    v.strategy === "preserve" &&
+    (v.strategy === "preserve" || v.strategy === "update_nfo") &&
     text(v.state) &&
     list(
       v.files,
       (f): f is OutputFile =>
         object(f) &&
         text(f.destination) &&
-        ["nfo", "poster"].includes(String(f.kind)) &&
+        ["nfo", "poster", "fanart", "actor_thumb"].includes(String(f.kind)) &&
         nullableText(f.old_text) &&
         nullableText(f.new_text) &&
         nullableText(f.expected_hash) &&
@@ -440,8 +441,8 @@ export const scraperOutputApi = {
       { preview_id: previewId },
       (v): v is null => v === null,
     ),
-  preview: (mediaId: string) =>
-    request("scraper_output_preview", { media_id: mediaId }, outputPreview),
+  preview: (mediaId: string, mode: NfoExportMode = "online") =>
+    request("scraper_output_preview", { media_id: mediaId, mode }, outputPreview),
   execute: (previewId: string) =>
     request("scraper_output_execute", { preview_id: previewId }, outputResult),
   history: () => request("scraper_history", {}, history),

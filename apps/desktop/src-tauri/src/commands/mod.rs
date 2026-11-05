@@ -411,6 +411,13 @@ pub struct ScraperMediaInput {
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
+pub struct ScraperOutputInput {
+    media_id: Uuid,
+    #[serde(default)]
+    mode: mediaatlas_infrastructure::media_output::NfoExportMode,
+}
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScraperArtworkInput {
     run_id: Uuid,
     candidate_index: usize,
@@ -480,11 +487,11 @@ pub async fn scraper_history(
 #[tauri::command]
 pub async fn scraper_output_preview(
     state: State<'_, DesktopState>,
-    input: ScraperMediaInput,
+    input: ScraperOutputInput,
 ) -> Result<ApiResponse<mediaatlas_infrastructure::media_output::OutputPreview>, ErrorDto> {
     state
         .output
-        .preview(input.media_id)
+        .preview_with_mode(input.media_id, input.mode)
         .await
         .map(ApiResponse::new)
         .map_err(storage_error)
