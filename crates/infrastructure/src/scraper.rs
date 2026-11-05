@@ -626,7 +626,7 @@ impl ScraperService {
             sqlx::query("DELETE FROM external_ids WHERE media_item_id=?")
                 .bind(media.id.to_string()).execute(&mut *tx).await?;
             // Only remove database indices. Local images and source media remain read-only.
-            sqlx::query("DELETE FROM artworks WHERE media_item_id=? AND provider_id IS NOT NULL")
+            sqlx::query("DELETE FROM artworks WHERE media_item_id=?")
                 .bind(media.id.to_string()).execute(&mut *tx).await?;
         }
         for external in &detail.identity().external_ids {
@@ -1240,8 +1240,7 @@ mod tests {
         assert!(values.contains(&protected));
         assert_eq!(s.repo.get_media(s.media.id).await.unwrap().unwrap().title, "Provider title");
         let art = s.repo.list_artworks(s.media.id).await.unwrap();
-        assert_eq!(art.len(), 1);
-        assert_eq!(art[0].provider_id, None);
+        assert!(art.is_empty());
         assert_eq!(std::fs::read(s.dir.path().join("old-poster.jpg")).unwrap(), b"old local picture remains read-only");
         assert_eq!(std::fs::read(s.dir.path().join("Example.mkv")).unwrap(), b"synthetic source media must stay intact");
         s.server.abort();
