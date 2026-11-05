@@ -34,6 +34,7 @@ it("previews escaped text and keeps the document when file selection is cancelle
   vi.mocked(nfoApi.open).mockResolvedValueOnce(null);
   const { container } = render(<NfoPage />);
   await screen.findByRole("heading", { name: "Atlas" });
+  expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
   expect(container.querySelector("img,video,audio,iframe")).toBeNull();
   expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Open NFO" }));
@@ -82,4 +83,24 @@ it("shows Kodi actor roles once and treats every image reference as inert text",
   expect(screen.getByText("Image references")).toBeInTheDocument();
   expect(screen.getByText(/https:\/\/image\.tmdb\.org\/poster\.jpg/)).toBeInTheDocument();
   expect(container.querySelector("img,video,audio,iframe,object,embed,a[href]")).toBeNull();
+});
+
+it("reuses the detail view without library controls, invented status or missing field labels", async () => {
+  vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({ ...document, metadata: { fields: { title: "Sparse NFO", directors: [], studios: null }, external_ids: [] } });
+  const { container } = render(<NfoPage />);
+  await screen.findByRole("heading", { level: 1, name: "Sparse NFO" });
+  expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
+  expect(container.querySelector("aside,img,a[href]")).toBeNull();
+  expect(screen.queryByText("Director")).not.toBeInTheDocument();
+  expect(screen.queryByText("Studios")).not.toBeInTheDocument();
+  expect(screen.queryByText("Metadata and media status")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /Open in system app/ })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Local files" })).not.toBeInTheDocument();
+});
+
+it("uses the filename once when the NFO has no title", async () => {
+  vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({ ...document, metadata: { fields: {}, external_ids: [] } });
+  render(<NfoPage />);
+  await screen.findByRole("heading", { level: 1, name: "sample.nfo" });
+  expect(screen.getAllByText("sample.nfo")).toHaveLength(1);
 });

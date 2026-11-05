@@ -2,7 +2,7 @@
   "schema_version": 1,
   "scope": "Complete Cargo.lock and pnpm-lock.yaml package union; includes dependencies not shipped on every target.",
   "lockfiles": {
-    "Cargo.lock": "057d4dd293104220dcf17de7e34b7080a35f1c24801991710274369dad8a4f0e",
+    "Cargo.lock": "1da868afaf13e7043a859b5a387137b0910a3ea9e462d3d065131de848cf5148",
     "pnpm-lock.yaml": "7528b7d05ef3627253a4525312003d21530993b16e6f8a90b9bad322396dc531"
   },
   "missing_notices": [],
@@ -17300,8 +17300,8 @@
       "ecosystem": "native",
       "name": "NSIS installer stub and bundled standard plugins",
       "version": "3.13",
-      "license": "Zlib",
-      "scope": "Windows NSIS installer selects bzip2 compression; COPYING also preserves terms for unselected archive compression modules",
+      "license": "Zlib AND CPL-1.0",
+      "scope": "Windows NSIS installer selects LZMA compression; original COPYING preserves CPL-1.0 with the explicit NSIS linking exception and terms for unselected archive compression modules",
       "notices": [
         {
           "path": "docs/third-party-licenses/native/NSIS-COPYING.txt",
@@ -17310,7 +17310,7 @@
           "origin": "https://github.com/tauri-apps/binary-releases/releases/download/nsis-3.13/nsis-3.13.zip"
         }
       ],
-      "archive_additional_unselected_module_terms": ["BZip2-1.0.6", "CPL-1.0"],
+      "archive_additional_unselected_module_terms": ["BZip2-1.0.6"],
       "notice_provenance": "upstream_file"
     },
     {

@@ -88,6 +88,7 @@ beforeEach(async () => {
 
 it("shows real movie details and opens only the explicitly chosen local file", async () => {
   const { container } = show(detail);
+  expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
   expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
     "Local film",
   );

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, FileVideo, Film, LockKeyhole, Star, Wrench } from "lucide-react";
+import { ArrowLeft, FileVideo, Film, LockKeyhole, Wrench } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MediaDetail } from "../../api/library";
@@ -8,10 +8,10 @@ import { scraperApi, type SeasonDetail } from "../../api/scraper";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { VideoSourceDetails } from "../scraper/source-detail";
 import { DetailRecoveryAction } from "./detail-recovery-action";
-import { MediaArtwork } from "./media-artwork";
+import { MediaDetailTabs, MediaDetailView } from "./media-detail-view";
 import { NativeOpen, playableFiles } from "./native-open";
 import { ErrorNotice, HealthBadges, useFormat } from "./shared";
 import { videoDetailFields } from "./video-detail-model";
@@ -93,16 +93,14 @@ export function VideoDetail({
   sourceDetail?: ReactNode;
 }) {
   const { t, i18n } = useTranslation();
-  const { number, date } = useFormat();
+  const { number } = useFormat();
   const isSeries = detail.media.kind === "tv_series";
   const [tab, setTab] = useState(isSeries ? "seasons" : "files");
-  const [expanded, setExpanded] = useState(false);
   const source = useQuery({
     queryKey: ["video-source-detail", detail.media.id],
     queryFn: () => scraperApi.mediaDetail(detail.media.id),
   });
   const fields = videoDetailFields(detail, i18n.resolvedLanguage ?? "zh-CN");
-  const canExpand = fields.overview.length > 240;
   const missingNfo = detail.health.includes("missing_nfo");
   const failedNfo = detail.health.includes("nfo_output_failed");
   const playable = playableFiles(detail.files);
@@ -110,44 +108,36 @@ export function VideoDetail({
     (health) =>
       !["metadata_pending", "missing_nfo", "nfo_output_failed"].includes(health),
   );
+  const facts = [
+    { key: "directors", label: t("videoDetailDirector"), value: fields.directors.length ? fields.directors.join(" / ") : null },
+    { key: "cast", label: t("videoDetailCast"), value: fields.cast.length ? fields.cast.slice(0, 4).join(" / ") : null },
+    { key: "premiered", label: t("videoDetailPremiere"), value: fields.premiered || null },
+    { key: "language", label: t("language"), value: fields.language || null },
+    { key: "status", label: t("scraperField_status"), value: fields.status || null },
+    { key: "genres", label: t("scraperField_genres"), value: fields.genres.length ? <span className="flex flex-wrap gap-1.5">{fields.genres.map((genre) => <Badge key={genre} variant="secondary">{genre}</Badge>)}</span> : null },
+  ].filter((fact) => fact.value !== null);
   return (
-    <article className="min-w-0 [&_h2:not([data-slot=video-status-heading])]:mb-3 [&_h2:not([data-slot=video-status-heading])]:text-[20px] [&_h2:not([data-slot=video-status-heading])]:font-semibold">
-      <header className="relative isolate min-h-[300px] pt-0 pb-9 [@media(width<=760px)]:min-h-0">
-        {detail.poster_uri && (
-          <div className="pointer-events-none absolute -top-[104px] -right-10 -bottom-[70px] left-[35%] -z-1 overflow-hidden opacity-40 [mask-image:linear-gradient(to_right,transparent,black_35%),linear-gradient(to_bottom,black_40%,transparent)] [mask-composite:intersect] [&_img]:object-contain [&_img]:object-[right_top] [&_[data-slot=poster-placeholder]]:hidden [@media(width<=760px)]:-right-6 [@media(width<=760px)]:left-[20%] [@media(width<=760px)]:opacity-25" aria-hidden="true">
-            <MediaArtwork uri={detail.poster_uri} title="" eager />
-          </div>
-        )}
-        <div className="max-w-[900px]">
+    <MediaDetailView
+      title={detail.media.title}
+      originalTitle={detail.media.original_title}
+      year={detail.media.year}
+      kind={t(`kind_${detail.media.kind}`)}
+      runtime={fields.runtime}
+      genres={fields.genres}
+      rating={fields.rating}
+      poster={{ uri: detail.poster_uri, updatedAt: detail.media.updated_at }}
+      overview={fields.overview}
+      facts={facts}
+      navigation={
           <Button asChild variant="secondary" className="mb-6">
             <Link to="/library" search={{}}>
               <ArrowLeft size={17} aria-hidden="true" />
               {t("backToLibrary")}
             </Link>
           </Button>
-          <h1 className="m-0 max-w-[780px] text-[clamp(28px,3vw,42px)] leading-[1.2] font-[650] tracking-[-0.035em] [overflow-wrap:anywhere]">{detail.media.title}</h1>
-          {detail.media.original_title &&
-            detail.media.original_title !== detail.media.title && (
-              <p className="mt-2 text-[18px] text-foreground">
-                {detail.media.original_title}
-              </p>
-            )}
-          <div className="mt-4 flex flex-wrap items-center gap-x-3.5 gap-y-2 text-[14px] text-muted-foreground [&>span+span:not([data-slot=badge])]:before:mr-3.5 [&>span+span:not([data-slot=badge])]:before:content-['·']">
-            {detail.media.year !== null && <span>{detail.media.year}</span>}
-            <span>{t(`kind_${detail.media.kind}`)}</span>
-            {fields.runtime !== null && (
-              <span>{t("videoDetailRuntime", { count: fields.runtime })}</span>
-            )}
-            {fields.genres.length > 0 && <span>{fields.genres.join(" / ")}</span>}
-            {fields.rating && (
-              <Badge variant="secondary" className="gap-[7px] text-foreground [&_svg]:text-[color:var(--rating)] [&>span]:text-muted-foreground">
-                <Star size={17} aria-hidden="true" />
-                {number(fields.rating.value)}
-                <span>{fields.rating.provider ?? t("localMetadata")}</span>
-              </Badge>
-            )}
-          </div>
-          <div className="mt-6 flex flex-wrap items-center gap-3 [&>[data-slot=button]]:min-h-[46px]">
+      }
+      actions={
+        <>
             <NativeOpen files={detail.files} />
             <DetailRecoveryAction detail={detail} />
             <Button asChild variant="outline">
@@ -156,87 +146,9 @@ export function VideoDetail({
                 {t("videoTools")}
               </Link>
             </Button>
-          </div>
-        </div>
-      </header>
-      <div className="grid grid-cols-[minmax(180px,260px)_minmax(0,1fr)] items-start gap-8 [@media(760px<width<=1350px)]:grid-cols-[minmax(160px,220px)_minmax(0,1fr)] [@media(width<=1350px)]:gap-6 [@media(width<=760px)]:grid-cols-[minmax(0,1fr)]">
-        <aside className="[@media(width<=760px)]:max-w-[180px]">
-          <div className="poster-image aspect-2/3 overflow-hidden rounded-[14px] border border-input bg-muted">
-            <MediaArtwork uri={detail.poster_uri} title={detail.media.title} eager />
-          </div>
-          <p className="mt-3.5 text-[12px] text-muted-foreground">
-            {t("updated")} {date(detail.media.updated_at)}
-          </p>
-        </aside>
-        <div className="min-w-0">
-          <div className="mb-8 grid grid-cols-[minmax(0,1fr)_minmax(240px,280px)] items-start gap-6 [@media(width<=1350px)]:grid-cols-[minmax(0,1fr)]">
-            <section className="min-w-0">
-              {fields.overview && (
-                <>
-                  <h2 className="mb-3 text-[20px] font-semibold">{t("videoDetailOverview")}</h2>
-                  <p
-                    className={
-                      `whitespace-pre-line leading-[1.8] text-muted-foreground${canExpand && !expanded ? " line-clamp-3" : ""}`
-                    }
-                  >
-                    {fields.overview}
-                  </p>
-                  {canExpand && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="mt-1.5 mr-0 mb-0 ml-auto flex text-ring"
-                      aria-expanded={expanded}
-                      onClick={() => setExpanded(!expanded)}
-                    >
-                      {t(expanded ? "videoDetailCollapse" : "videoDetailExpand")}
-                    </Button>
-                  )}
-                </>
-              )}
-              <dl className="mt-6 grid gap-4 [&>div]:grid [&>div]:grid-cols-[90px_minmax(0,1fr)] [&>div]:gap-3 [&>div]:text-[14px] [&_dt]:text-muted-foreground [&_dd]:[overflow-wrap:anywhere]">
-                {fields.directors.length > 0 && (
-                  <div>
-                    <dt>{t("videoDetailDirector")}</dt>
-                    <dd>{fields.directors.join(" / ")}</dd>
-                  </div>
-                )}
-                {fields.cast.length > 0 && (
-                  <div>
-                    <dt>{t("videoDetailCast")}</dt>
-                    <dd>{fields.cast.slice(0, 4).join(" / ")}</dd>
-                  </div>
-                )}
-                {fields.premiered && (
-                  <div>
-                    <dt>{t("videoDetailPremiere")}</dt>
-                    <dd>{fields.premiered}</dd>
-                  </div>
-                )}
-                {fields.language && (
-                  <div>
-                    <dt>{t("language")}</dt>
-                    <dd>{fields.language}</dd>
-                  </div>
-                )}
-                {fields.status && (
-                  <div>
-                    <dt>{t("scraperField_status")}</dt>
-                    <dd>{fields.status}</dd>
-                  </div>
-                )}
-                {fields.genres.length > 0 && (
-                  <div>
-                    <dt>{t("scraperField_genres")}</dt>
-                    <dd className="flex flex-wrap gap-1.5">
-                      {fields.genres.map((genre) => (
-                        <Badge key={genre} variant="secondary">{genre}</Badge>
-                      ))}
-                    </dd>
-                  </div>
-                )}
-              </dl>
-            </section>
+        </>
+      }
+      status={
             <Card asChild className="p-5 sm:p-5">
               <aside
                 aria-label={t("videoDetailStatus")}
@@ -285,9 +197,10 @@ export function VideoDetail({
                 )}
               </aside>
             </Card>
-          </div>
+      }
+    >
           {sourceDetail}
-          <Tabs value={tab} onValueChange={setTab} className="[&>[data-slot=tabs-list]]:flex [&>[data-slot=tabs-list]]:w-full [&>[data-slot=tabs-list]]:justify-start [&>[data-slot=tabs-list]]:gap-2 [&>[data-slot=tabs-list]]:overflow-x-auto [&>[data-slot=tabs-list]]:rounded-none [&>[data-slot=tabs-list]]:border-b [&>[data-slot=tabs-list]]:border-border [&>[data-slot=tabs-list]]:bg-transparent [&>[data-slot=tabs-list]]:p-0 [&>[data-slot=tabs-list]]:pb-2.5 [&_[data-slot=tabs-trigger]]:shrink-0 [&_[data-slot=tabs-trigger]]:min-h-10 [&_[data-slot=tabs-trigger]]:rounded-[10px] [&_[data-slot=tabs-trigger]]:bg-muted [&_[data-slot=tabs-trigger]]:px-[18px] [&_[data-slot=tabs-trigger]]:whitespace-nowrap [&_[data-slot=tabs-trigger][data-state=active]]:bg-primary [&_[data-slot=tabs-trigger][data-state=active]]:text-primary-foreground [&>[data-slot=tabs-content]]:mt-[18px]">
+          <MediaDetailTabs value={tab} onValueChange={setTab}>
             <TabsList aria-label={t("detailsAction")}>
               <TabsTrigger value="files">{t("videoDetailFiles")}</TabsTrigger>
               {isSeries && (
@@ -443,9 +356,7 @@ export function VideoDetail({
                 </ul>
               </TabsContent>
             )}
-          </Tabs>
-        </div>
-      </div>
-    </article>
+          </MediaDetailTabs>
+    </MediaDetailView>
   );
 }

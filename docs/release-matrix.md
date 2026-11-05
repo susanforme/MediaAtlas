@@ -1,5 +1,11 @@
 # 发布矩阵与验证
 
+本轮准备发布 `v0.1.0-beta.10`：NFO 与媒体库详情复用纯展示组件，缺失资料区域省略；包内许可材料移至 Release 附件，Rust 发布编译、NSIS 与 ZIP 同步优化体积。版本清单及锁文件统一为 beta.10，许可清单锁文件指纹同步更新。遵守用户要求不执行本地项目、脚本、测试、格式化、构建或安装；新版本体积、四平台构建与包内材料排除结果以新标签的云端发布为准。
+
+2026-11-05 当前安装包策略：所有平台的安装资源与可执行文件均不再包含许可材料，也不提供运行时许可导出命令。完整 `LICENSE.md`、`THIRD_PARTY_NOTICES.md`、`dependency-licenses.json`、`license-materials.zip` 继续作为 Release 附件分发并校验 SHA-256。Windows NSIS 改用 Tauri 默认的 LZMA 压缩，便携 ZIP 与许可附件 ZIP 使用标准 Deflate 级别 9。实际瘦身幅度以新标签的四平台云端产物为准；本轮未运行本地构建、测试、脚本或安装包。
+
+Rust release 配置使用 `opt-level="s"`、thin LTO、单 codegen unit 和符号剥离。编译/链接可能更慢，原生回溯可能失去函数符号；panic 仍保持默认展开，错误清理路径继续保留。不能把配置变化当成已实测的体积下降，实际包大小由新标签云端产物确认。
+
 发布标签支持 `vX.Y.Z` 正式版和 `vX.Y.Z-beta.N` 预发布版（N 为正整数，所有数字段不含前导零）。workflow 接收 `v*`，预检拒绝其他格式，继续要求包清单、Tauri、Cargo workspace 与本项目锁文件版本完全一致。正式版设为 `prerelease=false`，通过 GitHub `make_latest=legacy` 按发布时间和语义版本决定 latest；beta 保持 `prerelease=true`、`make_latest=false`。四平台、来源绑定、草稿上传及资产完整性门槛共用。此脚本扩展不移动正在构建的 beta.9 标签。
 
 2026-11-05：按用户要求准备发布 `v0.1.0-beta.9`。桌面业务样式全部迁移为 Tailwind 4，删除 9 个组件/feature CSS 文件和启动页内联样式；全局仅保留主题 token 与 Tailwind reset。保留现有测试使用的语义 class/id，更新下拉菜单坐标与主题测试的实现引用，以及 QA 来源文件清单。根与前端 `AGENTS.md` 加入仅使用 Tailwind、保留 UI 的约束。根/desktop 包、Tauri 配置、Cargo workspace 与锁文件的六个本项目 crate 同步为 beta.9；第三方依赖不变。按用户要求仅静态阅读、修改和 diff 核对，未运行本地项目、测试、lint、构建、格式化或安装包，未生成本轮截图，实际视觉一致性未经渲染验证。发布沿用 tag 触发的 GitHub Actions 原生四平台构建与验证，只有远端门槛全部通过才公开 Release。以下 beta.8 及更早版本记录为历史背景。
@@ -29,7 +35,7 @@ beta.9 首次云端预检在 `bf0cd14` 因许可清单的 Cargo.lock 指纹仍�
 
 每个目标独立 job，`fail-fast: false`、`max-parallel: 4`。每 job 限制 `CARGO_BUILD_JOBS=2` 以降低内存峰值；缓存额外 key 包含 runner label、Rust target、Cargo.lock 和 rust-toolchain.toml 哈希，rust-cache 自身也隔离平台/toolchain。工具链固定为仓库 `rust-toolchain.toml`，显式安装目标 Rust 标准库；Node 24、pnpm 使用项目 `packageManager` 固定版本。
 
-每目标均运行 frontend tests、`cargo test --locked --target <native-target>` 和真实 `tauri build --ci --target ... -- --locked`。Linux 安装 WebKitGTK 4.1 等系统开发依赖；实际 Ubuntu 22.04 容器 apt-cache 已确认官方 jammy-updates 提供 libwebkit2gtk-4.1-dev 2.50.4，选择较早发行版以降低 glibc 基线；Windows 使用 MSVC/NSIS，release overlay 显式固定 build.windows.staticVCRuntime=true、bundleVCRuntime=false；实际应用 PE normal/delay imports 必须不依赖 VCRUNTIME/MSVCP 等额外 VC redistributable，便携 ZIP 不以 runner 已装开发工具当运行前提，NSIS 压缩显式采用 BZip2（其完整许可已随 NSIS 材料提供）；这修复完整许可树下 NSIS 3.13 solid zlib 无法被 7-Zip 提取的问题，复现证据见 [Windows hotfix](hotfix-windows-ci.md#nsis-package-extraction-2026-11-03)，macOS 使用原生 Apple 工具链。`tauri build` 负责前端生产编译。未采用插件自动发布，因为需要先验证完整矩阵再集中发布。
+每目标均运行 frontend tests、`cargo test --locked --target <native-target>` 和真实 `tauri build --ci --target ... -- --locked`。Linux 安装 WebKitGTK 4.1 等系统开发依赖，使用 Ubuntu 22.04 以降低 glibc 基线。Windows 使用 MSVC/NSIS，release overlay 显式固定 build.windows.staticVCRuntime=true、bundleVCRuntime=false；实际应用 PE normal/delay imports 必须不依赖 VCRUNTIME/MSVCP 等额外 VC redistributable，便携 ZIP 不以 runner 已装开发工具当运行前提。NSIS 当前显式采用 LZMA；此前 BZip2 解决旧 zlib 的 7-Zip 提取失败，仅为历史背景，见 [Windows hotfix](hotfix-windows-ci.md#nsis-package-extraction-2026-11-03)。macOS 使用原生 Apple 工具链。`tauri build` 负责前端生产编译，完整矩阵和资产验证通过后再集中发布。
 
 上述 label 文档、工作流静态校验以及 Linux 本地 Rust 通过，都不能替代 Windows/macOS 真实编译、启动或安装验收。首次远程 workflow 的 job/产物结果才是各目标构建证据。交互式安装、升级、卸载、用户数据保留、系统 keyring、真实 Provider 访问继续按 P8 平台验收记录；manifest 明确 `installation_tested: false`。
 
@@ -40,12 +46,12 @@ beta.9 首次云端预检在 `bf0cd14` 因许可清单的 Cargo.lock 指纹仍�
 `release.py stage` 首先解析原生可执行文件头（PE/ELF/Mach-O），检查真正的 CPU 架构与非空文件；然后逐包验收：
 
 - NSIS：7-Zip 解开安装器，读取内含应用 exe 的 PE 架构与 Windows ProductVersion。NSIS 启动器自身可能为 x86，因此不以安装器启动器架构误判应用目标。
-- 便携 ZIP：成员必须恰好为 `MediaAtlas.exe`，不附带目录或零散文件。验证 ZIP CRC、实际 PE 架构、normal/delay CRT imports 和原始 exe SHA-256；然后运行解出的 EXE 导出内嵌许可，逐文件验证完整集合与 SHA-256。NSIS 安装器保持独立资产。
+- 便携 ZIP：成员必须恰好为 `MediaAtlas.exe`，不附带目录或零散文件。验证 ZIP CRC、实际 PE 架构、normal/delay CRT imports 和原始 exe SHA-256，不执行提取出的应用程序。NSIS 安装器保持独立资产。
 - Debian：`dpkg-deb` 检查包内完整 version/Architecture，再解开检查实际应用 ELF；拒绝额外 ELF、`.so`/DLL/dylib，确保不夹带 GTK/WebKit helpers/shared libraries，依赖系统 runtime。
 - AppImage：本次明确 `not_built`。Tauri AppImage 会带入 GTK/WebKit 等原生库；实际归属、逐项版权及同处对应源码分发 gate 尚未完成，不能以 Rust/npm notices 冒称覆盖。preflight/stage 显式禁止重新启用此格式。保留底层提取/架构检查工具供未来开发使用，不代表可分发。
 - DMG：`hdiutil` 只读挂载，检查 app 的 Info.plist 版本及实际 Mach-O；无论检查结果如何都卸载。
 
-原生安装包中的 LICENSE.md、THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 与 docs/third-party-licenses/** 全文也需逐文件与源码材料 SHA-256 一致；目录结构保留，避免同名 LICENSE 覆盖。Apple bundle short version 或 Windows product version 在工具链只支持数字版本时允许 SemVer core；完整发布版本仍由 tag/config/Cargo/manifest 保持一致。产物以完整版本和 Rust target 重命名，避免不同平台重名。
+所有原生包提取/挂载后检查不含许可清单、归档及许可资源目录；所有应用二进制检查不含已移除的嵌入许可目录标记。聚合拒绝没有记录材料排除检查的目标 manifest。许可全文及对应源码归档只保留在独立的 Release 附件中，按源码字节、完整文件集合与 SHA-256 校验。Apple bundle short version 或 Windows product version 在工具链只支持数字版本时允许 SemVer core；完整发布版本仍由 tag/config/Cargo/manifest 保持一致。产物以完整版本和 Rust target 重命名，避免不同平台重名。
 
 `stage` 默认只记录 package validation，不宣称自动化测试通过；仅在 workflow 前端与 native Rust core 两步成功后传入 `--tests-passed`。聚合拒绝没有真实测试通过记录的包，本地打包 dryrun 不会自动生成可发布的测试声明。
 
@@ -53,22 +59,13 @@ beta.9 首次云端预检在 `bf0cd14` 因许可清单的 Cargo.lock 指纹仍�
 
 聚合产物包括所有可用安装包、项目许可/说明/清单、保留全部许可材料目录结构的 license-materials.zip、RELEASE_NOTES.md、release-manifest.json、SHA256SUMS。SHA256SUMS 覆盖除自身以外的每个 Release 资产。GitHub 自动提供的源代码档案链接可由 tag 获取，源码 commit 链接也写入说明。校验和验证字节完整性，不代表签名身份。
 
-## 单 EXE 与许可导出（main，待下次发布）
+## 单 EXE 与独立许可附件
 
-Windows 便携 ZIP 解压后仅有 `MediaAtlas.exe`，直接运行仍要求系统已有 WebView2。完整许可材料在编译时通过 `include_bytes!` 嵌入 EXE，不依赖开发目录，也不修改已编译的 PE。正常启动不导出任何材料。安装包仍保留原有许可资源；Release 仍单独提供 `license-materials.zip`，无需启动程序也可阅读。
+Windows 便携 ZIP 解压后仅有 `MediaAtlas.exe`，直接运行仍要求系统已有 WebView2。所有平台不再嵌入许可文本或对应源码归档，应用不再提供许可导出命令。查看完整许可材料直接下载 Release 的 `license-materials.zip`，无需启动应用。无参数正常启动、单个 `.nfo` 文件关联启动和无效参数拒绝仍保留。
 
-需要本地阅读时，在 PowerShell 显式导出到尚不存在的目录：
+`test_portable.py` 验证无资源配置、单文件 ZIP、CRC、原始 EXE 哈希、架构及 CRT 边界，且不会执行被提取的应用。发布验证同时拒绝重新混入许可文件或旧嵌入目录标记，外部许可附件继续逐字节及哈希校验。新增测试仅静态补写，未在本地运行。
 
-```powershell
-$p = Start-Process -FilePath .\MediaAtlas.exe -ArgumentList '--export-licenses', 'licenses' -Wait -PassThru
-$p.ExitCode
-```
-
-父目录须已存在；目标目录或文件已存在时拒绝覆盖。成功返回 0，参数或写入错误返回 2，导出路径不启动 GUI、数据库或网络；写入中断可能留下部分新目录，应检查后换一个新目录重试。使用 `Start-Process -Wait -PassThru` 可可靠等待 Windows GUI 子系统 EXE 并读取退出码。此 flag 同样支持 macOS/Linux 原生可执行文件。
-
-`test_portable_notices.py` 在三平台 main CI 编译实际 std-only 嵌入生成器和导出模块，删除所有 fixture 许可源文件后执行导出，确认字节与文件集合完全一致。它也检查非法参数、已有目录不覆盖及 ZIP 拒绝路径。此检查不等同完整 Tauri 宿主构建；正式 Windows `stage` 仍须运行真实打包 EXE 的导出并检查真实 PE/CRT/哈希。
-
-本轮本地验证：52 项发布工具测试全部通过（包含真实 NSIS 提取回归和新导出测试）；导出模块内部 3 项 Rust 测试执行通过。另有 7 项 CI 工具测试、Rust 格式检查、前端 lint、1001 依赖 / 1625 引用的许可校验与 beta.3 preflight 通过。未构建新的完整 Windows Tauri EXE，正式包验证由下一次发布运行完成。
+历史背景：beta.9 及更早版本曾在 EXE 内嵌和安装资源中同时分发完整材料，并验证运行时导出。此前的 52 项发布工具测试、导出模块内部 3 项 Rust 测试，以及相关旧平台成绩属于旧实现，不能作为当前材料排除策略的验证结果。
 
 ## 发布权限与恢复
 
@@ -76,7 +73,7 @@ $p.ExitCode
 
 不启用自动更新、updater artifacts、证书签名或 Apple notarization。未配置凭据时不会伪造签名；macOS 在完整应用资源复制后显式生成 ad-hoc 签名，并在只读挂载的 DMG 内强制验证资源签名完整性；此验证不等同可信分发签名或 Apple 公证，见 [资源签名修复](hotfix-macos-package.md)。Windows SmartScreen、macOS Gatekeeper 可能提示，发布说明明确这一状态。Windows NSIS 显式使用官方 downloadBootstrapper：系统缺少 WebView2 runtime 时在线安装，不捆绑 fixed/offline Chromium/WebView2 engine；ZIP 要求已有 WebView2 runtime。macOS 实际 app 用 otool 验证链接系统 WebKit/WKWebView，禁止内嵌 Chromium/WebKit framework；Debian 包显式依赖系统 WebKitGTK 4.1、GTK3、libdbus-1 与 xdg-utils，实际 ELF 的 DT_NEEDED 必须有 WebKitGTK/GTK/libdbus，readelf symbol versions 的最高 GLIBC 不得超过 2.35；AppImage 本次不分发，缺少其实际原生库归属和对应源码分发 gate；Ubuntu 22.04 构建的 glibc 基线为 2.35，不承诺旧发行版兼容。ffmpeg/ffprobe 仅为开发 fixture 工具，应用不调用或捆绑它们；拆包校验显式拒绝夹带这两个可执行文件。AppImage 候选 overlay 显式关闭 bundleMediaFramework，但此设置不能替代其未完成的原生库分发审查，也不使该格式进入本次矩阵。
 
-项目自身按所有者提供的 MIT License 授权，分发时保留 LICENSE.md 原文。依赖保留其自身许可，P8 维护真实的 THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 及 docs/third-party-licenses/** 内所需完整许可材料。
+项目自身按所有者提供的 MIT License 授权；`LICENSE.md` 原文、第三方许可及对应源码材料完整保留在源码仓库和 Release 附件中。依赖保留其自身许可，维护真实的 THIRD_PARTY_NOTICES.md、docs/dependency-licenses.json 及 docs/third-party-licenses/**，不再将这些材料复制进安装包或应用二进制。
 
 2026-11-04：合入所有者的 MIT 许可提交后，将构建资源、嵌入导出、发布归档和校验入口统一到 `LICENSE.md`，保留逐字节与 SHA-256 校验。许可证 18 项测试、发布 56 项测试通过；4 项原生 macOS 签名测试及 1 项 NSIS 工具测试因当前 Linux 主机缺少对应工具跳过，不作为本轮实机验收。实际便携版嵌入/导出测试使用 Rust 编译运行，未跳过。清单验证为 1002 依赖、1626 notice 引用。
 

@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
+import zipfile
 
 SPEC = importlib.util.spec_from_file_location("release", Path(__file__).with_name("release.py"))
 release = importlib.util.module_from_spec(SPEC)
@@ -56,7 +57,7 @@ class ReleaseTests(unittest.TestCase):
                 path = directory / name
                 path.write_bytes(f"verified native package {name}".encode())
                 assets.append({"name": name, "format": format_name, "bytes": path.stat().st_size, "sha256": release.sha256(path), "internal_architecture_verified": True,
-                               "package_verification": {"macos_signature_verified": True} if spec["os"] == "macos" else {}})
+                               "package_verification": {"license_materials_bundled": False, **({"macos_signature_verified": True} if spec["os"] == "macos" else {})}})
             manifest = {"schema": 1, "tag": self.tag, "version": self.version, "commit": self.commit, **spec, "assets": assets, "tests_passed": True}
             (directory / "manifest.json").write_text(json.dumps(manifest))
 
@@ -105,7 +106,7 @@ class ReleaseTests(unittest.TestCase):
                 path = next((self.input / "aarch64-apple-darwin").glob("manifest.json"))
                 manifest = json.loads(path.read_text())
                 if flag is None:
-                    manifest["assets"][0].pop("package_verification")
+                    manifest["assets"][0]["package_verification"].pop("macos_signature_verified")
                 else:
                     manifest["assets"][0]["package_verification"]["macos_signature_verified"] = flag
                 path.write_text(json.dumps(manifest))
@@ -177,6 +178,12 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "architecture"):
             release.check_binary(path, release.TARGETS[0])
 
+    def test_executable_with_embedded_license_inventory_is_rejected(self):
+        path = self.root / "binary"
+        path.write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x100000C) + bytes(56) + b"docs/third-party-licenses/texts/license.txt")
+        with self.assertRaisesRegex(ValueError, "embedded license materials"):
+            release.check_binary(path, {"arch": "aarch64"})
+
     def test_required_only_release_lists_unavailable_and_has_valid_checksums(self):
         self.fixture()
         release.aggregate(self.args())
@@ -184,6 +191,10 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(len(manifest["platforms"]), 4)
         self.assertEqual(len(manifest["unavailable_optional_targets"]), 2)
         self.assertIn("Not built", (self.output / "RELEASE_NOTES.md").read_text())
+        with zipfile.ZipFile(self.output / "license-materials.zip") as archive:
+            self.assertEqual(set(archive.namelist()), {path.relative_to(self.root).as_posix() for path in release.licenses()})
+            for path in release.licenses():
+                self.assertEqual(archive.read(path.relative_to(self.root).as_posix()), path.read_bytes())
         for line in (self.output / "SHA256SUMS").read_text().splitlines():
             digest, filename = line.split("  ", 1)
             self.assertEqual(release.sha256(self.output / filename), digest)
@@ -250,7 +261,7 @@ class ReleaseTests(unittest.TestCase):
             release.aggregate(self.args())
 
     @unittest.skipUnless(shutil.which("dpkg-deb") and Path("/bin/true").is_file(), "native Debian tooling required")
-    def test_real_debian_container_metadata_payload_and_license_validation(self):
+    def test_real_debian_container_metadata_payload_and_material_exclusion(self):
         # An actual dpkg container with a native system binary exercises extraction;
         # this is a verifier test and never a MediaAtlas installation claim.
         package_root = self.root / "deb-root"
@@ -264,10 +275,6 @@ class ReleaseTests(unittest.TestCase):
         spec = next(item for item in release.TARGETS if item["os"] == "linux" and item["arch"] == architecture)
         deb_arch = {"x86_64": "amd64", "aarch64": "arm64"}[architecture]
         (control_dir / "control").write_text(f"Package: verifier-fixture\nVersion: {self.version}\nArchitecture: {deb_arch}\nMaintainer: Test <test@example.invalid>\nDescription: Release verifier extraction fixture\n")
-        for source in release.licenses():
-            destination = package_root / source.relative_to(self.root)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source, destination)
         package = self.root / "fixture.deb"
         subprocess.run(["dpkg-deb", "--root-owner-group", "--build", str(package_root), str(package)], check=True, capture_output=True)
         release.inspect_package(package, spec, self.version)
@@ -281,19 +288,33 @@ class ReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "unexpected bundled native payload"):
             release.inspect_package(package, spec, self.version)
 
-    def test_bundled_license_material_must_match(self):
-        # Dependencies may retain their upstream LICENSE.md filenames too.
-        (self.root / "docs/third-party-licenses/fixture/LICENSE.md").write_text("Upstream fixture license.\n")
+    def test_packages_reject_license_materials_at_any_depth(self):
         directory = self.root / "extracted"
         directory.mkdir()
-        for source in release.licenses():
-            destination = directory / source.relative_to(self.root)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            destination.write_bytes(source.read_bytes())
-        release.check_licenses(directory)
-        (directory / "LICENSE.md").write_text("changed")
-        with self.assertRaisesRegex(ValueError, "license material"):
-            release.check_licenses(directory)
+        release.check_package_contents(directory)
+        for name in ("LICENSE.md", "THIRD_PARTY_NOTICES.md", "dependency-licenses.json", "third-party-licenses", "license-materials.zip"):
+            material = directory / "Contents/Resources/docs" / name
+            material.parent.mkdir(parents=True, exist_ok=True)
+            material.write_text("Release attachment only")
+            with self.subTest(material=name), self.assertRaisesRegex(ValueError, "release assets only"):
+                release.check_package_contents(directory)
+            material.unlink()
+
+    def test_aggregate_rejects_missing_or_failed_package_material_exclusion(self):
+        for flag in (None, True, "false"):
+            with self.subTest(flag=flag):
+                self.fixture()
+                def change(data):
+                    verification = data["assets"][0]["package_verification"]
+                    if flag is None:
+                        verification.pop("license_materials_bundled")
+                    else:
+                        verification["license_materials_bundled"] = flag
+                self.modify_manifest(change)
+                with self.assertRaisesRegex(ValueError, "exclusion was not verified"):
+                    release.aggregate(self.args())
+                shutil.rmtree(self.input)
+                shutil.rmtree(self.output)
 
     def test_embedded_chromium_or_webkit_engine_cannot_be_bundled(self):
         directory = self.root / "extracted"
@@ -302,7 +323,7 @@ class ReleaseTests(unittest.TestCase):
             path = directory / executable
             path.write_bytes(b"embedded engine is not permitted")
             with self.assertRaisesRegex(ValueError, "embedded browser engine"):
-                release.check_licenses(directory)
+                release.check_package_contents(directory)
             path.unlink()
 
     def test_optional_external_probe_executables_cannot_be_bundled(self):
@@ -312,7 +333,7 @@ class ReleaseTests(unittest.TestCase):
             path = directory / executable
             path.write_bytes(b"not allowed in distributed app")
             with self.assertRaisesRegex(ValueError, "media probe tools"):
-                release.check_licenses(directory)
+                release.check_package_contents(directory)
             path.unlink()
 
     def test_asset_path_traversal_rejected(self):

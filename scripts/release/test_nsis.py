@@ -1,4 +1,4 @@
-"""Exercise the configured NSIS codec against the actual bundled resource tree.
+"""Exercise the configured NSIS codec without bundling license materials.
 
 Use MEDIAATLAS_TEST_MAKENSIS / MEDIAATLAS_TEST_7Z for non-PATH tools. The test
 compiles and extracts a harmless file-only installer; it never executes it.
@@ -23,17 +23,16 @@ SEVENZIP = os.environ.get("MEDIAATLAS_TEST_7Z") or shutil.which("7z") or shutil.
 class NsisExtractionTests(unittest.TestCase):
     def test_selected_codec_and_license_inventory_agree(self):
         config = json.loads((ROOT / ".github/tauri.release.conf.json").read_text())
-        # Large modern NSIS zlib headers are not reliably decoded by 7-Zip's
-        # legacy NSIS Deflate handler. Keep the verified permissive codec.
-        self.assertEqual(config["bundle"]["windows"]["nsis"]["compression"], "bzip2")
+        # LZMA is Tauri's default NSIS codec and avoids the old zlib decoder path.
+        self.assertEqual(config["bundle"]["windows"]["nsis"]["compression"], "lzma")
         native = json.loads((ROOT / "scripts/licenses/native-components.json").read_text())
         nsis = next(item for item in native if item["name"] == "NSIS installer stub and bundled standard plugins")
-        self.assertIn("selects bzip2 compression", nsis["scope"])
+        self.assertIn("selects LZMA compression", nsis["scope"])
         notices = (ROOT / "docs/third-party-licenses/native/NSIS-COPYING.txt").read_text()
-        self.assertIn("bzip2", notices.lower())
+        self.assertIn("SPECIAL EXCEPTION FOR LZMA COMPRESSION MODULE", notices)
 
     @unittest.skipUnless(MAKENSIS and SEVENZIP, "requires native makensis and 7-Zip extraction tools")
-    def test_actual_large_nsis_resource_tree_roundtrips(self):
+    def test_actual_nsis_payload_roundtrips_without_license_materials(self):
         codec = json.loads((ROOT / ".github/tauri.release.conf.json").read_text())["bundle"]["windows"]["nsis"]["compression"]
         with tempfile.TemporaryDirectory(prefix="mediaatlas-nsis-probe-") as temporary:
             directory = Path(temporary)
@@ -47,9 +46,6 @@ class NsisExtractionTests(unittest.TestCase):
             lines = ["Unicode true", 'Name "MediaAtlas extractor fixture"',
                      f'OutFile "{quoted(package)}"', f"SetCompressor /SOLID {codec}",
                      "Section", 'SetOutPath "$INSTDIR"', f'File "{quoted(payload)}"']
-            for source in release.licenses():
-                parent = source.relative_to(ROOT).parent.as_posix().replace("/", "\\")
-                lines.extend([f'SetOutPath "$INSTDIR\\{quoted(parent)}"', f'File "{quoted(source)}"'])
             lines.append("SectionEnd")
             script = directory / "fixture.nsi"
             script.write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -57,8 +53,8 @@ class NsisExtractionTests(unittest.TestCase):
             extracted = directory / "extracted"
             subprocess.run([SEVENZIP, "x", "-y", f"-o{extracted}", str(package)], check=True, capture_output=True, text=True)
             self.assertEqual((extracted / "payload.bin").read_bytes(), payload.read_bytes())
-            release.check_licenses(extracted)
-            expected = {"payload.bin", *(path.relative_to(ROOT).as_posix() for path in release.licenses())}
+            release.check_package_contents(extracted)
+            expected = {"payload.bin"}
             self.assertEqual({path.relative_to(extracted).as_posix() for path in extracted.rglob("*") if path.is_file()}, expected)
 
 

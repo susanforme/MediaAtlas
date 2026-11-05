@@ -147,6 +147,7 @@ def check_windows_crt(path):
 def check_binary(path, spec):
     require(path.is_file() and path.stat().st_size > 0, f"missing/empty executable: {path}")
     require(binary_arch(path) == spec["arch"], f"wrong architecture in {path}")
+    require(b"docs/third-party-licenses/" not in path.read_bytes(), "embedded license materials must be distributed as release assets only")
 
 
 def verify_macos_signature(app):
@@ -167,27 +168,18 @@ def one(paths, description):
     return paths[0]
 
 
-def check_licenses(directory):
+def check_package_contents(directory):
     browser_engines = {"chrome", "chrome.exe", "chromium", "chromium.exe", "msedge.exe", "msedgewebview2.exe", "chrome.dll", "msedge.dll", "libcef.dll", "libcef.so", "icudtl.dat", "WebKit.framework", "Chromium Embedded Framework.framework", "Electron Framework.framework"}
     require(not any(path.name in browser_engines for path in directory.rglob("*")), "embedded browser engine must not be bundled; use the system WebView")
     forbidden = {"ffmpeg", "ffprobe", "ffmpeg.exe", "ffprobe.exe"}
     require(not any(path.is_file() and path.name.lower() in forbidden for path in directory.rglob("*")), "external media probe tools must not be bundled")
-    marker = one(
-        (path for path in directory.rglob("LICENSE.md")
-         if (path.parent / "THIRD_PARTY_NOTICES.md").is_file()
-         and (path.parent / "docs/dependency-licenses.json").is_file()),
-        "bundled project license",
-    )
-    resource_root = marker.parent
-    for source in licenses():
-        relative = source.relative_to(ROOT)
-        installed = resource_root / relative
-        require(installed.is_file() and sha256(installed) == sha256(source), f"bundled license material mismatch: {relative}")
+    materials = {"license.md", "third_party_notices.md", "dependency-licenses.json", "third-party-licenses", "license-materials.zip"}
+    require(not any(path.name.lower() in materials for path in directory.rglob("*")), "license materials must be distributed as release assets only")
 
 
 def inspect_package(path, spec, expected_version):
     """Extract/mount each native package and inspect the shipped application's header."""
-    inspection = {"payload_architecture": spec["arch"], "license_materials_verified": True, "embedded_browser_engine": False}
+    inspection = {"payload_architecture": spec["arch"], "license_materials_bundled": False, "embedded_browser_engine": False}
     with tempfile.TemporaryDirectory(prefix="mediaatlas-package-") as temporary:
         directory = Path(temporary)
         if path.suffix == ".exe":
@@ -200,7 +192,7 @@ def inspect_package(path, spec, expected_version):
             product_version = run("powershell", "-NoProfile", "-Command", "(Get-Item -LiteralPath $env:MEDIAATLAS_VERIFY_BINARY).VersionInfo.ProductVersion", env=environment)
             require(product_version in (expected_version, expected_version.split("-")[0]), "Windows payload product version mismatch")
             inspection["payload_version"] = product_version
-            check_licenses(directory)
+            check_package_contents(directory)
         elif path.suffix == ".deb":
             require(run("dpkg-deb", "-f", path, "Architecture") == {"x86_64": "amd64", "aarch64": "arm64"}[spec["arch"]], "deb architecture mismatch")
             require(run("dpkg-deb", "-f", path, "Version") == expected_version, "deb version mismatch")
@@ -213,13 +205,13 @@ def inspect_package(path, spec, expected_version):
                     require(not re.search(r"\.(?:so(?:\.\d+)*|dll|dylib)$", item.name, re.IGNORECASE), f"unexpected bundled shared library in deb: {item}")
                     with item.open("rb") as handle:
                         require(handle.read(4) != b"\x7fELF", f"unexpected bundled native payload in deb: {item}")
-            check_licenses(directory)
+            check_package_contents(directory)
         elif path.suffix == ".AppImage":
             check_binary(path, spec)
             path.chmod(path.stat().st_mode | 0o100)
             run(path, "--appimage-extract", cwd=directory)
             check_binary(one(directory.rglob("usr/bin/mediaatlas-desktop"), "AppImage executable"), spec)
-            check_licenses(directory / "squashfs-root")
+            check_package_contents(directory / "squashfs-root")
         elif path.suffix == ".dmg":
             mount = directory / "mount"
             run("hdiutil", "attach", "-readonly", "-nobrowse", "-mountpoint", mount, path)
@@ -235,7 +227,7 @@ def inspect_package(path, spec, expected_version):
                 inspection.update(verify_macos_signature(app))
                 inspection["notarization"] = "not performed by this workflow"
                 inspection["payload_version"] = info["CFBundleShortVersionString"]
-                check_licenses(app / "Contents/Resources")
+                check_package_contents(app)
             finally:
                 run("hdiutil", "detach", mount)
         else:
@@ -253,7 +245,7 @@ def licenses():
 
 
 def inspect_portable_zip(path, executable, spec):
-    """Verify the sole shipped EXE, including the notices it exports offline."""
+    """Verify the sole shipped EXE without executing it."""
     with zipfile.ZipFile(path) as archive:
         require(archive.namelist() == ["MediaAtlas.exe"], "portable ZIP must contain only MediaAtlas.exe")
         require(archive.testzip() is None, "corrupt portable zip")
@@ -264,14 +256,7 @@ def inspect_portable_zip(path, executable, spec):
             check_binary(extracted, spec)
             check_windows_crt(extracted)
             require(sha256(extracted) == sha256(executable), "portable binary mismatch")
-            # The native CI runner executes only the explicit export command;
-            # it returns before initializing Tauri, the database or networking.
-            notices = directory / "notices"
-            run(extracted, "--export-licenses", notices, timeout=30)
-            expected = {source.relative_to(ROOT).as_posix() for source in licenses()}
-            actual = {item.relative_to(notices).as_posix() for item in notices.rglob("*") if item.is_file()}
-            require(actual == expected, "embedded portable license file set mismatch")
-            check_licenses(notices)
+            check_package_contents(directory)
 
 
 def stage(args):
@@ -302,13 +287,12 @@ def stage(args):
     for format_name in spec["formats"]:
         filename = f"MediaAtlas_{expected}_{args.target}.{format_name}"
         destination = output / filename
-        inspection = {"payload_architecture": spec["arch"], "license_materials_verified": True, "embedded_browser_engine": False}
+        inspection = {"payload_architecture": spec["arch"], "license_materials_bundled": False, "embedded_browser_engine": False}
         if format_name == "zip":
-            with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
                 archive.write(executable, "MediaAtlas.exe")
             inspect_portable_zip(destination, executable, spec)
             inspection["portable_single_executable"] = True
-            inspection["license_materials"] = "embedded; explicit export verified byte for byte"
         else:
             package = one((profile / "bundle").glob(patterns[format_name]), format_name)
             require(package.stat().st_size > 0, f"empty package: {package}")
@@ -350,6 +334,7 @@ def aggregate(args):
             package = directory / name
             require(package.is_file() and package.stat().st_size > 0 and package.stat().st_size == asset["bytes"], "asset missing/size mismatch")
             require(asset["internal_architecture_verified"] is True and sha256(package) == asset["sha256"], "asset checksum/verification mismatch")
+            require(asset.get("package_verification", {}).get("license_materials_bundled") is False, "package license-material exclusion was not verified")
             if spec["os"] == "macos":
                 require(asset.get("package_verification", {}).get("macos_signature_verified") is True, "macOS package signature integrity was not verified")
             shutil.copyfile(package, args.output / name)
@@ -357,13 +342,13 @@ def aggregate(args):
     license_paths = licenses()
     for license_path in license_paths[:3]:
         shutil.copyfile(license_path, args.output / license_path.name)
-    with zipfile.ZipFile(args.output / "license-materials.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    with zipfile.ZipFile(args.output / "license-materials.zip", "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for license_path in license_paths:
             archive.write(license_path, license_path.relative_to(ROOT).as_posix())
     summary = {"schema": 1, "tag": args.tag, "version": expected, "commit": args.commit, "platforms": manifests, "unavailable_optional_targets": unavailable, "license_materials": [{"path": path.relative_to(ROOT).as_posix(), "bytes": path.stat().st_size, "sha256": sha256(path)} for path in license_paths]}
     (args.output / "release-manifest.json").write_text(json.dumps(summary, indent=2) + "\n")
     source = f"https://github.com/{args.repository}/tree/{args.commit}"
-    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP contains only MediaAtlas.exe, with complete license materials embedded at build time; use MediaAtlas.exe --export-licenses <new-directory> to export them explicitly. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this release because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices: see LICENSE.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip assets (the ZIP contains all full license texts with their repository paths); MediaAtlas is licensed under the MIT License; third-party components retain their own licenses. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
+    lines = [f"# MediaAtlas {expected}", "", f"Source: {source}", f"Commit: `{args.commit}`", "", "Packages have no trusted publisher signature; macOS may use ad-hoc signing. Windows SmartScreen and macOS Gatekeeper may require explicit approval. Apple notarization and trusted publisher signing have not been performed. No automatic updater is enabled.", "", "Build validation checks frontend tests, native Rust core tests, package payload architecture, versions and SHA-256 integrity. Interactive installation, upgrade, uninstall, OS credential storage and live Provider access still require platform acceptance; successful compilation does not establish these results.", "", "Windows NSIS uses LZMA compression and the official online WebView2 bootstrapper if the system runtime is missing; it does not bundle a fixed Chromium/WebView2 engine. Portable ZIP uses standard Deflate level 9 and contains only MediaAtlas.exe. It requires an existing Microsoft WebView2 runtime; the application statically links the Visual C++ runtime, and its normal/delay PE imports are checked for unexpected redistributable DLL dependencies. macOS uses the system WKWebView/WebKit framework. Debian packages require system WebKitGTK 4.1, GTK3, libdbus-1 and xdg-utils; no browser engine or extra native shared libraries are bundled. Linux binaries are built on Ubuntu 22.04 (glibc 2.35). AppImage is not built in this release because native-library licensing and corresponding-source distribution checks are incomplete. ffmpeg/ffprobe are development fixture tools; the application does not invoke or bundle them.", "", "License and dependency notices are distributed only as the separate LICENSE.md, THIRD_PARTY_NOTICES.md, dependency-licenses.json and license-materials.zip Release assets; installers and application executables do not embed these materials. The ZIP preserves all full license texts and corresponding-source archives with their repository paths. MediaAtlas is licensed under the MIT License; third-party components retain their own licenses. Provider services have their own access terms; no Provider credentials are shipped.", "", "| Target | Available packages |", "| --- | --- |"]
     for manifest in manifests:
         lines.append(f"| `{manifest['target']}` | {', '.join(asset['format'] for asset in manifest['assets'])} |")
     for item in unavailable:
