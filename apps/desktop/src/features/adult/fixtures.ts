@@ -1,7 +1,7 @@
 // Neutral synthetic fixtures; these are never live provider results or real adult artwork.
-import type { AdultDetail, AdultSearchPreview } from "../../api/adult";
+import type { AdultDetail, AdultOutputPreview, AdultSearchPreview } from "../../api/adult";
 import type { MediaPage } from "../../api/library";
-import type { MergePreview, OutputPreview } from "../../api/scraper";
+import type { MergePreview } from "../../api/scraper";
 export const syntheticAdultDetail: AdultDetail = {
   identity: {
     provider_id: "dmm",
@@ -98,7 +98,7 @@ export const syntheticAdultMerge: MergePreview = {
   artwork: [],
   confirmed: false,
 };
-export const syntheticAdultOutput: OutputPreview = {
+export const syntheticAdultOutput: AdultOutputPreview = {
   schema_version: 1,
   preview_id: "synthetic-output",
   media_item_id: "synthetic-media",

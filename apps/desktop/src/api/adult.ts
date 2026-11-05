@@ -91,7 +91,8 @@ export interface AdultOutputFile
   extends Omit<OutputPreview["files"][number], "kind"> {
   kind: "nfo" | "poster" | "cover" | "back_cover" | "sample";
 }
-export interface AdultOutputPreview extends Omit<OutputPreview, "files"> {
+export interface AdultOutputPreview extends Omit<OutputPreview, "files" | "strategy"> {
+  strategy: "preserve";
   files: AdultOutputFile[];
 }
 export interface AdultBatchPreview {

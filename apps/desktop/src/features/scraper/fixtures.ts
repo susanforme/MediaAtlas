@@ -29,7 +29,7 @@ export const syntheticSearch: SearchPreview = {
   ],
   failures: [],
 };
-export const syntheticMetadata: VideoMetadata = {
+export const syntheticMetadata: Extract<VideoMetadata, { kind: "movie" }> = {
   kind: "movie",
   data: {
     identity: syntheticIdentity,
