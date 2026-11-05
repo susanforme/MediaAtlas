@@ -384,7 +384,7 @@ it("blocks export while directory defaults fail and uses the retried default", a
   const button = await screen.findByRole("button", { name: "Preview NFO and poster output" });
   await waitFor(() => expect(button).toBeDisabled());
   expect(scraperOutputApi.preview).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
   await waitFor(() => expect(screen.getByRole("combobox", { name: "NFO export mode" })).toHaveValue("offline"));
   await waitFor(() => expect(button).toBeEnabled());
   fireEvent.click(button);
