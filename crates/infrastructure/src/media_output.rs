@@ -2733,10 +2733,10 @@ mod tests {
         let temp = crate::test_support::tempdir().unwrap();
         let dir = open_absolute_dir(temp.path(), false).unwrap();
         assert_eq!(atomic_create_checked(&dir, "movie.nfo", b"new output", || {
-            dir.write("movie.nfo", b"external edit").map_err(io_error)
+            dir.write("movie.nfo", b"other edit").map_err(io_error)
         }).unwrap_err(), RepositoryError::Conflict);
-        assert_eq!(std::fs::read(temp.path().join("movie.nfo")).unwrap(), b"external edit");
-        assert!(!atomic_create(&dir, "movie.nfo", b"external edit").unwrap());
+        assert_eq!(std::fs::read(temp.path().join("movie.nfo")).unwrap(), b"other edit");
+        assert!(!atomic_create(&dir, "movie.nfo", b"other edit").unwrap());
         assert!(atomic_create(&dir, "other.nfo", b"new output").unwrap());
         assert_eq!(std::fs::read_dir(temp.path()).unwrap().count(), 2);
     }
