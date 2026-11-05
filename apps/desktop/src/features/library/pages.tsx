@@ -11,6 +11,7 @@ import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { Textarea } from "../../components/ui/textarea";
 import { RootCard } from "./root-card";
+import { rootSupportsNfoExport } from "./library-model";
 import { automaticRootSources } from "./root-source-model";
 import { RootSourceReadiness } from "./root-source-readiness";
 import type { ScannerSearch } from "./scanner-navigation";
@@ -151,6 +152,9 @@ export function RootsPage({
                       ...form,
                       kind,
                       metadata_providers: automaticRootSources(kind),
+                      nfo_export_mode: rootSupportsNfoExport(kind)
+                        ? form.nfo_export_mode ?? "online"
+                        : "online",
                     });
                   }}
                 >
@@ -165,6 +169,27 @@ export function RootsPage({
                 </Select>
               </Label>
             </div>
+            {rootSupportsNfoExport(form.kind) && (
+              <div className="space-y-2">
+                <Label className="filter-field max-w-sm">
+                  <span>{t("rootNfoExportMode")}</span>
+                  <Select
+                    value={form.nfo_export_mode ?? "online"}
+                    disabled={working || picking}
+                    onChange={(event) => setForm({
+                      ...form,
+                      nfo_export_mode: event.target.value === "offline" ? "offline" : "online",
+                    })}
+                  >
+                    <option value="online">{t("rootNfoExportOnline")}</option>
+                    <option value="offline">{t("rootNfoExportOffline")}</option>
+                  </Select>
+                </Label>
+                {form.nfo_export_mode === "offline" && (
+                  <p className="text-sm text-muted-foreground">{t("rootNfoExportOfflineHelp")}</p>
+                )}
+              </div>
+            )}
             <RootSourceReadiness
               kind={form.kind}
               adultAvailable={adultAvailable}

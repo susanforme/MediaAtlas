@@ -2,6 +2,10 @@ import i18n from "../../i18n";
 
 const values = {
   "zh-CN": {
+    rootNfoExportMode: "默认 NFO 导出模式",
+    rootNfoExportOnline: "HTTPS 图片链接",
+    rootNfoExportOffline: "离线图片",
+    rootNfoExportOfflineHelp: "后台生成缺失 NFO 时也会写入配套图片；已有 NFO 保留，源视频只读。",
     rootSourceCheck: "资料来源配置",
     rootSourcesChecking: "正在检查资料来源…",
     rootSourcePriorityHelp: "仅用于此目录，按顺序尝试来源；未选来源时仅读取本地资料。",
@@ -83,6 +87,10 @@ const values = {
     scanNothingToReview: "本次扫描没有待确认的候选。",
   },
   "en-US": {
+    rootNfoExportMode: "Default NFO export mode",
+    rootNfoExportOnline: "HTTPS image links",
+    rootNfoExportOffline: "Offline images",
+    rootNfoExportOfflineHelp: "Generating missing NFOs in the background also writes their images. Existing NFOs are preserved and source videos stay read-only.",
     rootSourceCheck: "Metadata source configuration",
     rootSourcesChecking: "Checking metadata sources…",
     rootSourcePriorityHelp: "Applies only to this directory. Sources are tried in order; select none to use local metadata only.",

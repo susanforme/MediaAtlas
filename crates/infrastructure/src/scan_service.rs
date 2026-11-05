@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use mediaatlas_application::library::{
     ConfirmInput, ConfirmResult, PreviewInput, PreviewPageView, ScanCandidateView, ScanTaskView,
 };
-use mediaatlas_domain::{LibraryRoot, MediaKind, TaskState};
+use mediaatlas_domain::{LibraryRoot, MediaKind, NfoExportMode, TaskState};
 use mediaatlas_media_scanner::{run_scan, FileStamp, ScanOptions, ScanStats, ScannedFile};
 use serde::{Deserialize, Serialize};
 use sqlx::{sqlite::SqliteRow, Row};
@@ -46,6 +46,8 @@ struct RootSnapshot {
     exclude_patterns: Vec<String>,
     #[serde(default)]
     metadata_providers: Option<Vec<String>>,
+    #[serde(default)]
+    nfo_export_mode: NfoExportMode,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -83,7 +85,7 @@ impl ScanService {
     }
 
     /// A user-requested library refresh indexes local files and enriches metadata
-    /// in the application database. It never creates media sidecars or moves files.
+    /// and creates missing NFOs using the directory's saved export mode.
     pub async fn start_automatic(&self, root_id: Uuid) -> Result<ScanTaskView, RepositoryError> {
         self.start_inner(root_id, None, true, None).await
     }
@@ -158,12 +160,13 @@ impl ScanService {
             {
                 return Err(RepositoryError::Conflict);
             }
-            let opted_in: bool = sqlx::query_scalar(
-                "SELECT EXISTS(SELECT 1 FROM watcher_roots WHERE root_id=? AND opted_in=1)",
+            let opted_in: Option<bool> = sqlx::query_scalar(
+                "SELECT opted_in FROM watcher_roots WHERE root_id=?",
             )
             .bind(root_id.to_string())
-            .fetch_one(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await?;
+            let opted_in = opted_in.unwrap_or(matches!(snapshot.root.kind, Some(MediaKind::Movie | MediaKind::TvSeries | MediaKind::Anime)));
             let isolated:bool=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM media_files f JOIN media_items m ON m.id=f.media_item_id WHERE f.root_id=? AND (m.adult_isolated=1 OR m.kind='adult_video'))")
                 .bind(root_id.to_string()).fetch_one(&mut *tx).await?;
             if !opted_in || isolated {
@@ -466,7 +469,10 @@ impl ScanService {
         let providers: Option<Vec<String>> = sqlx::query_scalar::<_, Option<String>>("SELECT metadata_providers_json FROM root_settings WHERE root_id=?")
             .bind(saved.root.id.to_string()).fetch_optional(&mut *tx).await?.flatten()
             .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData)).transpose()?;
-        if exclusions != saved.exclude_patterns || providers != saved.metadata_providers {
+        let mode: Option<String> = sqlx::query_scalar("SELECT nfo_export_mode FROM root_settings WHERE root_id=?")
+            .bind(saved.root.id.to_string()).fetch_optional(&mut *tx).await?;
+        let mode = crate::root_sources::parse_nfo_export_mode(mode.as_deref().unwrap_or("online"))?;
+        if exclusions != saved.exclude_patterns || providers != saved.metadata_providers || mode != saved.nfo_export_mode {
             return Err(RepositoryError::Conflict);
         }
         let current_state: String = sqlx::query_scalar("SELECT state FROM scrape_tasks WHERE id=?")
@@ -533,6 +539,7 @@ impl ScanService {
             root,
             exclude_patterns,
             metadata_providers: crate::root_sources::load(self.repo.pool(), root_id).await?,
+            nfo_export_mode: crate::root_sources::load_nfo_export_mode(self.repo.pool(), root_id).await?,
         })
     }
 
@@ -735,6 +742,7 @@ fn same_config(a: &RootSnapshot, b: &RootSnapshot) -> bool {
         && a.root.kind == b.root.kind
         && a.exclude_patterns == b.exclude_patterns
         && a.metadata_providers == b.metadata_providers
+        && a.nfo_export_mode == b.nfo_export_mode
 }
 
 async fn snapshot_tx(
@@ -776,6 +784,10 @@ async fn snapshot_tx(
         metadata_providers: sqlx::query_scalar::<_, Option<String>>("SELECT metadata_providers_json FROM root_settings WHERE root_id=?")
             .bind(root_id.to_string()).fetch_optional(&mut **tx).await?.flatten()
             .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData)).transpose()?,
+        nfo_export_mode: crate::root_sources::parse_nfo_export_mode(
+            sqlx::query_scalar::<_, String>("SELECT nfo_export_mode FROM root_settings WHERE root_id=?")
+                .bind(root_id.to_string()).fetch_optional(&mut **tx).await?.as_deref().unwrap_or("online"),
+        )?,
     })
 }
 

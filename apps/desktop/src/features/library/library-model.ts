@@ -61,6 +61,7 @@ export function newRootInput(adult: boolean): RootInput {
     enabled: true,
     exclude_patterns: [],
     metadata_providers: null,
+    nfo_export_mode: "online",
   };
 }
 export function rootInputFromView(root: RootView): RootInput {
@@ -72,6 +73,9 @@ export function rootInputFromView(root: RootView): RootInput {
     enabled: root.enabled,
     exclude_patterns: root.exclude_patterns,
     metadata_providers: root.metadata_providers ?? null,
+    nfo_export_mode: rootSupportsNfoExport(root.kind)
+      ? root.nfo_export_mode ?? "online"
+      : "online",
   };
 }
 export function normalizeRootInput(
@@ -82,11 +86,17 @@ export function normalizeRootInput(
     ...form,
     name: form.name.trim(),
     path: form.path.trim(),
+    nfo_export_mode: rootSupportsNfoExport(form.kind)
+      ? form.nfo_export_mode ?? "online"
+      : "online",
     exclude_patterns: excludes
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter(Boolean),
   };
+}
+export function rootSupportsNfoExport(kind: MediaKind | null): boolean {
+  return kind === null || ["movie", "tv_series", "anime"].includes(kind);
 }
 export function isActiveScanTask(task: ScanTask): boolean {
   return ["queued", "running", "waiting_for_user"].includes(task.state);

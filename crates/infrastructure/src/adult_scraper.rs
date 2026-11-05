@@ -1204,6 +1204,7 @@ mod tests {
             .bind(Uuid::new_v4().to_string()).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
         crate::scraper::automatic::AutomaticContext {
             metadata_providers: None,
+            nfo_export_mode: NfoExportMode::Online,
             root: s.root.clone(),
             exclusions: vec![],
             task_id,

@@ -19,6 +19,7 @@ async fn fixture() -> (
         .unwrap();
     let root = BrowseService::new(repo.clone(), dir.path().join("cache"))
         .save_root(&RootInput {
+            nfo_export_mode: None,
             metadata_providers: None,
             id: None,
             name: "Fixture".into(),
@@ -83,9 +84,26 @@ async fn settled(scans: &ScanService, id: Uuid) {
     .unwrap();
 }
 #[tokio::test]
+async fn video_roots_are_watched_by_default_but_an_explicit_opt_out_survives_restart() {
+    let (_dir, repo, scans, watcher, root) = fixture().await;
+    injected_signals_only(&watcher);
+    watcher.reconcile().await.unwrap();
+    let status = watcher.list().await.unwrap().remove(0);
+    assert!(status.opted_in && status.active);
+    watcher.configure(root.id, false).await.unwrap();
+    watcher.shutdown().await;
+    let restarted = WatcherService::new(repo.clone(), scans);
+    restarted.restore().await.unwrap();
+    let status = restarted.list().await.unwrap().remove(0);
+    assert!(!status.opted_in && !status.active);
+    restarted.shutdown().await;
+    repo.pool().close().await;
+}
+
+#[tokio::test]
 async fn native_events_are_debounced_into_unconfirmed_candidates_and_restart_restores_opt_in() {
     let (_dir, repo, scans, watcher, root) = fixture().await;
-    assert!(!watcher.list().await.unwrap()[0].opted_in);
+    assert!(watcher.list().await.unwrap()[0].opted_in);
     assert!(watcher.configure(root.id, true).await.unwrap().active);
     let path = Path::new(&root.path).join("Fixture.2020.mkv");
     for _ in 0..12 {

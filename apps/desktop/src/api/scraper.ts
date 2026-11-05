@@ -444,14 +444,24 @@ function history(v: unknown): v is ScraperHistoryEntry[] {
   );
 }
 export const scraperOutputApi = {
+  defaultMode: (mediaId: string) =>
+    request(
+      "scraper_output_default_mode",
+      { media_id: mediaId },
+      (value): value is NfoExportMode => value === "online" || value === "offline",
+    ),
   discard: (previewId: string) =>
     request(
       "scraper_output_discard",
       { preview_id: previewId },
       (v): v is null => v === null,
     ),
-  preview: (mediaId: string, mode: NfoExportMode = "online") =>
-    request("scraper_output_preview", { media_id: mediaId, mode }, outputPreview),
+  preview: (mediaId: string, mode?: NfoExportMode, expectedDefaultMode?: NfoExportMode) =>
+    request(
+      "scraper_output_preview",
+      { media_id: mediaId, ...(mode ? { mode } : {}), ...(expectedDefaultMode ? { expected_default_mode: expectedDefaultMode } : {}) },
+      outputPreview,
+    ),
   execute: (previewId: string) =>
     request("scraper_output_execute", { preview_id: previewId }, outputResult),
   history: () => request("scraper_history", {}, history),

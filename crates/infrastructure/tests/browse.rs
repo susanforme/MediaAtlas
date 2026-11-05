@@ -3,7 +3,7 @@ mod support;
 use chrono::{DateTime, Duration, Utc};
 use mediaatlas_application::library::{BrowseQuery, MediaDetailInput, RootInput};
 use mediaatlas_domain::{
-    Artwork, ArtworkKind, ExternalId, MediaFile, MediaItem, MediaKind, MetadataValue,
+    Artwork, ArtworkKind, ExternalId, MediaFile, MediaItem, MediaKind, MetadataValue, NfoExportMode,
 };
 use mediaatlas_infrastructure::{
     browse::BrowseService,
@@ -27,6 +27,7 @@ async fn setup() -> (TempDir, LibraryRepository, BrowseService) {
 }
 fn input(path: &Path, kind: Option<MediaKind>) -> RootInput {
     RootInput {
+        nfo_export_mode: None,
         metadata_providers: None,
         id: None,
         name: "Fixture root".into(),
@@ -455,5 +456,54 @@ async fn root_sources_are_ordered_per_directory_and_validate_before_saving() {
     assert_eq!(service.save_root(&first).await.unwrap().metadata_providers, Some(vec!["anilist".into()]));
     let roots = service.list_roots(false).await.unwrap();
     assert_eq!(roots.iter().find(|root| root.root.id == other.root.id).unwrap().metadata_providers, Some(vec!["tmdb".into()]));
+    repo.pool().close().await;
+}
+
+#[tokio::test]
+async fn nfo_export_mode_is_saved_per_directory_and_omission_preserves_the_selection() {
+    let (dir, repo, service) = setup().await;
+    let first_path = dir.path().join("offline-movies");
+    let second_path = dir.path().join("online-movies");
+    std::fs::create_dir(&first_path).unwrap();
+    std::fs::create_dir(&second_path).unwrap();
+    let mut first = input(&first_path, Some(MediaKind::Movie));
+    first.nfo_export_mode = Some(NfoExportMode::Offline);
+    let saved = service.save_root(&first).await.unwrap();
+    assert_eq!(saved.nfo_export_mode, NfoExportMode::Offline);
+    let second = service.save_root(&input(&second_path, Some(MediaKind::Movie))).await.unwrap();
+    assert_eq!(second.nfo_export_mode, NfoExportMode::Online);
+    first.id = Some(saved.root.id);
+    first.nfo_export_mode = None;
+    first.name = "Renamed offline directory".into();
+    assert_eq!(service.save_root(&first).await.unwrap().nfo_export_mode, NfoExportMode::Offline);
+    let reopened = BrowseService::new(repo.clone(), dir.path().join("reopened-cache"));
+    let roots = reopened.list_roots(false).await.unwrap();
+    assert_eq!(roots.iter().find(|root| root.root.id == saved.root.id).unwrap().nfo_export_mode, NfoExportMode::Offline);
+    assert_eq!(roots.iter().find(|root| root.root.id == second.root.id).unwrap().nfo_export_mode, NfoExportMode::Online);
+    first.nfo_export_mode = Some(NfoExportMode::Online);
+    assert_eq!(service.save_root(&first).await.unwrap().nfo_export_mode, NfoExportMode::Online);
+    assert_eq!(std::fs::read_dir(&first_path).unwrap().count(), 0);
+    assert_eq!(std::fs::read_dir(&second_path).unwrap().count(), 0);
+    repo.pool().close().await;
+}
+
+#[tokio::test]
+async fn offline_nfo_cannot_be_enabled_for_adult_or_music_directories() {
+    let (dir, repo, service) = setup().await;
+    let path = dir.path().join("media");
+    std::fs::create_dir(&path).unwrap();
+    for kind in [MediaKind::AdultVideo, MediaKind::MusicRelease, MediaKind::MusicTrack] {
+        let mut root = input(&path, Some(kind));
+        root.nfo_export_mode = Some(NfoExportMode::Offline);
+        assert!(matches!(service.save_root(&root).await, Err(RepositoryError::InvalidInput)));
+    }
+    assert!(service.list_roots(true).await.unwrap().is_empty());
+    let mut root = input(&path, Some(MediaKind::Movie));
+    root.nfo_export_mode = Some(NfoExportMode::Offline);
+    let saved = service.save_root(&root).await.unwrap();
+    root.id = Some(saved.root.id);
+    root.kind = Some(MediaKind::MusicRelease);
+    root.nfo_export_mode = None;
+    assert_eq!(service.save_root(&root).await.unwrap().nfo_export_mode, NfoExportMode::Online);
     repo.pool().close().await;
 }

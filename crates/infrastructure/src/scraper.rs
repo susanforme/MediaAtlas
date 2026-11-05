@@ -455,7 +455,8 @@ impl ScraperService {
             let mut result: MergeResult = decode(&row.try_get::<String, _>("result_json")?)?;
             result.already_applied = true;
             let output =
-                crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone());
+                crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone())
+                    .with_network_engine(self.engine.clone());
             let _ = output
                 .automatic_nfo(
                     preview.media_item_id,
@@ -662,7 +663,8 @@ impl ScraperService {
         sqlx::query("UPDATE scrape_tasks SET state='succeeded',updated_at=MAX(updated_at,?) WHERE id=? AND state='waiting_for_user'").bind(Utc::now().timestamp_millis()).bind(run_id.to_string()).execute(&mut *tx).await?;
         tx.commit().await?;
         let output =
-            crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone());
+            crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone())
+                .with_network_engine(self.engine.clone());
         let _ = output
             .automatic_nfo(media.id, Some(&cancel), automatic)
             .await;
@@ -785,7 +787,7 @@ fn validate_detail_identity(
 
 // Keep the exact rows the user reviewed: identity correction also removes stale
 // unprotected metadata and artwork indices, so concurrent edits must invalidate it.
-async fn merge_state(
+pub(crate) async fn merge_state(
     connection: &mut sqlx::SqliteConnection,
     media_id: Uuid,
 ) -> Result<serde_json::Value, RepositoryError> {
@@ -1253,7 +1255,7 @@ mod tests {
         let search = s.service.search(request()).await.unwrap();
         let preview = s.service.preview(selection(search.run_id, s.media.id)).await.unwrap();
         let root = s.repo.list_roots().await.unwrap().remove(0);
-        let context = automatic::AutomaticContext { root, exclusions: vec![], metadata_providers: None, task_id: Uuid::new_v4(), cancel: CancellationToken::new(), adult_access: None };
+        let context = automatic::AutomaticContext { root, exclusions: vec![], metadata_providers: None, nfo_export_mode: NfoExportMode::Online, task_id: Uuid::new_v4(), cancel: CancellationToken::new(), adult_access: None };
         assert_eq!(s.service.confirm_inner(preview.preview_id, Some(&context)).await.unwrap_err(), RepositoryError::Conflict);
         assert_eq!(s.repo.list_external_ids(s.media.id).await.unwrap().len(), 3);
         s.repo.save_external_id(&ExternalId {
@@ -1485,6 +1487,76 @@ mod tests {
         s.server.abort();
         s.repo.pool().close().await;
     }
+    #[tokio::test]
+    async fn deleted_nfo_is_restored_from_saved_metadata_before_unavailable_artwork_repair() {
+        let s = setup().await;
+        let root = s.repo.list_roots().await.unwrap().remove(0);
+        let scans = crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let first = scans.start_automatic(root.id).await.unwrap();
+        assert_eq!(settle_automatic(&scans, first.id).await.state, TaskState::Succeeded);
+        let mut saved = s.service.media_detail(s.media.id).await.unwrap().unwrap();
+        let VideoMetadata::Movie(detail) = &mut saved else { panic!("movie fixture"); };
+        detail.artwork.push(ArtworkCandidate {
+            url: "https://image.tmdb.org/t/p/original/uncached.jpg".into(),
+            source_provider: "tmdb".into(), kind: "poster".into(), language: None,
+        });
+        sqlx::query("UPDATE video_metadata_sources SET metadata_json=? WHERE media_item_id=?")
+            .bind(json(&saved).unwrap()).bind(s.media.id.to_string()).execute(s.repo.pool()).await.unwrap();
+        let searches = s.service.history().await.unwrap().len();
+        let mut config = s.providers.config("tmdb").await.unwrap();
+        config.enabled = false;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        let path = s.dir.path().join("Example.nfo");
+        std::fs::remove_file(&path).unwrap();
+        let retry = scans.start_automatic(root.id).await.unwrap();
+        settle_automatic(&scans, retry.id).await;
+        assert!(std::fs::read_to_string(&path).unwrap().contains("Provider title"));
+        assert_eq!(s.service.history().await.unwrap().len(), searches);
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn default_watching_restores_deleted_nfo_without_a_click_even_after_automatic_review() {
+        let s = setup().await;
+        // Keep database/cache writes outside the watched media root.
+        let media_dir = s.dir.path().join("media");
+        std::fs::create_dir(&media_dir).unwrap();
+        std::fs::rename(s.dir.path().join("Example.mkv"), media_dir.join("Example.mkv")).unwrap();
+        let mut root = s.repo.list_roots().await.unwrap().remove(0);
+        root.path = media_dir.to_string_lossy().into_owned();
+        s.repo.save_root(&root).await.unwrap();
+        let scans = crate::scan_service::ScanService::new(s.repo.clone()).with_scraper(s.service.clone());
+        let first = scans.start_automatic(root.id).await.unwrap();
+        assert_eq!(settle_automatic(&scans, first.id).await.state, TaskState::Succeeded);
+        let searches = s.service.history().await.unwrap().len();
+        let mut config = s.providers.config("tmdb").await.unwrap();
+        config.enabled = false;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        std::fs::write(media_dir.join("Unmatched.2021.mkv"), b"unmatched local video").unwrap();
+        let watcher = crate::watcher::WatcherService::new(s.repo.clone(), scans.clone());
+        watcher.restore().await.unwrap();
+        assert!(watcher.list().await.unwrap()[0].active);
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if scans.list_tasks(false).await.unwrap().iter().any(|task| task.id != first.id && task.state == TaskState::WaitingForUser) { break; }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }).await.expect("automatic review was not reached");
+        let nfo = media_dir.join("Example.nfo");
+        std::fs::remove_file(&nfo).unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !nfo.is_file() { tokio::time::sleep(Duration::from_millis(20)).await; }
+        }).await.expect("deleted NFO was not restored by the watcher");
+        watcher.shutdown().await;
+        for task in scans.list_tasks(false).await.unwrap() { settle_automatic(&scans, task.id).await; }
+        assert!(std::fs::read_to_string(&nfo).unwrap().contains("Provider title"));
+        assert_eq!(s.service.history().await.unwrap().len(), searches);
+        assert_eq!(std::fs::read(media_dir.join("Example.mkv")).unwrap(), b"synthetic source media must stay intact");
+        s.server.abort();
+        s.repo.pool().close().await;
+    }
+
     #[tokio::test]
     async fn automatic_refresh_without_enabled_source_remains_unconfigured_until_real_retry() {
         let s = setup().await;
@@ -1945,6 +2017,7 @@ mod tests {
         }
         let root = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("cache"))
             .save_root(&mediaatlas_application::library::RootInput {
+                nfo_export_mode: None,
                 metadata_providers: Some(vec!["tvmaze".into(), "tmdb".into()]),
                 id: None,
                 name: "Shows".into(),
@@ -2914,6 +2987,7 @@ mod tests {
         let browse = crate::browse::BrowseService::new(s.repo.clone(), s.dir.path().join("thumbs"));
         let root = browse
             .save_root(&RootInput {
+                nfo_export_mode: None,
                 metadata_providers: None,
                 id: None,
                 name: "TV".into(),

@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { type ComponentProps, StrictMode } from "react";
 import { I18nextProvider } from "react-i18next";
@@ -175,9 +176,73 @@ it("submits an explicit root type and normalized exclusion lines", async () => {
       enabled: true,
       exclude_patterns: ["**/sample/**", "**/*.tmp"],
       metadata_providers: null,
+      nfo_export_mode: "online",
     }),
   );
 });
+it("saves an explicitly chosen offline NFO mode before starting the directory's background update", async () => {
+  vi.mocked(pickDirectory).mockResolvedValue("/media/Films");
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Add root" }));
+  await screen.findByText("/media/Films");
+  const mode = screen.getByLabelText("Default NFO export mode");
+  await waitFor(() => expect(mode).toBeEnabled());
+  expect(mode).toHaveValue("online");
+  chooseSelectOption(mode, "offline");
+  expect(screen.getByText("Generating missing NFOs in the background also writes their images. Existing NFOs are preserved and source videos stay read-only.")).toBeInTheDocument();
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+  expect(libraryApi.sync).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Add to library" }));
+  await waitFor(() => expect(libraryApi.saveRoot).toHaveBeenCalledWith(
+    expect.objectContaining({ path: "/media/Films", nfo_export_mode: "offline" }),
+  ));
+  await waitFor(() => expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith("fixture-root"));
+});
+
+it("reads each directory's saved NFO mode independently and discards cancelled edits", async () => {
+  const first: RootView = {
+    id: "first", name: "Offline films", path: "/media/Offline", path_style: "posix", kind: "movie",
+    enabled: false, exclude_patterns: [], created_at: time, updated_at: time, last_scan_at: null,
+    nfo_export_mode: "offline",
+  };
+  const second: RootView = { ...first, id: "second", name: "Linked films", path: "/media/Linked", nfo_export_mode: "online" };
+  vi.mocked(libraryApi.roots).mockResolvedValue([first, second]);
+  show();
+  const firstCard = (await screen.findByText(first.name)).closest("article")!;
+  const secondCard = screen.getByText(second.name).closest("article")!;
+  fireEvent.click(within(firstCard).getByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText("Default NFO export mode")).toHaveValue("offline");
+  chooseSelectOption(screen.getByLabelText("Default NFO export mode"), "online");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(within(firstCard).getByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText("Default NFO export mode")).toHaveValue("offline");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  fireEvent.click(within(secondCard).getByRole("button", { name: "Edit" }));
+  expect(screen.getByLabelText("Default NFO export mode")).toHaveValue("online");
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+  chooseSelectOption(screen.getByLabelText("Default NFO export mode"), "offline");
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await waitFor(() => expect(libraryApi.saveRoot).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ id: "second", nfo_export_mode: "offline" }),
+  ));
+  expect(first.nfo_export_mode).toBe("offline");
+  expect(second.nfo_export_mode).toBe("online");
+});
+
+it.each(["music_release", "adult_video"] as const)("clears a pending offline mode when switching to %s", async (kind) => {
+  scope.visible = true;
+  show();
+  fireEvent.click(screen.getByRole("button", { name: "Add root" }));
+  const mode = await screen.findByLabelText("Default NFO export mode");
+  await waitFor(() => expect(mode).toBeEnabled());
+  chooseSelectOption(mode, "offline");
+  chooseSelectOption(screen.getByLabelText("Root media type"), kind);
+  expect(screen.queryByLabelText("Default NFO export mode")).not.toBeInTheDocument();
+  chooseSelectOption(screen.getByLabelText("Root media type"), "movie");
+  expect(screen.getByLabelText("Default NFO export mode")).toHaveValue("online");
+  expect(libraryApi.saveRoot).not.toHaveBeenCalled();
+});
+
 it("uses localized validation instead of submitting empty root fields", async () => {
   show();
   await screen.findByText("No library roots yet");

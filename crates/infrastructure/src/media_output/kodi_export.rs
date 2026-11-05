@@ -132,7 +132,8 @@ impl MediaOutputService {
         Ok(bytes)
     }
 
-    async fn export_remote_bytes(&self, item: &MediaItem, reference: &str) -> Result<Vec<u8>, RepositoryError> {
+    async fn export_remote_bytes(&self, item: &MediaItem, reference: &str, cancel: &CancellationToken) -> Result<Vec<u8>, RepositoryError> {
+        if cancel.is_cancelled() { return Err(RepositoryError::Provider(ProviderFailure::Cancelled)); }
         let provider = remote_provider(reference)?;
         match open_absolute_dir(&self.base_cache, false) {
             Ok(cache) => {
@@ -164,15 +165,24 @@ impl MediaOutputService {
         };
         // The caller holds its gate; use an independent cache gate for downloads.
         let downloader = Self::new(self.repo.clone(), self.base_cache.clone());
-        let cached = downloader.cache_artwork(network, &job, reference, &CancellationToken::new()).await
+        let cached = downloader.cache_artwork(network, &job, reference, cancel).await
             .map_err(RepositoryError::Provider)?;
         self.export_cached_bytes(&cached.cache_path, &cached.content_hash)?.ok_or(RepositoryError::NotFound)
     }
 
+    #[cfg(test)]
     pub(super) async fn prepare_kodi_images(
         &self, item: &MediaItem, metadata: &[MetadataValue], stem: &str, dir: &Dir, mode: NfoExportMode,
         root_id: Uuid, relative_parent: &Path,
     ) -> Result<PreparedExport, RepositoryError> {
+        self.prepare_kodi_images_cancellable(item, metadata, stem, dir, mode, root_id, relative_parent, &CancellationToken::new()).await
+    }
+
+    pub(super) async fn prepare_kodi_images_cancellable(
+        &self, item: &MediaItem, metadata: &[MetadataValue], stem: &str, dir: &Dir, mode: NfoExportMode,
+        root_id: Uuid, relative_parent: &Path, cancel: &CancellationToken,
+    ) -> Result<PreparedExport, RepositoryError> {
+        if cancel.is_cancelled() { return Err(RepositoryError::Provider(ProviderFailure::Cancelled)); }
         if self.channel != OutputChannel::Ordinary || item.kind == MediaKind::AdultVideo {
             return Err(RepositoryError::InvalidInput);
         }
@@ -242,6 +252,7 @@ impl MediaOutputService {
         };
         for target in [ArtworkKind::Poster, ArtworkKind::Backdrop] {
             for source in sources.iter().filter(|source| source.kind == target) {
+                if cancel.is_cancelled() { return Err(RepositoryError::Provider(ProviderFailure::Cancelled)); }
                 if mode == NfoExportMode::Online {
                     let Some(reference) = &source.reference else { continue; };
                     if !remote(reference) { continue; }
@@ -254,7 +265,7 @@ impl MediaOutputService {
                 } else { None };
                 let bytes = if let Some(bytes) = bytes { bytes } else {
                     let Some(reference) = &source.reference else { continue; };
-                    if remote(reference) { self.export_remote_bytes(item, reference).await? }
+                    if remote(reference) { self.export_remote_bytes(item, reference, cancel).await? }
                     else { let Some(bytes) = local_bytes(dir, reference)? else { continue; }; bytes }
                 };
                 let (format, _, _) = decode_image(&bytes).map_err(RepositoryError::Provider)?;
@@ -266,13 +277,14 @@ impl MediaOutputService {
             }
         }
         for reference in actors {
+            if cancel.is_cancelled() { return Err(RepositoryError::Provider(ProviderFailure::Cancelled)); }
             if mode == NfoExportMode::Online {
                 if !remote(&reference) { continue; }
                 remote_provider(&reference)?;
                 continue;
             }
             if remote(&reference) { remote_provider(&reference)?; }
-            let bytes = if remote(&reference) { self.export_remote_bytes(item, &reference).await? }
+            let bytes = if remote(&reference) { self.export_remote_bytes(item, &reference, cancel).await? }
                 else { local_bytes(dir, &reference)?.ok_or(RepositoryError::NotFound)? };
             let (format, _, _) = decode_image(&bytes).map_err(RepositoryError::Provider)?;
             let name = image_name(dir, &format!("{image_stem}-actor-{}.{}", &hash(reference.as_bytes())[..12], extension(format).ok_or(RepositoryError::InvalidInput)?), &bytes)?;

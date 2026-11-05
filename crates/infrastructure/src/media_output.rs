@@ -36,13 +36,7 @@ const MAX_IMAGE: usize = 8 * 1024 * 1024;
 const MAX_PIXELS: u64 = 20_000_000;
 const MAX_ADULT_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum NfoExportMode {
-    #[default]
-    Online,
-    Offline,
-}
+pub use mediaatlas_domain::NfoExportMode;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutputFileDiff {
@@ -86,6 +80,10 @@ struct OutputPlan {
     series_target: bool,
     #[serde(default)]
     nfo_only: bool,
+    #[serde(default)]
+    root_export_mode: Option<NfoExportMode>,
+    #[serde(default)]
+    metadata_snapshot: Option<String>,
     relative_parent: PathBuf,
     payloads: Vec<Vec<u8>>,
 }
@@ -377,7 +375,7 @@ impl MediaOutputService {
             .bind(Utc::now().timestamp_millis()).execute(self.repo.pool()).await?.rows_affected())
     }
     pub async fn preview(&self, media_id: Uuid) -> Result<OutputPreview, RepositoryError> {
-        self.preview_inner(media_id, false, None, NfoExportMode::Offline, false).await
+        self.preview_inner(media_id, false, None, Some(NfoExportMode::Offline), false, None, None).await
     }
     pub async fn preview_with_mode(
         &self,
@@ -387,18 +385,38 @@ impl MediaOutputService {
         if self.channel != OutputChannel::Ordinary {
             return Err(RepositoryError::InvalidInput);
         }
-        self.preview_inner(media_id, false, None, mode, true).await
+        self.preview_inner(media_id, false, None, Some(mode), true, None, None).await
+    }
+    pub async fn preview_with_defaults(&self, media_id: Uuid, expected_mode: Option<NfoExportMode>) -> Result<OutputPreview, RepositoryError> {
+        if self.channel != OutputChannel::Ordinary { return Err(RepositoryError::InvalidInput); }
+        self.preview_inner(media_id, false, None, None, true, None, expected_mode).await
+    }
+    pub async fn default_mode(&self, media_id: Uuid) -> Result<NfoExportMode, RepositoryError> {
+        if self.channel != OutputChannel::Ordinary { return Err(RepositoryError::InvalidInput); }
+        self.ensure_channel_media(media_id).await?;
+        let files = self.output_files(media_id).await?;
+        let source = files.iter().find(|file| is_video_source(&file.relative_path)).ok_or(RepositoryError::NotFound)?;
+        let root = self.repo.get_root(source.root_id).await?.ok_or(RepositoryError::NotFound)?;
+        if !root.enabled || !self.root_matches_channel(root.kind) { return Err(RepositoryError::InvalidInput); }
+        crate::root_sources::load_nfo_export_mode(self.repo.pool(), root.id).await
     }
     async fn preview_inner(
         &self,
         media_id: Uuid,
         nfo_only: bool,
         source_id: Option<Uuid>,
-        mode: NfoExportMode,
+        requested_mode: Option<NfoExportMode>,
         update_existing: bool,
+        cancel: Option<&CancellationToken>,
+        expected_default_mode: Option<NfoExportMode>,
     ) -> Result<OutputPreview, RepositoryError> {
         let _gate = self.gate.lock().await;
         self.ensure_access()?;
+        self.ensure_channel_media(media_id).await?;
+        let metadata_snapshot = if self.channel == OutputChannel::Ordinary {
+            let mut connection = self.repo.pool().acquire().await?;
+            Some(output_metadata_hash(&mut connection, media_id).await?)
+        } else { None };
         let item = self
             .repo
             .get_media(media_id)
@@ -419,6 +437,16 @@ impl MediaOutputService {
         self.ensure_channel_media(media_id).await?;
         if !root.enabled || !self.root_matches_channel(root.kind) {
             return Err(RepositoryError::InvalidInput);
+        }
+        let root_export_mode = if requested_mode.is_none() && self.channel == OutputChannel::Ordinary {
+            Some(crate::root_sources::load_nfo_export_mode(self.repo.pool(), root.id).await?)
+        } else { None };
+        let mode = requested_mode.or(root_export_mode).unwrap_or_default();
+        if expected_default_mode.is_some_and(|expected| root_export_mode != Some(expected)) {
+            return Err(RepositoryError::Conflict);
+        }
+        if cancel.is_some_and(CancellationToken::is_cancelled) {
+            return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
         }
         let relative = checked_relative(&source.relative_path)?;
         let source_parent = relative
@@ -557,7 +585,8 @@ impl MediaOutputService {
             }
         }
         let prepared = if self.channel == OutputChannel::Ordinary && (update_existing || (nfo_only && old.is_none())) {
-            self.prepare_kodi_images(&item, &metadata, name, &dir, mode, source.root_id, &parent).await?
+            let uncancelled = CancellationToken::new();
+            self.prepare_kodi_images_cancellable(&item, &metadata, name, &dir, mode, source.root_id, &parent, cancel.unwrap_or(&uncancelled)).await?
         } else {
             kodi_export::PreparedExport {
                 artwork: Vec::new(),
@@ -765,6 +794,12 @@ impl MediaOutputService {
             files: diffs,
             state: "planned".into(),
         };
+        if let Some(expected) = &metadata_snapshot {
+            let mut connection = self.repo.pool().acquire().await?;
+            if output_metadata_hash(&mut connection, media_id).await? != *expected {
+                return Err(RepositoryError::Conflict);
+            }
+        }
         let plan = OutputPlan {
             channel: self.channel,
             preview: preview.clone(),
@@ -774,6 +809,8 @@ impl MediaOutputService {
             source_relative: source.relative_path.clone(),
             source_fingerprint,
             nfo_only,
+            root_export_mode,
+            metadata_snapshot,
             series_target: (nfo_only || update_existing)
                 && matches!(item.kind, MediaKind::TvSeries | MediaKind::TvSeason),
             relative_parent: parent,
@@ -817,9 +854,8 @@ impl MediaOutputService {
         }
         Ok(preview)
     }
-    /// User-authorized default export: create only absent NFO sidecars. Never
-    /// outputs artwork or alternate revisions, replaces an existing file, or
-    /// converts a failed file export into a failed metadata merge.
+    /// Create missing NFOs using the directory preference. Offline artwork is
+    /// opt-in per root; existing NFOs and source media remain untouched.
     pub(crate) async fn automatic_nfo(
         &self,
         media_id: Uuid,
@@ -857,6 +893,7 @@ impl MediaOutputService {
         let sources = files
             .into_iter()
             .filter(|file| {
+                if context.is_some_and(|context| file.root_id != context.root.id) { return false; }
                 Path::new(&file.relative_path)
                     .extension()
                     .and_then(|ext| ext.to_str())
@@ -895,7 +932,8 @@ impl MediaOutputService {
         if cancel.is_some_and(CancellationToken::is_cancelled) {
             return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
         }
-        let preview = self.preview_inner(media_id, true, Some(source.id), NfoExportMode::Online, false).await?;
+        let requested_mode = (self.channel == OutputChannel::Adult).then_some(NfoExportMode::Online);
+        let preview = self.preview_inner(media_id, true, Some(source.id), requested_mode, false, cancel, None).await?;
         let execution = self
             .execute_inner(preview.preview_id, cancel, context)
             .await;
@@ -1210,6 +1248,18 @@ impl MediaOutputService {
             {
                 return Err(RepositoryError::Conflict);
             }
+            if let Some(expected) = plan.root_export_mode {
+                let current_mode: Option<String> = sqlx::query_scalar("SELECT nfo_export_mode FROM root_settings WHERE root_id=?")
+                    .bind(plan.root_id.to_string()).fetch_optional(&mut *tx).await?;
+                if crate::root_sources::parse_nfo_export_mode(current_mode.as_deref().unwrap_or("online"))? != expected {
+                    return Err(RepositoryError::Conflict);
+                }
+            }
+            if let Some(expected) = &plan.metadata_snapshot {
+                if output_metadata_hash(&mut tx, plan.preview.media_item_id).await? != *expected {
+                    return Err(RepositoryError::Conflict);
+                }
+            }
             let ancestor = crate::library_ready::ancestor_isolation("m");
             let lane = if self.channel == OutputChannel::Adult {
                 "m.adult_isolated=1 AND m.kind='adult_video'".to_owned()
@@ -1261,6 +1311,14 @@ impl MediaOutputService {
     }
 }
 
+async fn output_metadata_hash(connection: &mut sqlx::SqliteConnection, media_id: Uuid) -> Result<String, RepositoryError> {
+    let state = crate::scraper::merge_state(connection, media_id).await?;
+    let media: String = sqlx::query_scalar("SELECT json_object('kind',kind,'title',title,'original_title',original_title,'year',year,'updated_at',updated_at,'adult_isolated',adult_isolated) FROM media_items WHERE id=?")
+        .bind(media_id.to_string()).fetch_optional(&mut *connection).await?.ok_or(RepositoryError::NotFound)?;
+    let bytes = serde_json::to_vec(&(state, media)).map_err(|_| RepositoryError::CorruptData)?;
+    Ok(hash(&bytes))
+}
+
 fn verify_completed_plan(plan: &OutputPlan) -> Result<(), RepositoryError> {
     let dir = descend(
         open_absolute_dir(&plan.root, false).map_err(io_error)?,
@@ -1298,12 +1356,20 @@ fn execute_plan(
     {
         return Err(RepositoryError::CorruptData);
     }
+    if plan.nfo_only && (plan.preview.files.iter().filter(|file| file.kind == "nfo").count() != 1
+        || (plan.preview.files.iter().any(|file| file.kind != "nfo")
+            && (plan.channel != OutputChannel::Ordinary || plan.root_export_mode != Some(NfoExportMode::Offline)
+                || plan.preview.files.iter().any(|file| file.kind == "nfo" && (file.protected || file.expected_hash.is_some())))))
+    {
+        return Err(RepositoryError::CorruptData);
+    }
     let dir = descend(
         open_absolute_dir(&plan.root, false).map_err(io_error)?,
         &plan.relative_parent,
         false,
     )
     .map_err(io_error)?;
+    if plan.nfo_only { check_automatic_nfo_target(plan, &dir)?; }
     let mut written = 0;
     let mut preserved = 0;
     // Check all before-images first; explicit NFO retries may resume publication
@@ -1366,6 +1432,7 @@ fn execute_plan(
             }
         }
         match atomic_create_checked(&dir, &name, payload, || {
+            verify_source(plan)?;
             if let Some(access) = access {
                 access.ensure()?;
             }
@@ -1373,12 +1440,7 @@ fn execute_plan(
                 return Err(RepositoryError::Provider(ProviderFailure::Cancelled));
             }
             if plan.nfo_only {
-                let desired = name.to_str().ok_or(RepositoryError::CorruptData)?;
-                if existing_nfo_name(&dir, desired, !plan.series_target)?
-                    .is_some_and(|existing| existing != desired)
-                {
-                    return Err(RepositoryError::Conflict);
-                }
+                check_automatic_nfo_target(plan, &dir)?;
             }
             Ok(())
         }) {
@@ -1388,6 +1450,17 @@ fn execute_plan(
         }
     }
     Ok((written, preserved))
+}
+fn check_automatic_nfo_target(plan: &OutputPlan, dir: &Dir) -> Result<(), RepositoryError> {
+    let nfo = plan.preview.files.iter().find(|file| file.kind == "nfo").ok_or(RepositoryError::CorruptData)?;
+    let name = target_name(nfo, &plan.relative_parent)?;
+    let desired = name.to_str().ok_or(RepositoryError::CorruptData)?;
+    if let Some(existing) = existing_nfo_name(dir, desired, !plan.series_target)? {
+        if existing != desired { return Err(RepositoryError::Conflict); }
+        let bytes = read_optional(dir, name, MAX_NFO)?.ok_or(RepositoryError::Conflict)?;
+        if hash(&bytes) != nfo.content_hash { return Err(RepositoryError::Conflict); }
+    }
+    Ok(())
 }
 fn target_name(diff: &OutputFileDiff, parent: &Path) -> Result<PathBuf, RepositoryError> {
     let relative = checked_relative(&diff.destination)?;
@@ -2135,6 +2208,103 @@ mod tests {
         repo.save_metadata_value(&value, crate::library::MetadataWriteMode::User).await.unwrap();
     }
 
+    async fn root_mode(repo: &LibraryRepository, id: Uuid, mode: NfoExportMode) {
+        let file = repo.list_files(id).await.unwrap().remove(0);
+        sqlx::query("INSERT INTO root_settings(root_id,nfo_export_mode) VALUES(?,?) ON CONFLICT(root_id) DO UPDATE SET nfo_export_mode=excluded.nfo_export_mode")
+            .bind(file.root_id.to_string()).bind(mode.as_str()).execute(repo.pool()).await.unwrap();
+    }
+
+    async fn local_kodi_images(temp: &tempfile::TempDir, repo: &LibraryRepository, id: Uuid) {
+        for name in ["source-poster.png", "source-fanart.png", "source-actor.png"] {
+            std::fs::write(temp.path().join("media").join(name), png()).unwrap();
+        }
+        save_kodi_value(repo, kodi_value(id, "nfo_artwork", serde_json::json!([
+            {"kind":"poster","url":"source-poster.png"}, {"kind":"backdrop","url":"source-fanart.png"},
+            {"kind":"poster","url":"https://image.tmdb.org/t/p/original/poster.jpg"}
+        ]))).await;
+        save_kodi_value(repo, kodi_value(id, "cast", serde_json::json!([
+            {"name":"Actor", "role":"Lead", "thumb":"source-actor.png"}
+        ]))).await;
+    }
+
+    #[tokio::test]
+    async fn manual_export_inherits_its_actual_source_root_and_allows_a_one_time_override() {
+        let (temp, repo, service, id) = library().await;
+        local_kodi_images(&temp, &repo, id).await;
+        assert_eq!(service.default_mode(id).await.unwrap(), NfoExportMode::Online);
+        root_mode(&repo, id, NfoExportMode::Offline).await;
+        assert_eq!(service.default_mode(id).await.unwrap(), NfoExportMode::Offline);
+        assert_eq!(service.preview_with_defaults(id, Some(NfoExportMode::Online)).await.unwrap_err(), RepositoryError::Conflict);
+        let inherited = service.preview_with_defaults(id, Some(NfoExportMode::Offline)).await.unwrap();
+        assert_eq!(inherited.files.len(), 4);
+        let explicit = service.preview_with_mode(id, NfoExportMode::Online).await.unwrap();
+        assert_eq!(explicit.files.len(), 1);
+        assert!(explicit.files[0].new_text.as_ref().unwrap().contains("https://image.tmdb.org/"));
+        assert_eq!(service.default_mode(id).await.unwrap(), NfoExportMode::Offline);
+        root_mode(&repo, id, NfoExportMode::Online).await;
+        assert_eq!(service.execute(inherited.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        assert!(!temp.path().join("media/Example-poster.png").exists());
+        service.execute(explicit.preview_id).await.unwrap();
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn offline_directory_automatically_exports_missing_nfo_with_images_but_keeps_existing_nfo() {
+        let (temp, repo, service, id) = library().await;
+        local_kodi_images(&temp, &repo, id).await;
+        root_mode(&repo, id, NfoExportMode::Offline).await;
+        service.automatic_nfo(id, None, None).await.unwrap();
+        let nfo = std::fs::read_to_string(temp.path().join("media/Example.nfo")).unwrap();
+        assert!(nfo.contains("Example-poster.png"));
+        assert!(nfo.contains("Example-fanart.png"));
+        assert!(nfo.contains("Example-actor-"));
+        assert!(!nfo.contains("https://"));
+        assert_eq!(std::fs::read(temp.path().join("media/Example-poster.png")).unwrap(), png());
+        std::fs::remove_file(temp.path().join("media/Example-poster.png")).unwrap();
+        service.automatic_nfo(id, None, None).await.unwrap();
+        assert!(!temp.path().join("media/Example-poster.png").exists());
+        assert_eq!(std::fs::read_to_string(temp.path().join("media/Example.nfo")).unwrap(), nfo);
+        assert_eq!(std::fs::read(temp.path().join("media/Example.mkv")).unwrap(), b"untouched video bytes");
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn automatic_offline_plans_recheck_directory_consent_and_new_nfo_before_any_image_write() {
+        let (temp, repo, service, id) = library().await;
+        local_kodi_images(&temp, &repo, id).await;
+        root_mode(&repo, id, NfoExportMode::Offline).await;
+        let first = service.preview_inner(id, true, None, None, false, None, None).await.unwrap();
+        root_mode(&repo, id, NfoExportMode::Online).await;
+        assert_eq!(service.execute(first.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert!(!temp.path().join("media/Example-poster.png").exists());
+        root_mode(&repo, id, NfoExportMode::Offline).await;
+        let second = service.preview_inner(id, true, None, None, false, None, None).await.unwrap();
+        std::fs::write(temp.path().join("media/movie.nfo"), "<movie><title>Other editor</title></movie>").unwrap();
+        assert_eq!(service.execute(second.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert!(!temp.path().join("media/Example-poster.png").exists());
+        let cancelled = CancellationToken::new();
+        cancelled.cancel();
+        assert_eq!(service.preview_inner(id, true, None, None, false, Some(&cancelled), None).await.unwrap_err(), RepositoryError::Provider(ProviderFailure::Cancelled));
+        repo.pool().close().await;
+    }
+
+    #[tokio::test]
+    async fn offline_export_rejects_a_new_protected_edit_after_its_metadata_was_prepared() {
+        let (temp, repo, service, id) = library().await;
+        local_kodi_images(&temp, &repo, id).await;
+        root_mode(&repo, id, NfoExportMode::Offline).await;
+        let preview = service.preview_inner(id, true, None, None, false, None, None).await.unwrap();
+        let mut title = kodi_value(id, "title", serde_json::json!("New locked title"));
+        title.is_locked = true;
+        title.is_user_modified = true;
+        save_kodi_value(&repo, title).await;
+        assert_eq!(service.execute(preview.preview_id).await.unwrap_err(), RepositoryError::Conflict);
+        assert!(!temp.path().join("media/Example.nfo").exists());
+        assert!(!temp.path().join("media/Example-poster.png").exists());
+        repo.pool().close().await;
+    }
+
     #[tokio::test]
     async fn online_kodi_export_writes_complete_metadata_and_https_artwork_without_images() {
         let (temp, repo, service, id) = library().await;
@@ -2305,7 +2475,7 @@ mod tests {
         sqlx::query("UPDATE file_operations SET state='interrupted' WHERE id=?")
             .bind(preview.preview_id.to_string()).execute(repo.pool()).await.unwrap();
         let source = repo.list_files(id).await.unwrap().remove(0);
-        assert_eq!(service.preview_inner(id, true, Some(source.id), NfoExportMode::Online, false).await.unwrap_err(), RepositoryError::Conflict);
+        assert_eq!(service.preview_inner(id, true, Some(source.id), Some(NfoExportMode::Online), false, None, None).await.unwrap_err(), RepositoryError::Conflict);
         assert!(!path.exists());
         service.execute(preview.preview_id).await.unwrap();
         assert!(std::fs::read_to_string(&path).unwrap().contains("<plot>New plot</plot>"));
@@ -2749,6 +2919,7 @@ mod tests {
         sqlx::query("INSERT INTO scan_candidates(id,task_id,root_id,kind,relative_path,normalized_relative_path,payload_json,status,existing_media_id) VALUES(?,?,?,'movie',?,?,'{}','imported',?)").bind(Uuid::new_v4().to_string()).bind(task_id.to_string()).bind(root.id.to_string()).bind(&source.relative_path).bind(normalized).bind(id.to_string()).execute(repo.pool()).await.unwrap();
         let context = crate::scraper::automatic::AutomaticContext {
             metadata_providers: None,
+            nfo_export_mode: NfoExportMode::Online,
             root: root.clone(),
             exclusions: vec![],
             task_id,
@@ -2763,7 +2934,7 @@ mod tests {
         sqlx::query("UPDATE root_settings SET metadata_providers_json=NULL WHERE root_id=?")
             .bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
         let preview = service
-            .preview_inner(id, true, Some(source.id), NfoExportMode::Online, false)
+            .preview_inner(id, true, Some(source.id), Some(NfoExportMode::Online), false, None, None)
             .await
             .unwrap();
         sqlx::query("INSERT INTO root_settings(root_id,exclude_patterns_json) VALUES(?, '[\"**/*.mkv\"]') ON CONFLICT(root_id) DO UPDATE SET exclude_patterns_json=excluded.exclude_patterns_json").bind(root.id.to_string()).execute(repo.pool()).await.unwrap();
@@ -2901,7 +3072,7 @@ mod tests {
     #[tokio::test]
     async fn automatic_nfo_preserves_a_late_external_sidecar_with_different_casing() {
         let (temp, _, service, id) = library().await;
-        let preview = service.preview_inner(id, true, None, NfoExportMode::Online, false).await.unwrap();
+        let preview = service.preview_inner(id, true, None, Some(NfoExportMode::Online), false, None, None).await.unwrap();
         let local = "<movie><title>Late external sidecar</title></movie>";
         std::fs::write(temp.path().join("media/MOVIE.NFO"), local).unwrap();
         assert_eq!(

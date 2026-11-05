@@ -78,6 +78,7 @@ vi.mock("../../api/scraper", async (original) => ({
     artworkPreview: vi.fn(),
   },
   scraperOutputApi: {
+    defaultMode: vi.fn(),
     history: vi.fn(),
     preview: vi.fn(),
     execute: vi.fn(),
@@ -106,7 +107,7 @@ function show(
     </I18nextProvider>
   );
   const view = render(content(mediaId));
-  return { ...view, changeTarget: (id?: string) => view.rerender(content(id)) };
+  return { ...view, client, changeTarget: (id?: string) => view.rerender(content(id)) };
 }
 const localFilm = {
   id: "media-1",
@@ -173,6 +174,7 @@ beforeEach(async () => {
     thumbnail: "data:image/png;base64,aGVsbG8=",
   });
   vi.mocked(scraperOutputApi.history).mockResolvedValue([]);
+  vi.mocked(scraperOutputApi.defaultMode).mockResolvedValue("online");
   vi.mocked(scraperOutputApi.discard).mockResolvedValue(null);
   vi.mocked(scraperOutputApi.preview).mockResolvedValue(syntheticOutput);
   vi.mocked(scraperOutputApi.execute).mockResolvedValue({
@@ -358,6 +360,106 @@ it("discards the previous NFO preview when its export mode changes and writes on
     expect(scraperOutputApi.execute).toHaveBeenCalledExactlyOnceWith("offline-output"),
   );
 });
+it("inherits an offline directory default and keeps a one-off override local to the export", async () => {
+  vi.mocked(scraperOutputApi.defaultMode).mockResolvedValue("offline");
+  const view = await searchAndChoose();
+  await confirmMerge();
+  const mode = await screen.findByRole("combobox", { name: "NFO export mode" });
+  await waitFor(() => expect(mode).toHaveValue("offline"));
+  await openOutputPreview();
+  await screen.findByText("/synthetic/library/film.nfo");
+  expect(scraperOutputApi.preview).toHaveBeenLastCalledWith("media-1", undefined, "offline");
+  chooseSelectOption(mode, "online");
+  await waitFor(() => expect(scraperOutputApi.discard).toHaveBeenCalledExactlyOnceWith("output-1"));
+  await act(async () => view.client.invalidateQueries({ queryKey: ["roots"] }));
+  expect(mode).toHaveValue("online");
+  fireEvent.click(screen.getByRole("button", { name: "Preview NFO and poster output" }));
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenLastCalledWith("media-1", "online"));
+});
+
+it("blocks export while directory defaults fail and uses the retried default", async () => {
+  vi.mocked(scraperOutputApi.defaultMode).mockRejectedValueOnce(new DesktopError("request_failed")).mockResolvedValue("offline");
+  await searchAndChoose();
+  await confirmMerge();
+  const button = screen.getByRole("button", { name: "Preview NFO and poster output" });
+  await waitFor(() => expect(button).toBeDisabled());
+  expect(scraperOutputApi.preview).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "NFO export mode" })).toHaveValue("offline"));
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1", undefined, "offline"));
+});
+
+it("does not let a late directory default replace an explicitly chosen export mode", async () => {
+  let finish!: (mode: "online" | "offline") => void;
+  vi.mocked(scraperOutputApi.defaultMode).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+  await searchAndChoose();
+  await confirmMerge();
+  const mode = screen.getByRole("combobox", { name: "NFO export mode" });
+  expect(screen.getByRole("button", { name: "Preview NFO and poster output" })).toBeDisabled();
+  chooseSelectOption(mode, "offline");
+  await act(async () => finish("online"));
+  expect(mode).toHaveValue("offline");
+  fireEvent.click(screen.getByRole("button", { name: "Preview NFO and poster output" }));
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1", "offline"));
+});
+
+it("releases a preview when the inherited directory mode changes", async () => {
+  const view = await searchAndChoose();
+  await confirmMerge();
+  await openOutputPreview();
+  await screen.findByText("/synthetic/library/film.nfo");
+  vi.mocked(scraperOutputApi.defaultMode).mockResolvedValue("offline");
+  await act(async () => view.client.invalidateQueries({ queryKey: ["roots"] }));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "NFO export mode" })).toHaveValue("offline"));
+  await waitFor(() => expect(scraperOutputApi.discard).toHaveBeenCalledExactlyOnceWith("output-1"));
+  expect(screen.queryByText("/synthetic/library/film.nfo")).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("refreshes a changed directory default instead of showing a preview for the old mode", async () => {
+  await searchAndChoose();
+  await confirmMerge();
+  vi.mocked(scraperOutputApi.defaultMode).mockResolvedValue("offline");
+  vi.mocked(scraperOutputApi.preview).mockRejectedValueOnce(new DesktopError("request_failed", {
+    schema_version: 1, code: "conflict", message: "Conflict", correlation_id: "fixture",
+  }));
+  await openOutputPreview();
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "NFO export mode" })).toHaveValue("offline"));
+  expect(screen.queryByText("/synthetic/library/film.nfo")).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Preview NFO and poster output" }));
+  await screen.findByText("/synthetic/library/film.nfo");
+  expect(scraperOutputApi.preview).toHaveBeenLastCalledWith("media-1", undefined, "offline");
+});
+
+it("does not carry an override or a late directory default into another media target", async () => {
+  let finish!: (mode: "online" | "offline") => void;
+  vi.mocked(scraperOutputApi.defaultMode).mockImplementation((id) => id === "media-1"
+    ? new Promise((resolve) => { finish = resolve; }) : Promise.resolve("online"));
+  vi.mocked(scraperOutputApi.preview).mockImplementation(async (id) => ({ ...syntheticOutput, media_item_id: id }));
+  const view = show("media-1");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Search providers" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Choose this candidate" }));
+  await confirmMerge();
+  const firstMode = await screen.findByRole("combobox", { name: "NFO export mode" });
+  chooseSelectOption(firstMode, "offline");
+  expect(firstMode).toHaveValue("offline");
+  view.changeTarget("media-2");
+  await waitFor(() => expect(scraperOutputApi.defaultMode).toHaveBeenCalledWith("media-2"));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Search providers" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Choose this candidate" }));
+  await confirmMerge();
+  const secondMode = await screen.findByRole("combobox", { name: "NFO export mode" });
+  await waitFor(() => expect(secondMode).toHaveValue("online"));
+  await act(async () => finish("offline"));
+  expect(secondMode).toHaveValue("online");
+  fireEvent.click(screen.getByRole("button", { name: "Preview NFO and poster output" }));
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenLastCalledWith("media-2", undefined, "online"));
+});
 it("shows the existing-NFO update consequence before the same explicit write confirmation", async () => {
   vi.mocked(scraperOutputApi.preview).mockResolvedValue({
     ...syntheticOutput,
@@ -385,7 +487,7 @@ it("releases an old mode's late preview without replacing the current NFO proof"
   await searchAndChoose();
   await confirmMerge();
   await openOutputPreview();
-  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalledWith("media-1", "online"));
+  await waitFor(() => expect(scraperOutputApi.preview).toHaveBeenCalledWith("media-1", undefined, "online"));
   const mode = screen.getByRole("combobox", { name: "NFO export mode" });
   expect(mode).toBeEnabled();
   chooseSelectOption(mode, "offline");
@@ -1142,7 +1244,7 @@ it("discards a late output preview from a queue item after an external route cha
   await act(async () => {
     fireEvent.click(outputButton);
   });
-  expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1", "online");
+  expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith("media-1", undefined, "online");
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Next item" })).toBeDisabled(),
   );
@@ -1886,6 +1988,7 @@ it.each(["execute", "discard"] as const)(
     await waitFor(() =>
       expect(scraperOutputApi.preview).toHaveBeenCalledExactlyOnceWith(
         "media-1",
+        undefined,
         "online",
       ),
     );

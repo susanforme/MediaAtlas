@@ -1,5 +1,5 @@
-//! Opt-in native filesystem notifications feed the read-only scan preview pipeline.
-//! No notification can confirm a candidate, acquire metadata, or organize a file.
+//! Native notifications refresh ordinary video roots by default. Explicit opt-out
+//! is preserved; isolated scan services still create read-only previews.
 use crate::{
     library::{LibraryRepository, RepositoryError},
     scan_service::ScanService,
@@ -128,8 +128,8 @@ impl WatcherService {
     }
     pub async fn restore(&self) -> Result<(), RepositoryError> {
         self.reconcile().await?;
-        // A stopped process misses native events. Catch up with a fresh read-only
-        // scan for each current opted-in generation, never replay mutation work.
+        // A stopped process misses native events. Catch up with a fresh
+        // scan for each current watched generation, never replay old operations.
         let live = self
             .runtime
             .live
@@ -178,7 +178,7 @@ impl WatcherService {
             .ok_or(RepositoryError::NotFound)
     }
     pub async fn list(&self) -> Result<Vec<WatcherStatus>, RepositoryError> {
-        let rows = sqlx::query("SELECT r.id AS root_id,coalesce(w.opted_in,0) AS opted_in,w.last_task_id FROM library_roots r LEFT JOIN watcher_roots w ON r.id=w.root_id WHERE r.kind IS NOT NULL AND r.kind!='adult_video' AND NOT EXISTS(SELECT 1 FROM media_files f JOIN media_items m ON m.id=f.media_item_id WHERE f.root_id=r.id AND (m.adult_isolated=1 OR m.kind='adult_video')) ORDER BY r.id LIMIT 200").fetch_all(self.repo.pool()).await?;
+        let rows = sqlx::query("SELECT r.id AS root_id,coalesce(w.opted_in,r.kind IN ('movie','tv_series','anime'),0) AS opted_in,w.last_task_id FROM library_roots r LEFT JOIN watcher_roots w ON r.id=w.root_id WHERE r.kind IS NOT NULL AND r.kind!='adult_video' AND NOT EXISTS(SELECT 1 FROM media_files f JOIN media_items m ON m.id=f.media_item_id WHERE f.root_id=r.id AND (m.adult_isolated=1 OR m.kind='adult_video')) ORDER BY r.id LIMIT 200").fetch_all(self.repo.pool()).await?;
         let live = self
             .runtime
             .live
@@ -243,7 +243,7 @@ async fn reconcile_unlocked(
         return Ok(());
     }
     let ids: Vec<String> = sqlx::query_scalar(
-        "SELECT root_id FROM watcher_roots WHERE opted_in=1 ORDER BY root_id LIMIT 32",
+        "SELECT r.id FROM library_roots r LEFT JOIN watcher_roots w ON w.root_id=r.id WHERE r.enabled=1 AND r.kind IS NOT NULL AND r.kind<>'adult_video' AND coalesce(w.opted_in,r.kind IN ('movie','tv_series','anime'),0)=1 AND NOT EXISTS(SELECT 1 FROM media_files f JOIN media_items m ON m.id=f.media_item_id WHERE f.root_id=r.id AND (m.adult_isolated=1 OR m.kind='adult_video')) ORDER BY w.opted_in DESC,r.id LIMIT 32",
     )
     .fetch_all(repo.pool())
     .await?;
@@ -433,9 +433,9 @@ async fn worker(
                 due.remove(&signal);
                 continue;
             }
-            // One unresolved preview per Root. Events during a running scan are
-            // retained and coalesced until that preview is confirmed/cancelled.
-            let active:Result<i64,_>=sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND t.state IN('queued','running','waiting_for_user')").bind(id.to_string()).fetch_one(repo.pool()).await;
+            // Manual previews wait for confirmation; automatic review results
+            // must not block later filesystem changes from refreshing the root.
+            let active:Result<i64,_>=sqlx::query_scalar("SELECT count(*) FROM scan_sessions s JOIN scrape_tasks t ON t.id=s.task_id WHERE s.root_id=? AND (t.state IN('queued','running') OR (t.state='waiting_for_user' AND s.mode<>'automatic'))").bind(id.to_string()).fetch_one(repo.pool()).await;
             if !matches!(active, Ok(0)) {
                 continue;
             }
@@ -443,11 +443,11 @@ async fn worker(
                 Ok(task) => {
                     due.remove(&signal);
                     let _ = sqlx::query(
-                        "UPDATE watcher_roots SET last_task_id=?,updated_at=? WHERE root_id=?",
+                        "INSERT INTO watcher_roots(root_id,opted_in,last_task_id,updated_at) VALUES(?,1,?,?) ON CONFLICT(root_id) DO UPDATE SET last_task_id=excluded.last_task_id,updated_at=excluded.updated_at",
                     )
+                    .bind(id.to_string())
                     .bind(task.id.to_string())
                     .bind(Utc::now().timestamp_millis())
-                    .bind(id.to_string())
                     .execute(repo.pool())
                     .await;
                 }

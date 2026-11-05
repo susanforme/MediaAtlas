@@ -595,7 +595,8 @@ export function MetadataMergeWorkspace({
               <Label className="filter-field">
                 <span>{t("scraperOutputMode")}</span>
                 <Select
-                  value={workspace.outputMode}
+                  value={workspace.outputModeReady ? workspace.outputMode : ""}
+                  aria-busy={workspace.outputModeLoading || undefined}
                   disabled={
                     workspace.write.isPending ||
                     workspace.discard.isPending ||
@@ -605,6 +606,7 @@ export function MetadataMergeWorkspace({
                     workspace.setOutputMode(event.target.value as NfoExportMode)
                   }
                 >
+                  {!workspace.outputModeReady && <option value="" disabled>{t(workspace.outputModeLoading ? "loading" : "none")}</option>}
                   <option value="online">{t("scraperOutputOnline")}</option>
                   <option value="offline">{t("scraperOutputOffline")}</option>
                 </Select>
@@ -614,7 +616,7 @@ export function MetadataMergeWorkspace({
               </Button>
               <Button
                 variant="outline"
-                disabled={busy}
+                disabled={busy || !workspace.outputModeReady}
                 onClick={() => workspace.outputPlan.mutate()}
               >
                 {t("scraperOutputPreview")}
@@ -645,6 +647,11 @@ export function MetadataMergeWorkspace({
             </>
           )}
         </div>
+        {done && workspace.outputModeError && (
+          <div className="w-full">
+            <ErrorNotice error={workspace.outputModeError} retry={workspace.retryOutputMode} />
+          </div>
+        )}
         {preview && !done && !workspace.mergeSelectionValid && (
           <div role="alert" className="w-full text-sm">
             <p>{t("mergeChanged")}</p>

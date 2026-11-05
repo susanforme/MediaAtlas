@@ -22,6 +22,7 @@ async fn setup(kind: Option<MediaKind>) -> (TempDir, LibraryRepository, ScanServ
         .unwrap();
     let root = BrowseService::new(repo.clone(), dir.path().join("cache"))
         .save_root(&RootInput {
+            nfo_export_mode: None,
             metadata_providers: None,
             id: None,
             name: "Fixture root".into(),

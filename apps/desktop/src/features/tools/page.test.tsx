@@ -222,7 +222,7 @@ it("shows persistent stage logs and gives rollback a separate Preview and confir
     expect(api.rollbackExecute).toHaveBeenCalledWith("rollback"),
   );
 });
-it("enables watching only by opt in and checks health only on request", async () => {
+it("saves the explicit watching choice and checks health only on request", async () => {
   vi.mocked(maintenanceApi.configure).mockResolvedValue({
     root_id: "root",
     opted_in: true,

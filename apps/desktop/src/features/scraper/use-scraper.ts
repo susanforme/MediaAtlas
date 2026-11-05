@@ -39,6 +39,7 @@ type OutputAction = PreviewAction & { outputEpoch: number };
 type OutputPlanAction = {
   mediaId: string;
   mode: NfoExportMode;
+  override: boolean;
   epoch: number;
   outputEpoch: number;
 };
@@ -85,7 +86,7 @@ export function useScraper(
   const [localQuery, setLocalQuery] = useState("");
   const [onlyMissing, updateOnlyMissing] = useState(false);
   const [output, setOutput] = useState<OutputPreview>();
-  const [outputMode, updateOutputMode] = useState<NfoExportMode>("online");
+  const [outputChoice, updateOutputChoice] = useState<{ target: string; mode: NfoExportMode }>();
   const outputGeneration = useRef(0);
   const [invalid, setInvalid] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<number, string>>({});
@@ -140,6 +141,19 @@ export function useScraper(
   const validTarget = Boolean(
     targetDetail.data && targetKind && targetDetail.data.media.id === target,
   );
+  const outputDefault = useQuery({
+    queryKey: ["roots", "nfo-export-mode", target],
+    queryFn: () => scraperOutputApi.defaultMode(target),
+    enabled: validTarget,
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+  const outputOverride = outputChoice?.target === target ? outputChoice.mode : undefined;
+  const outputMode = outputOverride ?? outputDefault.data ?? "online";
+  const outputModeReady = validTarget && Boolean(
+    outputOverride || (outputDefault.isSuccess && !outputDefault.isFetching && !outputDefault.isPlaceholderData),
+  );
+  const outputContext = useRef({ target, mode: outputMode, ready: outputModeReady });
   const draftProjection = metadata
     ? buildMergePreview({
         metadata,
@@ -185,6 +199,7 @@ export function useScraper(
     epoch: generation.current,
     mediaId: target,
     outputMode,
+    outputModeReady,
     mergeId: preview?.preview_id,
     mergeReady: false,
     outputId: output?.preview_id,
@@ -192,15 +207,27 @@ export function useScraper(
   // A DOM action can arrive before useMutation's passive option update.
   // Bind it to the committed preview rather than a mutationFn render closure.
   useLayoutEffect(() => {
+    const previous = outputContext.current;
+    const outputChanged = previous.target !== target || previous.mode !== outputMode || previous.ready !== outputModeReady;
+    if (outputChanged) {
+      outputContext.current = { target, mode: outputMode, ready: outputModeReady };
+      outputGeneration.current += 1;
+      if (previous.target !== target) updateOutputChoice(undefined);
+      setOutput(undefined);
+      outputPlan.reset();
+      if (!discard.isPending) discard.reset();
+      if (!write.isPending) write.reset();
+    }
     latestActions.current = {
       epoch: generation.current,
       mediaId: target,
       outputMode,
+      outputModeReady,
       mergeId: preview?.preview_id,
       mergeReady: Boolean(
         mergeSelectionValid && !liveMerge.pending && mergeChangeCount,
       ),
-      outputId: output?.preview_id,
+      outputId: outputChanged ? undefined : output?.preview_id,
     };
   });
   function validAction(action: PreviewAction, kind: "merge" | "output") {
@@ -211,7 +238,7 @@ export function useScraper(
       Boolean(action.previewId) &&
       (kind === "merge"
         ? latest.mergeReady && latest.mergeId === action.previewId
-        : latest.outputId === action.previewId)
+        : latest.outputModeReady && latest.outputId === action.previewId)
     );
   }
   const seededTarget = useRef("");
@@ -375,18 +402,28 @@ export function useScraper(
         !current(action.epoch) ||
         action.outputEpoch !== outputGeneration.current ||
         action.mediaId !== latest.mediaId ||
+        !latest.outputModeReady ||
         action.mode !== latest.outputMode
       )
         throw new DesktopError("request_failed");
       return guarded(
-        () => scraperOutputApi.preview(action.mediaId, action.mode),
+        () => action.override
+          ? scraperOutputApi.preview(action.mediaId, action.mode)
+          : scraperOutputApi.preview(action.mediaId, undefined, action.mode),
         action.epoch,
       );
     },
     onSuccess: ({ value, epoch }, action) => {
-      if (current(epoch) && action.outputEpoch === outputGeneration.current)
+      if (current(epoch) && action.outputEpoch === outputGeneration.current &&
+        action.mediaId === latestActions.current.mediaId &&
+        action.mode === latestActions.current.outputMode && latestActions.current.outputModeReady)
         setOutput(value);
       else void releaseOutput(value.preview_id).catch(() => {});
+    },
+    onError: (error, action) => {
+      if (error instanceof DesktopError && error.envelope?.code === "conflict" &&
+        !action.override && current(action.epoch) && action.outputEpoch === outputGeneration.current)
+        void client.invalidateQueries({ queryKey: ["roots", "nfo-export-mode", action.mediaId] });
     },
   });
   const discard = useMutation({
@@ -528,12 +565,13 @@ export function useScraper(
   }
   function setOutputMode(mode: NfoExportMode) {
     if (
-      mode === outputMode || write.isPending || discard.isPending || confirm.isPending
+      (mode === outputMode && outputOverride !== undefined) || write.isPending || discard.isPending || confirm.isPending
     ) return;
     outputGeneration.current += 1;
     latestActions.current.outputId = undefined;
     latestActions.current.outputMode = mode;
-    updateOutputMode(mode);
+    latestActions.current.outputModeReady = true;
+    updateOutputChoice({ target, mode });
     setOutput(undefined);
     outputPlan.reset();
     discard.reset();
@@ -606,6 +644,10 @@ export function useScraper(
     output,
     setOutput,
     outputMode,
+    outputModeReady,
+    outputModeLoading: !outputOverride && outputDefault.isFetching,
+    outputModeError: outputOverride ? undefined : outputDefault.error,
+    retryOutputMode: () => void outputDefault.refetch(),
     setOutputMode,
     invalid,
     setInvalid,
@@ -639,6 +681,7 @@ export function useScraper(
         outputPlan.mutate({
           mediaId: target,
           mode: outputMode,
+          override: outputOverride !== undefined,
           epoch: generation.current,
           outputEpoch: outputGeneration.current,
         }),

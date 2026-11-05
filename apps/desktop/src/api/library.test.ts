@@ -97,4 +97,25 @@ describe("library IPC contracts", () => {
     } = task;
     expect(scanTaskGuard(legacy)).toBe(true);
   });
+  it("round-trips a directory NFO mode and rejects unknown modes without breaking legacy roots", async () => {
+    const root = {
+      id: "root", name: "Films", path: "/media", path_style: "posix",
+      kind: "movie", enabled: true, exclude_patterns: [],
+      created_at: "2026-11-05", updated_at: "2026-11-05", last_scan_at: null,
+    };
+    vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data: [root] });
+    await expect(libraryApi.roots(false)).resolves.toEqual([root]);
+    for (const mode of ["online", "offline"] as const) {
+      const saved = { ...root, nfo_export_mode: mode };
+      vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data: saved });
+      const input = { id: root.id, name: root.name, path: root.path,
+        kind: "movie" as const, enabled: true, exclude_patterns: [], nfo_export_mode: mode };
+      await expect(libraryApi.saveRoot(input)).resolves.toEqual(saved);
+      expect(invoke).toHaveBeenLastCalledWith("library_save_root", { input });
+    }
+    for (const mode of ["invalid", null, 1]) {
+      vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data: [{ ...root, nfo_export_mode: mode }] });
+      await expect(libraryApi.roots(false)).rejects.toMatchObject({ code: "invalid_response" });
+    }
+  });
 });

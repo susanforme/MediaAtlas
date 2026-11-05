@@ -70,7 +70,12 @@ it("uses versioned typed search/detail/merge envelopes with immutable snapshot i
   respond(syntheticOutput);
   await scraperOutputApi.preview("media-1");
   expect(invoke).toHaveBeenLastCalledWith("scraper_output_preview", {
-    input: { media_id: "media-1", mode: "online" },
+    input: { media_id: "media-1" },
+  });
+  respond(syntheticOutput);
+  await scraperOutputApi.preview("media-1", undefined, "offline");
+  expect(invoke).toHaveBeenLastCalledWith("scraper_output_preview", {
+    input: { media_id: "media-1", expected_default_mode: "offline" },
   });
   respond({
     schema_version: 1,
@@ -84,6 +89,18 @@ it("uses versioned typed search/detail/merge envelopes with immutable snapshot i
   expect(invoke).toHaveBeenLastCalledWith("scraper_output_execute", {
     input: { preview_id: "output-1" },
   });
+});
+it("loads a validated directory export default and keeps explicit preview overrides", async () => {
+  respond("offline");
+  expect(await scraperOutputApi.defaultMode("media-1")).toBe("offline");
+  expect(invoke).toHaveBeenLastCalledWith("scraper_output_default_mode", { input: { media_id: "media-1" } });
+  respond(syntheticOutput);
+  await scraperOutputApi.preview("media-1", "online");
+  expect(invoke).toHaveBeenLastCalledWith("scraper_output_preview", { input: { media_id: "media-1", mode: "online" } });
+  for (const mode of [null, {}, "inherit", "ONLINE"]) {
+    respond(mode);
+    await expect(scraperOutputApi.defaultMode("media-1")).rejects.toBeDefined();
+  }
 });
 it.each([
   { ...syntheticSearch, schema_version: 2 },

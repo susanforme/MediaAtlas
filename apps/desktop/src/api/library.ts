@@ -1,5 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { DesktopError, type IpcErrorEnvelope } from "./desktop";
+import type { NfoExportMode } from "./scraper";
 
 export type MediaKind =
   | "movie"
@@ -36,6 +37,7 @@ export interface RootView {
   exclude_patterns: string[];
   last_scan_at: string | null;
   metadata_providers?: string[] | null;
+  nfo_export_mode?: NfoExportMode;
 }
 export interface RootInput {
   id: string | null;
@@ -45,6 +47,7 @@ export interface RootInput {
   enabled: boolean;
   exclude_patterns: string[];
   metadata_providers?: string[] | null;
+  nfo_export_mode?: NfoExportMode;
 }
 export interface BrowseQuery {
   root_id: string | null;
@@ -242,6 +245,8 @@ function root(v: unknown): v is RootView {
     (v.metadata_providers === undefined ||
       v.metadata_providers === null ||
       arrayOf(text)(v.metadata_providers)) &&
+    (v.nfo_export_mode === undefined ||
+      v.nfo_export_mode === "online" || v.nfo_export_mode === "offline") &&
     text(v.created_at) &&
     text(v.updated_at) &&
     optionalText(v.last_scan_at)

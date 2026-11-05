@@ -146,6 +146,7 @@ pub fn run() {
             commands::scraper_confirm,
             commands::scraper_history,
             commands::scraper_output_preview,
+            commands::scraper_output_default_mode,
             commands::scraper_output_execute,
             commands::scraper_artwork_preview,
             commands::scraper_search_preview,

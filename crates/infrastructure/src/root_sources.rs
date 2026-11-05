@@ -1,5 +1,5 @@
 use crate::library::RepositoryError;
-use mediaatlas_domain::MediaKind;
+use mediaatlas_domain::{MediaKind, NfoExportMode};
 use sqlx::SqlitePool;
 use std::collections::HashSet;
 use uuid::Uuid;
@@ -49,9 +49,33 @@ pub(crate) async fn load(
         .transpose()
 }
 
+pub(crate) fn parse_nfo_export_mode(value: &str) -> Result<NfoExportMode, RepositoryError> {
+    match value {
+        "online" => Ok(NfoExportMode::Online),
+        "offline" => Ok(NfoExportMode::Offline),
+        _ => Err(RepositoryError::CorruptData),
+    }
+}
+
+pub(crate) async fn load_nfo_export_mode(
+    pool: &SqlitePool,
+    root_id: Uuid,
+) -> Result<NfoExportMode, RepositoryError> {
+    let value: Option<String> = sqlx::query_scalar("SELECT nfo_export_mode FROM root_settings WHERE root_id=?")
+        .bind(root_id.to_string()).fetch_optional(pool).await?;
+    value.as_deref().map(parse_nfo_export_mode).transpose().map(Option::unwrap_or_default)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn nfo_mode_uses_only_the_stored_enum_values() {
+        assert_eq!(parse_nfo_export_mode("online"), Ok(NfoExportMode::Online));
+        assert_eq!(parse_nfo_export_mode("offline"), Ok(NfoExportMode::Offline));
+        assert_eq!(parse_nfo_export_mode("automatic"), Err(RepositoryError::CorruptData));
+    }
 
     #[test]
     fn directory_sources_reject_duplicates_unknown_and_cross_scope_providers() {

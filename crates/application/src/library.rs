@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use mediaatlas_domain::{
-    Artwork, ExternalId, LibraryRoot, MediaFile, MediaItem, MediaKind, MetadataValue, TaskState,
+    Artwork, ExternalId, LibraryRoot, MediaFile, MediaItem, MediaKind, MetadataValue, NfoExportMode, TaskState,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -35,6 +35,8 @@ pub struct RootInput {
     pub exclude_patterns: Vec<String>,
     #[serde(default)]
     pub metadata_providers: Option<Vec<String>>,
+    #[serde(default)]
+    pub nfo_export_mode: Option<NfoExportMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,6 +46,8 @@ pub struct RootView {
     pub exclude_patterns: Vec<String>,
     pub last_scan_at: Option<DateTime<Utc>>,
     pub metadata_providers: Option<Vec<String>>,
+    #[serde(default)]
+    pub nfo_export_mode: NfoExportMode,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -277,6 +281,7 @@ mod tests {
         let now = Utc::now();
         let root = RootView {
             metadata_providers: None,
+            nfo_export_mode: NfoExportMode::Online,
             root: LibraryRoot {
                 id: Uuid::new_v4(),
                 name: "Fixture".into(),
@@ -295,5 +300,21 @@ mod tests {
         assert_eq!(wire["data"]["name"], "Fixture");
         assert!(wire["data"].get("root").is_none());
         assert_eq!(wire["data"]["exclude_patterns"], json!(["*.tmp"]));
+        assert_eq!(wire["data"]["nfo_export_mode"], "online");
+        let mut legacy = wire["data"].clone();
+        legacy.as_object_mut().unwrap().remove("nfo_export_mode");
+        assert_eq!(serde_json::from_value::<RootView>(legacy).unwrap().nfo_export_mode, NfoExportMode::Online);
+    }
+
+    #[test]
+    fn root_nfo_mode_defaults_and_validates_the_wire_values() {
+        let mut input = json!({"id":null,"name":"Movie","path":"/fixture","kind":"movie","enabled":true});
+        let legacy: RootInput = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(legacy.nfo_export_mode, None);
+        input["nfo_export_mode"] = json!("offline");
+        let offline: RootInput = serde_json::from_value(input.clone()).unwrap();
+        assert_eq!(offline.nfo_export_mode, Some(NfoExportMode::Offline));
+        input["nfo_export_mode"] = json!("unknown");
+        assert!(serde_json::from_value::<RootInput>(input).is_err());
     }
 }

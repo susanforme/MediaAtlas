@@ -414,7 +414,9 @@ pub struct ScraperMediaInput {
 pub struct ScraperOutputInput {
     media_id: Uuid,
     #[serde(default)]
-    mode: mediaatlas_infrastructure::media_output::NfoExportMode,
+    mode: Option<mediaatlas_infrastructure::media_output::NfoExportMode>,
+    #[serde(default)]
+    expected_default_mode: Option<mediaatlas_infrastructure::media_output::NfoExportMode>,
 }
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -485,14 +487,23 @@ pub async fn scraper_history(
         .map_err(storage_error)
 }
 #[tauri::command]
+pub async fn scraper_output_default_mode(
+    state: State<'_, DesktopState>,
+    input: ScraperMediaInput,
+) -> Result<ApiResponse<mediaatlas_infrastructure::media_output::NfoExportMode>, ErrorDto> {
+    state.output.default_mode(input.media_id).await
+        .map(ApiResponse::new).map_err(storage_error)
+}
+#[tauri::command]
 pub async fn scraper_output_preview(
     state: State<'_, DesktopState>,
     input: ScraperOutputInput,
 ) -> Result<ApiResponse<mediaatlas_infrastructure::media_output::OutputPreview>, ErrorDto> {
-    state
-        .output
-        .preview_with_mode(input.media_id, input.mode)
-        .await
+    let preview = match input.mode {
+        Some(mode) => state.output.preview_with_mode(input.media_id, mode).await,
+        None => state.output.preview_with_defaults(input.media_id, input.expected_default_mode).await,
+    };
+    preview
         .map(ApiResponse::new)
         .map_err(storage_error)
 }

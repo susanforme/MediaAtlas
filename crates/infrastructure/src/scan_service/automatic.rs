@@ -95,6 +95,7 @@ impl ScanService {
             root: snapshot.root.clone(),
             exclusions: snapshot.exclude_patterns.clone(),
             metadata_providers: snapshot.metadata_providers.clone(),
+            nfo_export_mode: snapshot.nfo_export_mode,
             task_id: id,
             cancel: network_cancel.clone(),
             adult_access: adult_access.cloned(),

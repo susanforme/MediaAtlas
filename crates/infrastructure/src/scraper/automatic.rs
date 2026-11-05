@@ -7,6 +7,7 @@ pub(crate) struct AutomaticContext {
     pub root: LibraryRoot,
     pub exclusions: Vec<String>,
     pub metadata_providers: Option<Vec<String>>,
+    pub nfo_export_mode: NfoExportMode,
     pub task_id: Uuid,
     pub cancel: CancellationToken,
     pub adult_access: Option<crate::media_output::AdultOutputAccess>,
@@ -30,7 +31,7 @@ impl AutomaticContext {
             .bind(self.root.id.to_string())
             .execute(&mut **tx)
             .await?;
-        let root = sqlx::query("SELECT r.*,s.exclude_patterns_json,s.metadata_providers_json FROM library_roots r LEFT JOIN root_settings s ON s.root_id=r.id WHERE r.id=?")
+        let root = sqlx::query("SELECT r.*,s.exclude_patterns_json,s.metadata_providers_json,s.nfo_export_mode FROM library_roots r LEFT JOIN root_settings s ON s.root_id=r.id WHERE r.id=?")
             .bind(self.root.id.to_string()).fetch_optional(&mut **tx).await?.ok_or(RepositoryError::NotFound)?;
         let exclusions: Vec<String> = serde_json::from_str(
             root.try_get::<Option<String>, _>("exclude_patterns_json")?
@@ -40,6 +41,9 @@ impl AutomaticContext {
         .map_err(|_| RepositoryError::CorruptData)?;
         let providers: Option<Vec<String>> = root.try_get::<Option<String>, _>("metadata_providers_json")?
             .map(|value| serde_json::from_str(&value).map_err(|_| RepositoryError::CorruptData)).transpose()?;
+        let nfo_export_mode = crate::root_sources::parse_nfo_export_mode(
+            root.try_get::<Option<String>, _>("nfo_export_mode")?.as_deref().unwrap_or("online"),
+        )?;
         if !root.try_get::<bool, _>("enabled")?
             || root.try_get::<String, _>("path")? != self.root.path
             || root.try_get::<String, _>("path_style")? != self.root.path_style.as_str()
@@ -48,6 +52,7 @@ impl AutomaticContext {
             || (self.root.kind == Some(MediaKind::AdultVideo)) != self.adult_access.is_some()
             || exclusions != self.exclusions
             || providers != self.metadata_providers
+            || nfo_export_mode != self.nfo_export_mode
         {
             return Err(RepositoryError::Conflict);
         }
@@ -163,20 +168,25 @@ impl ScraperService {
                     && !existing_art.iter().any(|old| old.kind.as_str() == art.kind)
             })
         });
-        if local_metadata || (existing.is_some() && !repair_artwork) {
+        if local_metadata || existing.is_some() {
             let mut tx = self.repo.pool().begin().await?;
             context.validate_tx(&mut tx, media_id).await?;
             tx.commit().await?;
             let output =
-                crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone());
+                crate::media_output::MediaOutputService::new(self.repo.clone(), self.cache.clone())
+                    .with_network_engine(self.engine.clone());
             let _ = output
                 .automatic_nfo(media_id, Some(&context.cancel), Some(context))
                 .await;
-            return Ok(AutomaticOutcome {
-                state: "skipped",
-                reason: Some("existing_metadata"),
-                run_id: None,
-            });
+            // Restore NFOs from saved metadata even when remote artwork repair
+            // will be unavailable or still needs review.
+            if local_metadata || !repair_artwork {
+                return Ok(AutomaticOutcome {
+                    state: "skipped",
+                    reason: Some("existing_metadata"),
+                    run_id: None,
+                });
+            }
         }
         if !matches!(
             media.kind,
