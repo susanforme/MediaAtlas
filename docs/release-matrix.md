@@ -2,6 +2,8 @@
 
 2026-11-05：按用户要求准备发布 `v0.1.0-beta.9`。桌面业务样式全部迁移为 Tailwind 4，删除 9 个组件/feature CSS 文件和启动页内联样式；全局仅保留主题 token 与 Tailwind reset。保留现有测试使用的语义 class/id，更新下拉菜单坐标与主题测试的实现引用，以及 QA 来源文件清单。根与前端 `AGENTS.md` 加入仅使用 Tailwind、保留 UI 的约束。根/desktop 包、Tauri 配置、Cargo workspace 与锁文件的六个本项目 crate 同步为 beta.9；第三方依赖不变。按用户要求仅静态阅读、修改和 diff 核对，未运行本地项目、测试、lint、构建、格式化或安装包，未生成本轮截图，实际视觉一致性未经渲染验证。发布沿用 tag 触发的 GitHub Actions 原生四平台构建与验证，只有远端门槛全部通过才公开 Release。以下 beta.8 及更早版本记录为历史背景。
 
+beta.9 首次云端预检在 `bf0cd14` 因许可清单的 Cargo.lock 指纹仍为旧版本而停止，未调度打包或公开 Release。补齐六个本项目 crate 升版后的锁文件 SHA-256，第三方依赖记录及许可材料不变；保持不运行本地生成器，修正后更新尚未发布的 beta.9 标签重试。`bf0cd14` 的 Windows/macOS/Linux main CI 已全部通过；正式发布结果以修正后标签提交的 Actions 为准。
+
 2026-11-05 本轮按用户要求移动现有 `v0.1.0-beta.8` tag 并 push 重新发布，版本号和第三方依赖不变。新增 IMDb 完整地址／ID 精确识别、人工身份纠错预览，以及 OMDb、豆瓣、Bangumi 三个来源；来源配置、目录优先级和 Kodi 图片导出同步接通。仅静态修改并补写回归，未执行本地测试、lint、构建、格式化或安装包；远程发布结果以对应提交的 Actions 状态及资产清单为准。下文首次创建 beta.8 的描述为历史背景。
 
 发布前读取 main 上 `97ceba8` 的 Actions：Windows、Linux 成功，macOS 的 12 项 NFO 测试因临时目录含系统符号链接报 `NotADirectory`。相关 fixture 改用仓库现有的 canonical 临时目录 helper；生产目录的 no-follow 边界保持。修复未在本地执行，后续结果以新提交的云端检查为准。
