@@ -1574,7 +1574,7 @@ mod tests {
         let descriptors = VideoProviderHub::descriptors();
         assert_eq!(
             descriptors.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
-            vec!["tvmaze", "tmdb", "anilist", "wikipedia.html"]
+            vec!["tvmaze", "bangumi", "douban", "omdb", "tmdb", "anilist", "wikipedia.html"]
         );
         assert!(descriptors
             .iter()
