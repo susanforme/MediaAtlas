@@ -476,8 +476,8 @@ it.each([
   snapshot.providers[0].config.enabled = true;
   vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
   show();
+  if (kind === "anime") chooseSelectOption(await screen.findByLabelText("Media type"), "anime");
   await screen.findByText(name);
-  if (kind === "anime") chooseSelectOption(screen.getByLabelText("Media type"), "anime");
   const checkbox = screen.getByRole("checkbox", { name: new RegExp(name) });
   await waitFor(() => expect(checkbox).toBeEnabled());
   fireEvent.click(checkbox);
