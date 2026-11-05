@@ -870,7 +870,8 @@ mod tests {
                     let _ = stream.read(&mut request).await;
                     tokio::time::sleep(delay).await;
                     let body = r#"{"id":"fixture-1"}"#;
-                    let response=format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nRetry-After: 1\r\nConnection: close\r\n\r\n{body}",body.len());
+                    // Registry tests check persisted health/isolation, not cooldown expiry during slow database scheduling.
+                    let response=format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nRetry-After: 3600\r\nConnection: close\r\n\r\n{body}",body.len());
                     let _ = stream.write_all(response.as_bytes()).await;
                 });
             }
@@ -975,14 +976,18 @@ mod tests {
         configured(&service, "mock.healthy", 2000).await;
         let bad = service.start("mock.blocked", "First query").await.unwrap();
         let good = service.start("mock.healthy", "Second query").await.unwrap();
+        let failed = wait(&service, bad).await;
+        assert_eq!(failed.state, mediaatlas_domain::TaskState::Failed);
         assert_eq!(
-            wait(&service, bad).await.failure,
+            failed.failure,
             Some(ProviderFailure::RateLimited)
         );
+        let succeeded = wait(&service, good).await;
         assert_eq!(
-            wait(&service, good).await.state,
+            succeeded.state,
             mediaatlas_domain::TaskState::Succeeded
         );
+        assert_eq!(succeeded.failure, None);
         let snapshot = service.snapshot().await.unwrap();
         assert_eq!(
             snapshot
