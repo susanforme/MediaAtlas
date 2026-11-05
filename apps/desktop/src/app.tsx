@@ -49,7 +49,7 @@ const ScannerPage = lazyRouteComponent(
   "ScannerPage",
 );
 const TasksPage = lazyRouteComponent(
-  () => import("./features/library/scanner"),
+  () => import("./features/library/tasks"),
   "TasksPage",
 );
 function RootLayout() {

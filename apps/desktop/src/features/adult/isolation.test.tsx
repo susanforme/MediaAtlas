@@ -8,7 +8,8 @@ import i18n from "../../i18n";
 import { LibraryPage } from "../library/browse";
 import { MediaDetailPage } from "../library/detail";
 import { RootsPage } from "../library/pages";
-import { ScannerPage, TasksPage } from "../library/scanner";
+import { ScannerPage } from "../library/scanner";
+import { TasksPage } from "../library/tasks";
 
 vi.mock("../library/context", () => ({
   usePrivacy: () => ({

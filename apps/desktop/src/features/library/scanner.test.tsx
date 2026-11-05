@@ -15,10 +15,8 @@ import { libraryApi, type RootView, type ScanTask } from "../../api/library";
 import i18n from "../../i18n";
 import { selectOptions } from "../../test/select";
 import { PrivacyProvider } from "./context";
-import { ScannerPage, TasksPage } from "./scanner";
+import { ScannerPage } from "./scanner";
 import type { ScannerSearch } from "./scanner-navigation";
-
-vi.mock("../providers/pages", () => ({ ProviderTasks: () => null }));
 
 const privacy = vi.hoisted(() => ({ visible: false, allowed: true }));
 vi.mock("@tanstack/react-router", () => ({
@@ -496,31 +494,5 @@ describe("Fixture scan review", () => {
     await waitFor(() =>
       expect(libraryApi.sync).toHaveBeenCalledExactlyOnceWith(root.id),
     );
-  });
-
-  it("uses the same recovery instructions and real retry destination in task history", async () => {
-    vi.mocked(libraryApi.tasks).mockResolvedValue([
-      { ...task, state: "failed", error_code: "files_changed" },
-    ]);
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    render(
-      <I18nextProvider i18n={i18n}>
-        <QueryClientProvider client={client}>
-          <TasksPage />
-        </QueryClientProvider>
-      </I18nextProvider>,
-    );
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Some files changed during the scan and have not been added.",
-    );
-    const retry = screen.getByRole("link", { name: "View and update again" });
-    expect(retry).toHaveAttribute("href", "/scanner");
-    expect(retry).toHaveAttribute(
-      "data-search",
-      JSON.stringify({ root: root.id, task: task.id }),
-    );
-    expect(libraryApi.sync).not.toHaveBeenCalled();
   });
 });

@@ -52,10 +52,7 @@ export const providerTranslations = {
     providerCapability_search: "搜索",
     providerCapability_metadata: "详情",
     providerCapability_artwork: "图片",
-    providerTasks: "Provider 任务",
-    scanTasks: "本地扫描任务",
     noProviders: "尚无已注册 Provider",
-    noProviderTasks: "尚无 Provider 任务",
     providerResultReady: "任务结果已就绪",
     providerResult_fixture_complete:
       "离线 JSON 与 HTML 组合验证完成。未更改媒体。",
@@ -147,10 +144,7 @@ export const providerTranslations = {
     providerCapability_search: "Search",
     providerCapability_metadata: "Metadata",
     providerCapability_artwork: "Artwork",
-    providerTasks: "Provider tasks",
-    scanTasks: "Local scan tasks",
     noProviders: "No providers registered",
-    noProviderTasks: "No provider tasks yet",
     providerResultReady: "Task result is ready",
     providerResult_fixture_complete:
       "Offline JSON and HTML combination passed. No media was changed.",

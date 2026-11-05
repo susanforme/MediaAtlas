@@ -1,21 +1,14 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { adultApi } from "../../api/adult";
-import { libraryApi } from "../../api/library";
-import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
-import { ProviderTasks } from "../providers/pages";
 import type { ScannerSearch } from "./scanner-navigation";
-import { useLibraryDirectories } from "./use-library-directories";
 import "./translations";
 import { AutomaticScanResult } from "./automatic-scan-result";
 import { refreshIsRunning, refreshResultTitle } from "./library-activity-model";
 import "./library-status-translations";
-import { isActiveScanTask } from "./library-model";
 import { ScanRecovery } from "./scan-recovery";
 import { useScannerPreview } from "./use-scanner-preview";
 
@@ -25,147 +18,6 @@ export {
 } from "./scanner-navigation";
 
 import { Empty, ErrorNotice, Loading, PageHeading, useFormat } from "./shared";
-
-export function TasksPage() {
-  const { t } = useTranslation();
-  const { number, date } = useFormat();
-  const client = useQueryClient();
-  const { roots, adultAvailable } = useLibraryDirectories();
-  const ordinaryTasks = useQuery({
-    queryKey: ["tasks", false],
-    queryFn: () => libraryApi.tasks(false),
-    refetchInterval: 2000,
-  });
-  const privateTasks = useQuery({
-    queryKey: ["adult", "scan-tasks"],
-    queryFn: adultApi.tasks,
-    enabled: adultAvailable,
-    refetchInterval: adultAvailable ? 2000 : false,
-  });
-  const tasks = {
-    ...ordinaryTasks,
-    data: [
-      ...(ordinaryTasks.data ?? []),
-      ...(adultAvailable ? (privateTasks.data ?? []) : []),
-    ],
-    isPending:
-      ordinaryTasks.isPending || (adultAvailable && privateTasks.isPending),
-    isError: ordinaryTasks.isError || (adultAvailable && privateTasks.isError),
-    error: ordinaryTasks.error ?? (adultAvailable ? privateTasks.error : null),
-    refetch: () =>
-      Promise.all([
-        ordinaryTasks.refetch(),
-        ...(adultAvailable ? [privateTasks.refetch()] : []),
-      ]),
-  };
-  const cancel = useMutation({
-    mutationFn: (id: string) => libraryApi.cancel(id),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: ["tasks"] });
-      if (adultAvailable)
-        void client.invalidateQueries({ queryKey: ["adult", "scan-tasks"] });
-    },
-  });
-  return (
-    <>
-      <PageHeading title={t("tasks")} />
-      <h2 className="section-title">{t("scanTasks")}</h2>
-      {cancel.isError && <ErrorNotice error={cancel.error} />}
-      {tasks.isPending ? (
-        <Loading />
-      ) : tasks.isError ? (
-        <ErrorNotice error={tasks.error} retry={() => void tasks.refetch()} />
-      ) : !tasks.data.length ? (
-        <Empty title={t("noTasks")} />
-      ) : (
-        <div className="space-y-4">
-          {tasks.data.map((task) => (
-            <Card asChild key={task.id}>
-              <article>
-                <div className="flex flex-wrap justify-between gap-4">
-                  <div>
-                    <Badge variant="secondary">
-                      {t(
-                        task.mode === "automatic" && !refreshIsRunning(task)
-                          ? refreshResultTitle(task)
-                          : `state_${task.state}`,
-                      )}
-                    </Badge>
-                    <p className="mt-2 break-all text-xs text-muted-foreground">
-                      {roots.data?.find((root) => root.id === task.root_id)
-                        ?.name ?? t("root")}
-                    </p>
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      {date(task.updated_at)}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button asChild variant="ghost">
-                      <Link
-                        to="/scanner"
-                        search={{
-                          root: task.root_id,
-                          task: task.id,
-                          ...(roots.data.some(
-                            (root) =>
-                              root.id === task.root_id &&
-                              root.kind === "adult_video",
-                          )
-                            ? { kind: "adult_video" as const }
-                            : {}),
-                        }}
-                      >
-                        {t(
-                          task.mode === "automatic"
-                            ? "autoScanDetails"
-                            : "preview",
-                        )}
-                      </Link>
-                    </Button>
-                    {(task.mode === "automatic"
-                      ? task.state === "queued" || task.state === "running"
-                      : isActiveScanTask(task)) && (
-                      <Button
-                        variant="outline"
-                        disabled={cancel.isPending}
-                        onClick={() => cancel.mutate(task.id)}
-                      >
-                        {t("cancelTask")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-5 text-sm">
-                  {(
-                    [
-                      ["visited", task.visited_files],
-                      ["skipped", task.skipped_files],
-                      ["candidates", task.candidate_count],
-                      ["imported", task.imported_count],
-                      ["warnings", task.warnings],
-                    ] as const
-                  ).map(([label, value]) => (
-                    <span key={label}>
-                      {t(label)}: {number(value)}
-                    </span>
-                  ))}
-                </div>
-                <ScanRecovery
-                  task={task}
-                  adult={roots.data.some(
-                    (root) =>
-                      root.id === task.root_id && root.kind === "adult_video",
-                  )}
-                />
-              </article>
-            </Card>
-          ))}
-        </div>
-      )}
-      <ProviderTasks />
-    </>
-  );
-}
 
 export function ScannerPage({
   search,

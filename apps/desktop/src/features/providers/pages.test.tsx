@@ -6,8 +6,8 @@ import { DesktopError } from "../../api/desktop";
 import { providerApi } from "../../api/providers";
 import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
-import { fixtureSnapshot, fixtureTask } from "./fixtures";
-import { NetworkInspectorPage, ProvidersPage, ProviderTasks } from "./pages";
+import { fixtureSnapshot } from "./fixtures";
+import { NetworkInspectorPage, ProvidersPage } from "./pages";
 
 vi.mock("../../components/ui/sonner", () => ({
   toast: { success: vi.fn(), info: vi.fn(), error: vi.fn() },
@@ -124,33 +124,6 @@ it("validates editable limits before updating an immutable configuration snapsho
     ),
   );
 });
-it("shows persisted provider tasks and cancels only active tasks", async () => {
-  const data = fixtureSnapshot();
-  data.tasks = [
-    fixtureTask,
-    {
-      ...fixtureTask,
-      id: "done",
-      state: "succeeded",
-      result_summary: "fixture_complete",
-    },
-  ];
-  vi.mocked(providerApi.snapshot).mockResolvedValue(data);
-  show(<ProviderTasks />);
-  await screen.findByText(
-    "Offline JSON and HTML combination passed. No media was changed.",
-  );
-  expect(screen.getAllByRole("button", { name: "Cancel task" })).toHaveLength(
-    1,
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Cancel task" }));
-  await waitFor(() =>
-    expect(providerApi.cancel).toHaveBeenCalledWith(
-      "task-1",
-      expect.anything(),
-    ),
-  );
-});
 it("renders redacted request diagnostics and localized failure categories", async () => {
   const data = fixtureSnapshot();
   data.requests = [
@@ -183,36 +156,6 @@ it("shows desktop-required instead of fake data in a browser", async () => {
   expect(
     screen.queryByRole("button", { name: "Run offline fixture" }),
   ).not.toBeInTheDocument();
-});
-it("updates provider task history on polling without user navigation", async () => {
-  vi.mocked(providerApi.snapshot)
-    .mockResolvedValueOnce({ ...fixtureSnapshot(), tasks: [fixtureTask] })
-    .mockResolvedValue({
-      ...fixtureSnapshot(),
-      tasks: [
-        {
-          ...fixtureTask,
-          state: "succeeded",
-          result_summary: "fixture_complete",
-        },
-      ],
-    });
-  show(<ProviderTasks />);
-  await screen.findByText("Running");
-  await screen.findByText(
-    "Offline JSON and HTML combination passed. No media was changed.",
-    {},
-    { timeout: 3500 },
-  );
-});
-it("localizes provider states and failure explanations in Simplified Chinese", async () => {
-  await i18n.changeLanguage("zh-CN");
-  const data = fixtureSnapshot();
-  data.tasks = [{ ...fixtureTask, state: "failed", failure: "captcha" }];
-  vi.mocked(providerApi.snapshot).mockResolvedValue(data);
-  show(<ProviderTasks />);
-  await screen.findByText("需要验证码，未尝试绕过");
-  expect(screen.getByText("失败")).toBeInTheDocument();
 });
 
 it("snapshots the selected Chinese UI language when starting a provider task", async () => {
