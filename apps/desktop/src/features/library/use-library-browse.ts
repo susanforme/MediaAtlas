@@ -11,7 +11,6 @@ export function useLibraryBrowse(
   onSearch: (patch: LibrarySearch, replace?: boolean) => void,
   adult: boolean,
 ) {
-  const [advanced, setAdvanced] = useState(false);
   const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
   const { settings, includeAdult } = usePrivacy();
   const query = {
@@ -64,8 +63,6 @@ export function useLibraryBrowse(
     onSearch({ ...search, ...patch, cursor: undefined, page: 1 });
   }
   return {
-    advanced,
-    setAdvanced,
     history,
     setHistory,
     media,

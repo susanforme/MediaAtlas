@@ -77,8 +77,6 @@ export function LibraryPage({
 }) {
   const { t } = useTranslation();
   const {
-    advanced,
-    setAdvanced,
     history,
     setHistory,
     reset,
@@ -150,8 +148,6 @@ export function LibraryPage({
         roots={roots.data ?? []}
         facets={facets.data}
         facetError={facets.isError}
-        advanced={advanced}
-        setAdvanced={setAdvanced}
         filter={filter}
         reset={reset}
         onView={(view) => onSearch({ ...search, view }, true)}

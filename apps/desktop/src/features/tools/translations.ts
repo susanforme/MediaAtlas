@@ -70,8 +70,7 @@ const values = {
     toolsSelected: "{{count}} selected",
     toolsClearSelection: "Clear selection",
     toolsScrapeSelected: "Scrape selected",
-    toolsBatchHelp:
-      "Select movies, TV series or anime, up to {{limit}} items. Review each item before confirming.",
+    toolsBatchHelp: "Up to {{limit}} items · Review before confirming",
     toolsSelectionLimit:
       "The selection would exceed {{limit}} items. Nothing was added; remove items before selecting more.",
     toolsRemoveSelection: "Remove from scrape selection: {{title}}",
@@ -162,8 +161,7 @@ const values = {
     toolsSelected: "已选择 {{count}} 项",
     toolsClearSelection: "清空选择",
     toolsScrapeSelected: "刮削所选",
-    toolsBatchHelp:
-      "电影、剧集和动漫可加入队列，最多 {{limit}} 项，逐项核对后确认。",
+    toolsBatchHelp: "最多 {{limit}} 项 · 逐项核对后确认",
     toolsSelectionLimit:
       "此次选择会超过 {{limit}} 项，未添加任何条目；请先减少已选项。",
     toolsRemoveSelection: "从刮削选择中移除：{{title}}",

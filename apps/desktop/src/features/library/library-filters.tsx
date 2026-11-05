@@ -1,5 +1,5 @@
-import { LayoutGrid, List, SlidersHorizontal, X } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { LayoutGrid, List, X } from "lucide-react";
+import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type {
   FacetOption,
@@ -8,6 +8,7 @@ import type {
   RootView,
 } from "../../api/library";
 import { Button } from "../../components/ui/button";
+import { FilterBar, FilterChip } from "../../components/ui/filter-bar";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { type LibrarySearch, supportedLibraryHealth } from "./browse-model";
@@ -53,8 +54,6 @@ export function LibraryFilters({
   roots,
   facets,
   facetError,
-  advanced,
-  setAdvanced,
   filter,
   reset,
   onView,
@@ -66,24 +65,40 @@ export function LibraryFilters({
   roots: RootView[];
   facets: Facets | undefined;
   facetError: boolean;
-  advanced: boolean;
-  setAdvanced: (value: boolean) => void;
   filter: (patch: LibrarySearch) => void;
   reset: () => void;
   onView: (view: "wall" | "list") => void;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
-  const advancedId = useId();
   const health = supportedLibraryHealth(search.health, adult);
-  const advancedCount = [
-    search.root,
-    health,
-    search.genre,
-    search.person,
-    search.studio,
-    search.year,
-  ].filter(Boolean).length;
+  const visibleRoots = roots.filter((root) =>
+    adult
+      ? root.kind === "adult_video" || root.kind === null
+      : root.kind !== "adult_video",
+  );
+  const activeFilters = [
+    {
+      key: "root",
+      label: t("root"),
+      value: search.root,
+      display: visibleRoots.find((root) => root.id === search.root)?.name ?? t("root"),
+    },
+    {
+      key: "health",
+      label: t("health"),
+      value: health,
+      display: health ? t(`health_${health}`) : "",
+    },
+    ...(!adult
+      ? [
+          { key: "genre", label: t("genre"), value: search.genre, display: search.genre },
+          { key: "person", label: t("person"), value: search.person, display: search.person },
+          { key: "studio", label: t("studio"), value: search.studio, display: search.studio },
+          { key: "year", label: t("year"), value: search.year, display: search.year },
+        ]
+      : []),
+  ].filter((item) => item.value);
   const filtered = Boolean(
     search.health ||
       search.q ||
@@ -94,102 +109,53 @@ export function LibraryFilters({
       (search.sort && search.sort !== "updated_desc"),
   );
   return (
-    <section className="library-filters" aria-label={t("libraryFilters")}>
-      <div className="library-control-row">
-        {children}
-        <Label className="library-compact-select">
-          <span className="sr-only">{t("type")}</span>
-          <Select
-            value={search.kind ?? ""}
-            onChange={(event) =>
-              filter({
-                kind: (event.target.value || undefined) as
-                  | MediaKind
-                  | undefined,
-                root: undefined,
-                health: undefined,
-                genre: undefined,
-                person: undefined,
-                studio: undefined,
-                year: undefined,
-              })
-            }
+    <FilterBar
+      label={t("filters")}
+      optionsLabel={t("advancedFilters")}
+      activeCount={activeFilters.length}
+      summary={
+        activeFilters.length > 0 && activeFilters.map((item) => (
+          <FilterChip
+            key={item.key}
+            label={t("removeFilter", { label: item.label, value: item.display })}
+            onRemove={() => filter({ [item.key]: undefined })}
           >
-            <option value="">{t("allKinds")}</option>
-            {LIBRARY_CATEGORIES.filter(
-              (kind) => kind !== "adult_video" || adultAvailable,
-            ).map((kind) => (
-              <option value={kind} key={kind}>
-                {t(
-                  kind === "music_release"
-                    ? "libraryKindMusic"
-                    : `kind_${kind}`,
-                )}
-              </option>
-            ))}
-          </Select>
-        </Label>
-        <Label className="library-compact-select">
-          <span className="sr-only">{t("sort")}</span>
-          <Select
-            value={search.sort ?? "updated_desc"}
-            onChange={(event) => filter({ sort: event.target.value })}
-          >
-            {["title_asc", "year_desc", "added_desc", "updated_desc"].map(
-              (sort) => (
-                <option key={sort} value={sort}>
-                  {t(`sort_${sort}`)}
-                </option>
-              ),
-            )}
-          </Select>
-        </Label>
-        <Button
-          variant={advanced || advancedCount ? "secondary" : "ghost"}
-          size="sm"
-          aria-expanded={advanced}
-          aria-controls={advancedId}
-          onClick={() => setAdvanced(!advanced)}
-        >
-          <SlidersHorizontal size={15} aria-hidden="true" />
-          {t("libraryFilters")}
-          {advancedCount > 0 && (
-            <span className="library-filter-count">{advancedCount}</span>
+            {item.label} · {item.display}
+          </FilterChip>
+        ))
+      }
+      actions={
+        <>
+          {filtered && (
+            <Button variant="ghost" size="sm" onClick={reset}>
+              <X size={14} aria-hidden="true" />
+              {t("clearFilters")}
+            </Button>
           )}
-        </Button>
-        {filtered && (
-          <Button variant="ghost" size="sm" onClick={reset}>
-            <X size={14} aria-hidden="true" />
-            {t("clearFilters")}
-          </Button>
-        )}
-        <fieldset className="library-view-options" aria-label={t("wall")}>
-          <Button
-            size="sm"
-            variant={search.view !== "list" ? "secondary" : "ghost"}
-            aria-label={t("wall")}
-            aria-pressed={search.view !== "list"}
-            onClick={() => onView("wall")}
-          >
-            <LayoutGrid size={16} aria-hidden="true" />
-          </Button>
-          <Button
-            size="sm"
-            variant={search.view === "list" ? "secondary" : "ghost"}
-            aria-label={t("list")}
-            aria-pressed={search.view === "list"}
-            onClick={() => onView("list")}
-          >
-            <List size={16} aria-hidden="true" />
-          </Button>
-        </fieldset>
-      </div>
-      {advanced && (
-        <section
-          id={advancedId}
-          className="library-advanced-filters"
-          aria-label={t("libraryFilteredBy")}
-        >
+          <fieldset className="library-view-options" aria-label={t("wall")}>
+            <Button
+              size="sm"
+              variant={search.view !== "list" ? "secondary" : "ghost"}
+              aria-label={t("wall")}
+              aria-pressed={search.view !== "list"}
+              onClick={() => onView("wall")}
+            >
+              <LayoutGrid size={16} aria-hidden="true" />
+            </Button>
+            <Button
+              size="sm"
+              variant={search.view === "list" ? "secondary" : "ghost"}
+              aria-label={t("list")}
+              aria-pressed={search.view === "list"}
+              onClick={() => onView("list")}
+            >
+              <List size={16} aria-hidden="true" />
+            </Button>
+          </fieldset>
+        </>
+      }
+      filters={
+        <>
           <Label className="filter-field">
             <span>{t("root")}</span>
             <Select
@@ -199,17 +165,11 @@ export function LibraryFilters({
               }
             >
               <option value="">{t("allRoots")}</option>
-              {roots
-                .filter((root) =>
-                  adult
-                    ? root.kind === "adult_video" || root.kind === null
-                    : root.kind !== "adult_video",
-                )
-                .map((root) => (
-                  <option key={root.id} value={root.id}>
-                    {root.name}
-                  </option>
-                ))}
+              {visibleRoots.map((root) => (
+                <option key={root.id} value={root.id}>
+                  {root.name}
+                </option>
+              ))}
             </Select>
           </Label>
           <Label className="filter-field">
@@ -261,12 +221,53 @@ export function LibraryFilters({
             </>
           )}
           {facetError && !adult && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground" role="status">
               {t("operationFailed")}
             </p>
           )}
-        </section>
-      )}
-    </section>
+        </>
+      }
+    >
+      {children}
+      <Label>
+        <span className="sr-only">{t("type")}</span>
+        <Select
+          value={search.kind ?? ""}
+          onChange={(event) =>
+            filter({
+              kind: (event.target.value || undefined) as MediaKind | undefined,
+              root: undefined,
+              health: undefined,
+              genre: undefined,
+              person: undefined,
+              studio: undefined,
+              year: undefined,
+            })
+          }
+        >
+          <option value="">{t("allKinds")}</option>
+          {LIBRARY_CATEGORIES.filter(
+            (kind) => kind !== "adult_video" || adultAvailable,
+          ).map((kind) => (
+            <option value={kind} key={kind}>
+              {t(kind === "music_release" ? "libraryKindMusic" : `kind_${kind}`)}
+            </option>
+          ))}
+        </Select>
+      </Label>
+      <Label>
+        <span className="sr-only">{t("sort")}</span>
+        <Select
+          value={search.sort ?? "updated_desc"}
+          onChange={(event) => filter({ sort: event.target.value })}
+        >
+          {["title_asc", "year_desc", "added_desc", "updated_desc"].map((sort) => (
+            <option key={sort} value={sort}>
+              {t(`sort_${sort}`)}
+            </option>
+          ))}
+        </Select>
+      </Label>
+    </FilterBar>
   );
 }

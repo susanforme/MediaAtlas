@@ -10,11 +10,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { Alert } from "../../components/ui/alert";
 import { Button } from "../../components/ui/button";
-import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
-import { Input } from "../../components/ui/input";
-import { Label } from "../../components/ui/label";
-import { Select } from "../../components/ui/select";
 import {
   Table,
   TableHeader,
@@ -27,12 +23,8 @@ import { Empty, ErrorNotice, HealthBadges, Loading } from "../library/shared";
 import { ReviewQueueLauncher } from "../scraper/review-queue-launcher";
 import { MAX_SCRAPE_QUEUE } from "../scraper/search";
 import { isSelectableCandidate } from "./candidate-model";
-import {
-  TOOLS_HEALTH,
-  TOOLS_KINDS,
-  TOOLS_SORTS,
-  type ToolsRouteSearch,
-} from "./search";
+import { CandidateFilters } from "./candidate-filters";
+import type { ToolsRouteSearch } from "./search";
 import { useCandidateBrowser } from "./use-candidate-browser";
 
 export function OrdinaryCandidates({
@@ -68,121 +60,20 @@ export function OrdinaryCandidates({
   }, [someSelected, allSelected]);
   return (
     <section className="min-w-0 space-y-5">
-      <Card asChild>
-        <div className="space-y-4">
-          <div className="filter-grid">
-            <Label className="filter-field">
-              <span>{t("toolsSearch")}</span>
-              <Input
-                type="search"
-                maxLength={256}
-                value={browser.search.q ?? ""}
-                onChange={(event) =>
-                  browser.filter({ q: event.target.value || undefined })
-                }
-              />
-            </Label>
-            <Label className="filter-field">
-              <span>{t("root")}</span>
-              <Select
-                value={browser.search.root ?? ""}
-                onChange={(event) =>
-                  browser.filter({ root: event.target.value || undefined })
-                }
-              >
-                <option value="">{t("allRoots")}</option>
-                {browser.roots.data
-                  ?.filter((root) =>
-                    browser.adult
-                      ? root.kind === "adult_video"
-                      : root.kind !== "adult_video",
-                  )
-                  .map((root) => (
-                    <option key={root.id} value={root.id}>
-                      {root.name}
-                    </option>
-                  ))}
-              </Select>
-            </Label>
-            <Label className="filter-field">
-              <span>{t("type")}</span>
-              <Select
-                value={browser.search.kind ?? ""}
-                onChange={(event) =>
-                  browser.filter({
-                    kind: (event.target.value ||
-                      undefined) as ToolsRouteSearch["kind"],
-                  })
-                }
-              >
-                <option value="">{t("allKinds")}</option>
-                {[
-                  ...TOOLS_KINDS,
-                  ...(browser.adultEnabled || browser.adult
-                    ? ["adult_video"]
-                    : []),
-                ].map((kind) => (
-                  <option
-                    key={kind}
-                    value={kind}
-                    disabled={kind === "adult_video" && !browser.adultEnabled}
-                  >
-                    {t(`kind_${kind}`)}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-            <Label className="filter-field">
-              <span>{t("health")}</span>
-              <Select
-                value={browser.search.health ?? ""}
-                onChange={(event) =>
-                  browser.filter({
-                    health: (event.target.value ||
-                      undefined) as ToolsRouteSearch["health"],
-                  })
-                }
-              >
-                <option value="">{t("allHealth")}</option>
-                {TOOLS_HEALTH.map((health) => (
-                  <option key={health} value={health}>
-                    {t(`health_${health}`)}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-            <Label className="filter-field">
-              <span>{t("sort")}</span>
-              <Select
-                value={browser.search.sort ?? "updated_desc"}
-                onChange={(event) =>
-                  browser.filter({
-                    sort: event.target.value as ToolsRouteSearch["sort"],
-                  })
-                }
-              >
-                {TOOLS_SORTS.map((sort) => (
-                  <option key={sort} value={sort}>
-                    {t(`sort_${sort}`)}
-                  </option>
-                ))}
-              </Select>
-            </Label>
-          </div>
-          <Button variant="ghost" size="sm" onClick={browser.clearFilters}>
-            {t("clearFilters")}
-          </Button>
-          {browser.roots.isError && (
-            <ErrorNotice
-              error={browser.roots.error}
-              retry={() => void browser.roots.refetch()}
-            />
-          )}
-        </div>
-      </Card>
+      <CandidateFilters
+        search={browser.search}
+        roots={browser.roots.data ?? []}
+        adult={browser.adult}
+        adultEnabled={browser.adultEnabled}
+        filter={browser.filter}
+        clear={browser.clearFilters}
+      />
+      {browser.roots.isError && (
+        <ErrorNotice error={browser.roots.error} retry={() => void browser.roots.refetch()} />
+      )}
       {!browser.adult && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <ReviewQueueLauncher mediaIds={selectedIds} context={browser.search}>
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="ghost"
@@ -205,14 +96,10 @@ export function OrdinaryCandidates({
                 </Button>
               )}
             </div>
-          </div>
-          <ReviewQueueLauncher
-            mediaIds={selectedIds}
-            context={browser.search}
-          />
-          <p className="text-sm text-muted-foreground">
-            {t("toolsBatchHelp", { limit: MAX_SCRAPE_QUEUE })}
-          </p>
+            <span className="text-xs text-muted-foreground">
+              {t("toolsBatchHelp", { limit: MAX_SCRAPE_QUEUE })}
+            </span>
+          </ReviewQueueLauncher>
           {browser.limitReached && (
             <Alert asChild>
               <p role="alert">

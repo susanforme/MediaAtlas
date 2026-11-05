@@ -75,11 +75,10 @@ export function ScannerPage({
         </>
       ) : (
         <>
-          <Card asChild>
-            <div className="mb-6">
-              <div className="flex flex-wrap items-end gap-4">
-                <Label className="filter-field min-w-0 flex-1">
-                  <span>{t("chooseRoot")}</span>
+          <section className="mb-5 space-y-3 [&_[data-slot=select]]:h-9">
+              <div className="flex flex-wrap items-center gap-3">
+                <Label className="block w-full min-w-0 sm:w-60">
+                  <span className="sr-only">{t("chooseRoot")}</span>
                   <Select
                     value={rootId ?? ""}
                     disabled={start.isPending}
@@ -93,7 +92,33 @@ export function ScannerPage({
                     ))}
                   </Select>
                 </Label>
+                <Label className="block w-full min-w-0 sm:min-w-56 sm:flex-1 sm:max-w-md">
+                  <span className="sr-only">{t("scanChooseRecent")}</span>
+                  <Select
+                    value={task?.id ?? search.task ?? ""}
+                    disabled={cancel.isPending || matchingTasks.length === 0}
+                    onChange={(event) => selectTask(event.target.value)}
+                  >
+                    {matchingTasks.length === 0 && (
+                      <option value="">{t("noTasks")}</option>
+                    )}
+                    {search.task && !task && (
+                      <option value={search.task}>{t("taskNotAvailable")}</option>
+                    )}
+                    {matchingTasks.map((entry) => (
+                      <option key={entry.id} value={entry.id}>
+                        {roots.data?.find((root) => root.id === entry.root_id)?.name ?? t("root")}
+                        {" · "}
+                        {t(entry.mode === "automatic" && !refreshIsRunning(entry)
+                          ? refreshResultTitle(entry)
+                          : `state_${entry.state}`)}
+                        {" · "}{date(entry.created_at)}
+                      </option>
+                    ))}
+                  </Select>
+                </Label>
                 <Button
+                  size="sm"
                   disabled={!canStart || start.isPending}
                   onClick={() => rootId && start.mutate(rootId)}
                 >
@@ -112,36 +137,7 @@ export function ScannerPage({
                 </p>
               )}
               {start.isError && <ErrorNotice error={start.error} />}
-            </div>
-          </Card>
-          <Label className="filter-field mb-6">
-            <span>{t("scanChooseRecent")}</span>
-            <Select
-              value={task?.id ?? search.task ?? ""}
-              disabled={cancel.isPending || matchingTasks.length === 0}
-              onChange={(event) => selectTask(event.target.value)}
-            >
-              {matchingTasks.length === 0 && (
-                <option value="">{t("noTasks")}</option>
-              )}
-              {search.task && !task && (
-                <option value={search.task}>{t("taskNotAvailable")}</option>
-              )}
-              {matchingTasks.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {roots.data?.find((root) => root.id === entry.root_id)
-                    ?.name ?? t("root")}{" "}
-                  ·{" "}
-                  {t(
-                    entry.mode === "automatic" && !refreshIsRunning(entry)
-                      ? refreshResultTitle(entry)
-                      : `state_${entry.state}`,
-                  )}{" "}
-                  · {date(entry.created_at)}
-                </option>
-              ))}
-            </Select>
-          </Label>
+          </section>
           {tasks.isError && <ErrorNotice error={tasks.error} />}
           {!task && !search.task ? (
             tasks.isPending || roots.isPending ? (

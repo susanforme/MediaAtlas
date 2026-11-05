@@ -1,6 +1,6 @@
 # MediaAtlas 产品流程与 UI/UX
 
-更新：2026-11-05 · 代码基线：`b99533c`
+更新：2026-11-05 · 流程整理基线：`b99533c`；本轮交互调整以当前工作区为准
 
 本文按当前路由、页面和后台工作流整理；视觉参数引用仓库 `design.md`，不代表已经完成本轮视觉验收。
 
@@ -118,7 +118,7 @@ flowchart LR
     Recovery --> Work[进入带当前媒体目标的工作台或恢复流程]
 ```
 
-浏览页默认保持紧凑：搜索进入顶部工具栏，类型、排序和视图切换位于控制行；目录、健康状态、类型标签、人员、制作方和年份等扩展筛选按需展开。筛选、排序、分页和视图由 URL 查询状态承载。
+浏览页默认保持紧凑：搜索进入顶部工具栏，类型、排序和视图切换位于控制行；目录、健康状态、类型标签、人员、制作方和年份等扩展筛选按需展开。筛选区不使用整块卡片底色，展开内容以细分隔线与紧凑字段组织。收起后仍显示已选条件和数量，每个条件可单独移除；移除仅清除该条件并复位分页，保留其他查询条件。筛选、排序、分页和视图由 URL 查询状态承载。
 
 电影与剧集使用专门的详情构图；剧集呈现真实季、集和文件信息。其他类型沿用通用详情。评分、年份、简介、人员和图片来自实际资料，缺失时省略或显示明确缺失状态；不存在观看进度或“继续观看”数据。
 
@@ -245,7 +245,32 @@ flowchart TD
 
 **当前页面与历史设计描述的区别：**默认媒体库是筛选加海报墙，不能将 `design.md` 中保留的 Hero、横卡和最近添加参考构图理解为当前首页已有的全部模块。详情页有专门媒体展示区域；本次未运行应用核对其最终视觉效果。
 
-## 9. 整理依据与验证范围
+## 9. 本轮交互优化与社区依据
+
+本轮优先解决筛选表单占据首屏、操作散落和输入时意外清空选择的问题。以下为已修改的代码行为，尚未运行或完成视觉验收。
+
+| 区域 | 本轮调整 | 交互约束 |
+| --- | --- | --- |
+| 媒体库 | 轻量筛选栏；高级筛选移除大块底色和外层卡片感；已选条件可直接移除 | 保留类型、目录上下文与 URL 查询模型；单项移除复位分页，不重置其他条件 |
+| 媒体工具 | 搜索、类型、排序和筛选入口组成紧凑工具栏；目录和健康状态按需展开 | 输入搜索词只修改草稿，Enter 或搜索按钮提交；重复提交同一查询不清空批选；提交新查询才复位游标、详情与选择 |
+| 批量核对 | 已选数量、清空、队列操作和真实上限集中在一行 | 保留跨页选择、32 项限制、逐项确认和已有会话恢复；不将计数显示为处理完成数 |
+| 扫描页 | 目录、最近任务和更新动作合并为紧凑选择区 | 不改变目录预选、任务识别、重试及后台更新行为 |
+| 刮削页 | 去除目标与检索区的重复大卡片；标题优先，类型和年份使用匹配内容的宽度；高级检索使用轻量展开入口 | 来源配置状态和写入后果保持可见；只改变布局，不改变候选选择、预览或确认契约 |
+| 共用筛选控件 | 复用仓库 shadcn Button、Input、Select，新增轻量 FilterBar / FilterChip | 展开状态有可访问语义；移除条件后焦点回到筛选入口；窄屏换行，条件摘要截断而不撑宽整页 |
+
+采用的依据与适用范围：
+
+- [NN/g：渐进披露](https://www.nngroup.com/articles/progressive-disclosure/)建议将较少使用的选项放到第二层。本项目将目录、健康和元数据筛选放在单层展开区；这不意味着把错误、权限或写入后果隐藏起来。
+- [Carbon：Filtering](https://www.carbondesignsystem.com/building-blocks/core/patterns/filtering)要求折叠后仍提示已应用条件，并提供清除方式；本项目使用数量和可移除条件。搜索需显式提交是本项目对本地查询和批选状态的取舍，并非所有筛选一律增加“应用”步骤。
+- [Carbon：Data table](https://v10.carbondesignsystem.com/components/data-table/usage/)将搜索、筛选及批量动作放在表格工具栏；本项目据此合并散落的批量操作，保留已有持久化核对会话入口。
+- [苏格兰政府设计系统：Search filters](https://designsystem.gov.scot/patterns/search-results/search-filters)使用可移除的已选条件，并要求其可访问名称说明移除动作。本项目采用该交互，不复制政府站点的侧栏布局。
+- [WAI-ARIA：Disclosure](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/)规定展开按钮的键盘操作与 `aria-expanded`；共用筛选栏用已有 Button 实现，不新增浮层依赖。
+
+本轮未改后端扫描、NFO、来源启用或成人权限契约。工具页清除筛选继续保留当前资源类型，避免从成人类型意外切回普通查询；目录名称摘要使用与目录选项相同的隔离过滤。
+
+静态审阅覆盖共用筛选栏、媒体库调用方、工具页搜索与批选状态、扫描及刮削布局、双语词条和现有测试调用。已补充或调整回归用例：草稿不发请求且保留批选、提交后复位分页、单项移除保留其他条件并恢复焦点、清除成人类型筛选后继续走独立端点。这些用例未执行。
+
+## 10. 整理依据与验证范围
 
 - 产品边界与视觉规则：[AGENTS.md](../AGENTS.md)、[design.md](../design.md)。
 - 路由与应用框架：[app.tsx](../apps/desktop/src/app.tsx)、[app-shell.tsx](../apps/desktop/src/components/shell/app-shell.tsx)、[library-navigation.tsx](../apps/desktop/src/components/shell/library-navigation.tsx)。
@@ -254,4 +279,4 @@ flowchart TD
 - 核对与输出：[scraper/page.tsx](../apps/desktop/src/features/scraper/page.tsx)、[merge-workspace.tsx](../apps/desktop/src/features/scraper/merge-workspace.tsx)。
 - 工具与其他入口：[tools/page.tsx](../apps/desktop/src/features/tools/page.tsx)、[music/page.tsx](../apps/desktop/src/features/music/page.tsx)、[nfo/page.tsx](../apps/desktop/src/features/nfo/page.tsx)、[settings/page.tsx](../apps/desktop/src/features/settings/page.tsx)、[tasks.tsx](../apps/desktop/src/features/library/tasks.tsx)。
 
-本次仅新增文档，检查 Markdown 结构和本地引用；未运行桌面应用、端到端流程、Mermaid 渲染器或 `pnpm check`。本文是当前代码与产品约束的流程整理，不作为实机验收记录。
+本次按会话要求只做静态阅读与代码、文档修改，没有运行桌面应用、测试、类型检查、构建、Mermaid 渲染或安装依赖。1648×928 与窄屏布局、键盘实机行为及明暗主题仍待运行验收；本文与测试代码均不能替代验证结果。

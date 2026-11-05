@@ -308,6 +308,24 @@ it("keeps the poster selectable after cached artwork fails", async () => {
   expect(within(poster).getByText("No poster")).toBeInTheDocument();
   expect(poster).toHaveAttribute("href", "/media/synthetic-film");
 });
+
+it("removes a collapsed filter and keeps the remaining query and scope", async () => {
+  const initial: LibrarySearch = {
+    root: root.id, kind: "movie", genre: "Drama", health: "missing_nfo",
+    q: "Applied query", sort: "title_asc", cursor: "old-page", page: 3,
+  };
+  const { onSearch } = show(initial);
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  const chip = screen.getByRole("button", { name: "Remove filter: Genre · Drama" });
+  chip.focus();
+  fireEvent.click(chip);
+  expect(onSearch).toHaveBeenLastCalledWith({
+    ...initial, genre: undefined, cursor: undefined, page: 1,
+  }, undefined);
+  expect(screen.getByRole("button", { name: /^Filters/ })).toHaveFocus();
+  expect(screen.queryByRole("combobox", { name: "Health" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Remove filter: Health · NFO not generated" })).toBeInTheDocument();
+});
 it("opens directory creation directly from the empty library", async () => {
   vi.mocked(libraryApi.roots).mockResolvedValue([]);
   vi.mocked(libraryApi.media).mockResolvedValue({

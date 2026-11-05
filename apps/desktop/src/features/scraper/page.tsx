@@ -237,8 +237,7 @@ function ScraperWorkspace({
         />
       )}
       <div hidden={Boolean(metadata && validTarget)}>
-        <Card asChild>
-          <section className="mb-6 space-y-4">
+          <section className="mb-5 space-y-3 border-b border-border pb-4 [&_[data-slot=input]]:h-9 [&_[data-slot=select]]:h-9">
             {mediaId ? (
               targetDetail.isPending ? (
                 <Loading />
@@ -255,7 +254,7 @@ function ScraperWorkspace({
             ) : (
               <>
                 <form
-                  className="flex flex-wrap items-end gap-3"
+                  className="flex max-w-2xl flex-wrap items-end gap-3"
                   onSubmit={(event) => {
                     event.preventDefault();
                     setLocalQuery(localSearch.trim());
@@ -269,11 +268,11 @@ function ScraperWorkspace({
                       onChange={(e) => setLocalSearch(e.target.value)}
                     />
                   </Label>
-                  <Button variant="outline" type="submit">
+                  <Button variant="outline" type="submit" size="sm">
                     {t("scraperLocalSearch")}
                   </Button>
                 </form>
-                <Label className="filter-field">
+                <Label className="filter-field max-w-2xl">
                   <span>{t("scraperTarget")}</span>
                   <Select
                     value={target}
@@ -304,10 +303,8 @@ function ScraperWorkspace({
               </Alert>
             )}
           </section>
-        </Card>
         {snapshot.isPending && <Loading />}
         {snapshot.error && <ErrorNotice error={snapshot.error} />}
-        <Card asChild>
           <form
             className="scraper-search"
             noValidate
@@ -322,7 +319,22 @@ function ScraperWorkspace({
                 run.mutate();
               }
             }}>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="scraper-search-fields">
+              <Label className="filter-field">
+                <span>{t("scraperTitle")}</span>
+                <Input
+                  value={title}
+                  ref={titleInput}
+                  aria-describedby={
+                    selectedProviders.includes("wikipedia.html")
+                      ? "scraper-wikipedia-title-hint"
+                      : undefined
+                  }
+                  maxLength={2048}
+                  onChange={(e) => setTitle(e.target.value)}
+                  disabled={busy}
+                />
+              </Label>
               <Label className="filter-field">
                 <span>{t("type")}</span>
                 <Select
@@ -351,21 +363,6 @@ function ScraperWorkspace({
                 </Select>
               </Label>
               <Label className="filter-field">
-                <span>{t("scraperTitle")}</span>
-                <Input
-                  value={title}
-                  ref={titleInput}
-                  aria-describedby={
-                    selectedProviders.includes("wikipedia.html")
-                      ? "scraper-wikipedia-title-hint"
-                      : undefined
-                  }
-                  maxLength={2048}
-                  onChange={(e) => setTitle(e.target.value)}
-                  disabled={busy}
-                />
-              </Label>
-              <Label className="filter-field">
                 <span>{t("scraperYear")}</span>
                 <Input
                   type="number"
@@ -385,9 +382,9 @@ function ScraperWorkspace({
                 {t("scraperWikipediaTitleHint")}
               </p>
             )}
-            <Details className="mt-4">
+            <Details className="mt-3 rounded-none border-0 p-0">
               <DetailsSummary>{t("scraperAdvanced")}</DetailsSummary>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div className="mt-3 grid max-w-2xl gap-3 sm:grid-cols-2">
                 <Label className="filter-field">
                   <span>{t("scraperExternalNamespace")}</span>
                   <Input
@@ -497,7 +494,6 @@ function ScraperWorkspace({
               </Button>
             )}
           </form>
-        </Card>
         {recovery}
         {error && error !== run.error && error !== restore.error && (
           <div className="mt-4">

@@ -1,0 +1,98 @@
+.filter-bar {
+  min-width: 0;
+  margin-bottom: 20px;
+}
+.filter-bar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.filter-bar-controls > [data-slot="label"] {
+  display: block;
+  flex: 0 1 164px;
+  min-width: 0;
+}
+.filter-bar-controls [data-slot="select"],
+.filter-bar-controls [data-slot="input"],
+.filter-bar-options [data-slot="select"] {
+  height: 36px;
+  border-radius: 8px;
+  padding-block: 6px;
+  background: transparent;
+}
+.filter-bar-search {
+  position: relative;
+  flex: 1 1 220px;
+  max-width: 360px;
+  min-width: 0;
+}
+.filter-bar-search [data-slot="input"] {
+  padding-right: 40px;
+}
+.filter-bar-search > [data-slot="button"] {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.filter-bar-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 200px));
+  gap: 12px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.filter-bar-options > [data-slot="label"] {
+  min-width: 0;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--color-muted-foreground);
+}
+.filter-bar-count {
+  min-width: 18px;
+  padding-inline: 4px;
+  border-radius: 4px;
+  background: var(--color-primary);
+  color: var(--color-primary-foreground);
+  font-size: 11px;
+  text-align: center;
+}
+.filter-bar-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.filter-bar-chip[data-slot="button"] {
+  min-width: 0;
+  max-width: 100%;
+  height: 28px;
+  gap: 6px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 400;
+}
+.filter-bar-chip > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .filter-bar-search {
+    flex-basis: 100%;
+    max-width: none;
+  }
+  .filter-bar-controls > [data-slot="label"] {
+    flex: 1 1 120px;
+  }
+  .filter-bar-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

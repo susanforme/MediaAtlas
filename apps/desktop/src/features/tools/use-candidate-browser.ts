@@ -153,7 +153,7 @@ export function useCandidateBrowser(
         limitReached: false,
       });
       history.current = { scope, cursors: [undefined] };
-      navigate({});
+      navigate(validateToolsRouteSearch({ kind: search.kind }));
     },
     removeSelected: (id: string) =>
       setSelection((old) => ({

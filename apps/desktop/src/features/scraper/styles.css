@@ -90,7 +90,30 @@
 }
 
 .scraper-search {
-  max-width: 72rem;
+  max-width: 64rem;
+  padding-bottom: 20px;
+}
+.scraper-search-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px 100px;
+  gap: 12px;
+  align-items: end;
+}
+.scraper-search .filter-field {
+  min-width: 0;
+  gap: 5px;
+}
+.scraper-search [data-slot="input"],
+.scraper-search [data-slot="select"] {
+  height: 36px;
+}
+@media (max-width: 640px) {
+  .scraper-search-fields {
+    grid-template-columns: minmax(0, 1fr) 100px;
+  }
+  .scraper-search-fields > :first-child {
+    grid-column: 1 / -1;
+  }
 }
 .scraper-field-choice,
 .scraper-artwork-choice {

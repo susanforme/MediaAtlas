@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { reviewQueueApi } from "../../api/review-queue";
 import { Button } from "../../components/ui/button";
@@ -12,9 +12,11 @@ import "./review-queue-translations";
 export function ReviewQueueLauncher({
   mediaIds,
   context,
+  children,
 }: {
   mediaIds: string[];
   context: ToolsRouteSearch;
+  children?: ReactNode;
 }) {
   const { t } = useTranslation();
   const { date } = useFormat();
@@ -65,12 +67,16 @@ export function ReviewQueueLauncher({
   });
   return (
     <div className="space-y-3">
-      <Button
-        disabled={!mediaIds.length || create.isPending}
-        onClick={() => create.mutate()}
-      >
-        {t("toolsScrapeSelected")}
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {children}
+        <Button
+          size="sm"
+          disabled={!mediaIds.length || create.isPending}
+          onClick={() => create.mutate()}
+        >
+          {t("toolsScrapeSelected")}
+        </Button>
+      </div>
       {create.error && <ErrorNotice error={create.error} />}
       {sessions.error && (
         <ErrorNotice

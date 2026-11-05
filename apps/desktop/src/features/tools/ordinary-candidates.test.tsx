@@ -253,6 +253,8 @@ it("renders ordinary candidate metadata in a table with independent view and sel
   expect(screen.getAllByText(first.media.title)).toHaveLength(1);
   expect(screen.getAllByText("2020")).toHaveLength(4);
   expect(screen.queryByText("Synthetic private title")).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Library root" })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Filters" }));
   selectOptions(screen.getByRole("combobox", { name: "Library root" }));
   expect(
     screen.queryByRole("option", { name: "Synthetic private root" }),
@@ -324,6 +326,12 @@ it("sends every filter and sort to the backend instead of filtering only the vis
   fireEvent.change(screen.getByLabelText("Search local candidates"), {
     target: { value: "Server result" },
   });
+  expect(screen.getByRole("checkbox", {
+    name: `Select for scraping: ${first.media.title}`,
+  })).toBeChecked();
+  expect(screen.queryByText("Server result")).not.toBeInTheDocument();
+  expect(libraryApi.toolsMedia).toHaveBeenCalledTimes(1);
+  fireEvent.submit(screen.getByRole("search", { name: "Search local candidates" }));
   expect(await screen.findByText("Server result")).toBeInTheDocument();
   expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
     expect.objectContaining({
@@ -340,6 +348,14 @@ it("sends every filter and sort to the backend instead of filtering only the vis
   expect(
     screen.getByRole("button", { name: "Scrape selected" }),
   ).toBeDisabled();
+  const serverSelection = screen.getByRole("checkbox", {
+    name: "Select for scraping: Server result",
+  });
+  fireEvent.click(serverSelection);
+  const queries = vi.mocked(libraryApi.toolsMedia).mock.calls.length;
+  fireEvent.submit(screen.getByRole("search", { name: "Search local candidates" }));
+  expect(serverSelection).toBeChecked();
+  expect(libraryApi.toolsMedia).toHaveBeenCalledTimes(queries);
 });
 
 it("retains selection across cursor pages and creates a durable queue from ordered, deduplicated backend IDs", async () => {
@@ -507,6 +523,8 @@ it.each([
         name: `Select for scraping: ${first.media.title}`,
       }),
     );
+    if (label === "Library root" || label === "Health")
+      fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
     chooseSelectOption(screen.getByLabelText(label), value);
     await waitFor(() =>
       expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
@@ -519,6 +537,40 @@ it.each([
     ).toBeDisabled();
   },
 );
+
+it("removes a disclosed filter without losing type or the other server filters", async () => {
+  show({ kind: "movie", root: root.id, health: "missing_nfo", q: "Applied query", sort: "title_asc" });
+  await screen.findByRole("table");
+  const remove = screen.getByRole("button", { name: "Remove filter: Health · NFO not generated" });
+  remove.focus();
+  fireEvent.click(remove);
+  expect(screen.getByRole("button", { name: /^Filters/ })).toHaveFocus();
+  await waitFor(() => expect(libraryApi.toolsMedia).toHaveBeenLastCalledWith(
+    expect.objectContaining({ kind: "movie", root_id: root.id, health: null, query: "Applied query", sort: "title_asc", cursor: null }),
+  ));
+  expect(screen.queryByRole("button", { name: "Remove filter: Health · NFO not generated" })).not.toBeInTheDocument();
+});
+
+it("keeps the adult resource type when clearing filters", async () => {
+  vi.mocked(adultApi.toolsMedia).mockResolvedValue({ items: [privateCard], next_cursor: null });
+  show({ kind: "adult_video", q: "Old query", health: "missing_nfo" });
+  await screen.findByRole("table");
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+  await waitFor(() => expect(adultApi.toolsMedia).toHaveBeenLastCalledWith(
+    expect.objectContaining({ kind: "adult_video", include_adult: true, query: null, health: null }),
+  ));
+  expect(libraryApi.toolsMedia).not.toHaveBeenCalled();
+  expect(screen.getByRole("searchbox")).toHaveValue("");
+});
+
+it("does not reveal an adult directory name in an ordinary active-filter summary", async () => {
+  show({ kind: "movie", root: "private-root" });
+  await screen.findByRole("table");
+  expect(screen.queryByText(/Synthetic private root/)).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /^Filters/ }));
+  const options = selectOptions(screen.getByRole("combobox", { name: "Library root" }));
+  expect(options.some((option) => option.textContent?.includes("Synthetic private root"))).toBe(false);
+});
 
 it("keeps adult candidates on their independent endpoint without ordinary multi-select or queue links", async () => {
   vi.mocked(adultApi.toolsMedia).mockResolvedValue({
