@@ -282,7 +282,7 @@ it("keeps local adult searches and images separate from ordinary APIs", async ()
     "/media/synthetic-media?kind=adult_video",
   );
   expect(poster).toHaveTextContent("Synthetic local adult fixture");
-  expect(poster.querySelector(".poster-image")).not.toBeNull();
+  expect(poster.querySelector('[data-slot="poster-image"]')).not.toBeNull();
   expect(libraryApi.detail).not.toHaveBeenCalled();
   expect(nativeOpenApi.open).not.toHaveBeenCalled();
 });

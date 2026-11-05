@@ -29,12 +29,12 @@ export function LibraryPosterCard({
   const statusId = useId();
   const state = metadataStates.find((value) => card.health.includes(value));
   return (
-    <Card asChild className="border-0 bg-transparent p-0 sm:p-0">
+    <Card asChild className="min-w-0 overflow-visible rounded-[10px] border-0 bg-transparent p-0 sm:p-0">
       <article className="poster-card library-poster-card">
         <Button
           asChild
           variant="ghost"
-          className="library-poster-link h-auto w-full items-stretch justify-start gap-0 bg-transparent p-0 text-left text-foreground hover:bg-transparent"
+          className="group flex h-auto w-full min-w-0 flex-col items-stretch justify-start gap-0 rounded-[10px] bg-transparent p-0 text-left whitespace-normal text-foreground hover:bg-transparent [&:hover]:text-foreground"
         >
           <Link
             to="/media/$mediaId"
@@ -43,19 +43,19 @@ export function LibraryPosterCard({
             aria-label={t("libraryPosterOpen", { title: card.media.title })}
             aria-describedby={state ? `${metadataId} ${statusId}` : metadataId}
           >
-            <div className="poster-image">
+            <div data-slot="poster-image" className="poster-image relative aspect-2/3 w-full overflow-hidden rounded-[10px] bg-muted transition-[filter] duration-150 ease-[ease] group-[:hover]:brightness-[1.08] motion-reduce:transition-none">
               <MediaArtwork uri={card.poster_uri} title={card.media.title} />
               {state && (
-                <span className="library-poster-status" id={statusId}>
-                  <Badge variant="secondary">{t(`health_${state}`)}</Badge>
+                <span className="absolute inset-x-2 bottom-2 flex" id={statusId}>
+                  <Badge variant="secondary" className="max-w-full overflow-hidden bg-background/92 text-[10px] leading-[var(--text-xs--line-height)] text-ellipsis whitespace-nowrap text-foreground">{t(`health_${state}`)}</Badge>
                 </span>
               )}
             </div>
-            <span className="library-poster-caption">
-              <span className="library-poster-title" title={card.media.title}>
+            <span className="grid w-full min-w-0 gap-1 pt-[9px] text-left">
+              <span className="block truncate text-sm leading-5 font-medium" title={card.media.title}>
                 {card.media.title}
               </span>
-              <span className="library-poster-meta" id={metadataId}>
+              <span className="truncate text-xs leading-[18px] font-normal text-muted-foreground" id={metadataId}>
                 {[card.media.year, t(`kind_${card.media.kind}`)]
                   .filter(Boolean)
                   .join(" · ")}

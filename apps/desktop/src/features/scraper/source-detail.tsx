@@ -1,6 +1,5 @@
 /** biome-ignore-all lint/suspicious/noArrayIndexKey: Immutable provider snapshots can lack unique season/episode identifiers. */
 import { Card } from "../../components/ui/card";
-import "./styles.css";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { scraperApi, type VideoMetadata } from "../../api/scraper";
@@ -14,7 +13,7 @@ export function VideoSourceDetails({ metadata }: { metadata: VideoMetadata }) {
   const { number } = useFormat();
   return (
     <>
-      <dl className="scraper-facts mt-4">
+      <dl className="mt-4 grid grid-cols-[minmax(8rem,auto)_1fr] gap-x-4 gap-y-[0.6rem] [&_dt]:text-muted-foreground [&_dd]:min-w-0 [@media(max-width:640px)]:grid-cols-[1fr] [@media(max-width:640px)]:gap-[0.3rem]">
         <dt>{t("scraperIdentity")}</dt>
         <dd>
           {metadata.data.identity.provider_id} /{" "}
@@ -108,7 +107,7 @@ export function LibraryVideoSourceDetail({ mediaId }: { mediaId: string }) {
   return (
     <Card asChild>
       <section aria-labelledby="video-source-title">
-        <h2 id="video-source-title" className="section-title">
+        <h2 id="video-source-title" className="mb-4 font-semibold">
           {t("scraperLibrarySourceTitle")}
         </h2>
         {detail.isPending ? (

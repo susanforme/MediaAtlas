@@ -212,13 +212,11 @@ def main():
     assert not errors, errors
     sources = [
         'apps/desktop/src/components/shell/app-shell.tsx',
-        'apps/desktop/src/components/shell/shell.css',
         'apps/desktop/src/components/shell/library-navigation.tsx',
         'apps/desktop/src/components/shell/use-window-controls.ts',
         'apps/desktop/src/components/shell/window-controls.tsx',
-        'apps/desktop/src/components/shell/window-chrome.css',
         'apps/desktop/src/components/ui/sonner.tsx',
-        'apps/desktop/src/components/ui/sonner.css',
+        'apps/desktop/src/styles.css',
         'apps/desktop/src/features/library/native-open.tsx',
     ]
     report = {

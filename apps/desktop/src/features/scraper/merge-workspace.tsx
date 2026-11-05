@@ -592,7 +592,7 @@ export function MetadataMergeWorkspace({
         <div className="flex flex-wrap gap-3">
           {done ? (
             <>
-              <Label className="filter-field">
+              <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("scraperOutputMode")}</span>
                 <Select
                   value={workspace.outputModeReady ? workspace.outputMode : ""}

@@ -98,7 +98,7 @@ function ProviderConfiguration({ provider }: { provider: ProviderView }) {
       >
         <div className="grid gap-3 sm:grid-cols-2">
           {numericFields.map(([key, label, min, max]) => (
-            <Label className="filter-field" key={key}>
+            <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]" key={key}>
               <span>{t(label)}</span>
               <Input
                 type="number"
@@ -175,7 +175,7 @@ function ProviderCard({
     <Card asChild>
       <article>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="section-title">
+          <h2 className="mb-4 font-semibold">
             {provider.descriptor.fixture
               ? t("providerFixtureName")
               : provider.descriptor.name}
@@ -212,7 +212,7 @@ function ProviderCard({
             }}
             className="flex flex-wrap items-end gap-3"
           >
-            <Label className="filter-field flex-1">
+            <Label className="flex min-w-0 flex-1 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
               <span>{t("providerQuery")}</span>
               <Input
                 maxLength={200}

@@ -5,14 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#101016" />
     <title>MediaAtlas</title>
-    <style>
-      html, body { margin: 0; background: var(--background, #101016); color: var(--foreground, #f5f4fa); }
-      .app-bootstrap { min-height: 100vh; display: grid; place-content: center;
-        font: 600 24px "Segoe UI", system-ui, sans-serif; letter-spacing: -.03em; }
-    </style>
+    <link rel="stylesheet" href="/src/styles.css" />
   </head>
-  <body>
-    <div id="root"><div class="app-bootstrap" role="status">MediaAtlas</div></div>
+  <body class="bg-background text-foreground">
+    <div id="root" class="h-full overscroll-none [&:has([data-slot=app-shell])]:overflow-hidden"><div class="grid min-h-screen place-content-center text-[24px] font-semibold [font-family:'Segoe_UI',system-ui,sans-serif] leading-[normal] tracking-[-.03em]" role="status">MediaAtlas</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

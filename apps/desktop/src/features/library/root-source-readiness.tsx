@@ -74,7 +74,7 @@ export function RootSourceReadiness({
       <p className="text-sm text-muted-foreground">{t("rootLocalTagsOnly")}</p>
     );
   return (
-    <section className="root-source-editor" aria-label={t("rootSourceCheck")}>
+    <section className="border-y border-border py-5" aria-label={t("rootSourceCheck")}>
       <h3 className="text-sm font-medium">{t("rootSourceCheck")}</h3>
       <p className="mt-2 text-sm text-muted-foreground">
         {t("rootSourcePriorityHelp")}
@@ -88,7 +88,7 @@ export function RootSourceReadiness({
       ) : snapshot.isError ? (
         <ErrorNotice error={snapshot.error} retry={() => void snapshot.refetch()} />
       ) : (
-        <ol className="root-source-list">
+        <ol className="mt-3">
           {ordered.map((id) => {
             const index = selected.indexOf(id);
             const sourceIndex = providers.findIndex(
@@ -105,7 +105,7 @@ export function RootSourceReadiness({
               Boolean(credential?.isError),
             );
             return (
-              <li key={id} className="root-source-row">
+              <li key={id} className="flex min-h-12 flex-wrap items-center gap-2 py-1.5 [&+li]:border-t [&+li]:border-border">
                 <Label className="flex min-w-0 flex-1 items-center gap-3">
                   <Checkbox
                     checked={checked}

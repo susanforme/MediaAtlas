@@ -4,7 +4,6 @@ import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
 import type { WindowChrome } from "./use-window-controls";
 import "./window-translations";
-import "./window-chrome.css";
 
 export function WindowControls({ chrome }: { chrome: WindowChrome }) {
   const { t } = useTranslation();
@@ -14,7 +13,7 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
   return (
     <fieldset
       aria-label={t("windowControls")}
-      className="window-controls"
+      className="window-controls absolute top-0 right-0 z-40 m-0 flex h-9 w-[138px] min-w-0 select-none border-0 p-0 text-foreground data-[focused=false]:text-muted-foreground"
       data-focused={chrome.focused}
       data-tauri-drag-region="false"
       onPointerDown={(event) => event.stopPropagation()}
@@ -22,7 +21,7 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
       onDoubleClick={(event) => event.stopPropagation()}
     >
       <Button
-        className="window-control"
+        className="h-9 w-[46px] rounded-none border-0 bg-transparent p-0 text-inherit [&:hover:not(:disabled)]:bg-hover [&:hover:not(:disabled)]:text-foreground"
         variant="ghost"
         size="icon"
         disabled={disabled}
@@ -32,7 +31,7 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
         <Minus size={13} strokeWidth={1.5} aria-hidden="true" />
       </Button>
       <Button
-        className="window-control"
+        className="h-9 w-[46px] rounded-none border-0 bg-transparent p-0 text-inherit [&:hover:not(:disabled)]:bg-hover [&:hover:not(:disabled)]:text-foreground"
         variant="ghost"
         size="icon"
         disabled={disabled}
@@ -43,7 +42,7 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
         <MaximizeIcon size={12} strokeWidth={1.5} aria-hidden="true" />
       </Button>
       <Button
-        className="window-control window-close-control"
+        className="h-9 w-[46px] rounded-none border-0 bg-transparent p-0 text-inherit [&:hover:not(:disabled)]:bg-destructive [&:hover:not(:disabled)]:text-destructive-foreground"
         variant="ghost"
         size="icon"
         disabled={disabled}
@@ -55,7 +54,7 @@ export function WindowControls({ chrome }: { chrome: WindowChrome }) {
       {chrome.error && (
         <Alert
           variant="destructive"
-          className="window-controls-error bg-popover text-popover-foreground shadow-lg"
+          className="absolute top-[42px] right-2 w-[min(300px,calc(100vw_-_32px))] bg-popover text-[13px] leading-[var(--text-sm--line-height)] text-popover-foreground shadow-lg"
         >
           <p>{t("windowOperationFailed")}</p>
           <Button

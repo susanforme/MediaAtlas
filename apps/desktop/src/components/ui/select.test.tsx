@@ -120,8 +120,8 @@ it("opens above a trigger near the viewport edge without extending past the righ
   );
   fireEvent.click(control);
   const popup = screen.getByRole("listbox");
-  expect(Number.parseFloat(popup.style.bottom)).toBeGreaterThan(0);
-  expect(Number.parseFloat(popup.style.left) + Number.parseFloat(popup.style.width)).toBeLessThanOrEqual(window.innerWidth - 4);
+  expect(Number.parseFloat(popup.style.getPropertyValue("--select-bottom"))).toBeGreaterThan(0);
+  expect(Number.parseFloat(popup.style.getPropertyValue("--select-left")) + Number.parseFloat(popup.style.getPropertyValue("--select-width"))).toBeLessThanOrEqual(window.innerWidth - 4);
 });
 
 it("starts at the final enabled option for ArrowUp when the current value is unavailable", () => {

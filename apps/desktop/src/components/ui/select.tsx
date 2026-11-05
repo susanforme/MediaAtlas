@@ -14,7 +14,6 @@ import {
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
 import { Button } from "./button";
-import "./select.css";
 
 interface Choice {
   value: string;
@@ -92,7 +91,7 @@ export function Select({
   const [active, setActive] = useState(selectedIndex);
   const [label, setLabel] = useState("");
   const [invalid, setInvalid] = useState(false);
-  const [position, setPosition] = useState<CSSProperties>({});
+  const [position, setPosition] = useState<CSSProperties & Record<`--select-${string}`, string>>({});
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const native = useRef<HTMLSelectElement>(null);
@@ -141,15 +140,14 @@ export function Select({
       const offsetLeft = -originLeft + (container?.scrollLeft ?? 0);
       const offsetTop = -originTop + (container?.scrollTop ?? 0);
       setPosition({
-        position: container ? "absolute" : "fixed",
-        left: Math.max(leftEdge, Math.min(rect.left, rightEdge - width)) + offsetLeft,
-        width,
-        maxHeight: Math.max(0, Math.min(320, down ? below : above)),
+        "--select-left": `${Math.max(leftEdge, Math.min(rect.left, rightEdge - width)) + offsetLeft}px`,
+        "--select-width": `${width}px`,
+        "--select-max-height": `${Math.max(0, Math.min(320, down ? below : above))}px`,
         ...(down
-          ? { top: rect.bottom + offsetTop + 4 }
+          ? { "--select-top": `${rect.bottom + offsetTop + 4}px` }
           : {
-              bottom:
-                (container?.clientHeight ?? window.innerHeight) - rect.top - offsetTop + 4,
+              "--select-bottom":
+                `${(container?.clientHeight ?? window.innerHeight) - rect.top - offsetTop + 4}px`,
             }),
       });
     }
@@ -261,7 +259,7 @@ export function Select({
         ref={trigger}
         id={triggerId}
         data-slot="select"
-        className={cn("ui-select h-11 w-full min-w-0 justify-between rounded-[10px] border border-input bg-background px-3 text-left text-sm font-normal text-foreground hover:border-ring hover:bg-background focus-visible:ring-ring/40 disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-45 aria-invalid:border-destructive", className)}
+        className={cn("h-11 w-full min-w-0 justify-between rounded-[10px] border border-input bg-background px-3 text-left text-sm font-normal text-foreground hover:border-ring hover:bg-background focus-visible:ring-ring/40 disabled:pointer-events-auto disabled:cursor-not-allowed disabled:opacity-45 aria-invalid:border-destructive", className)}
         variant="outline"
         role="combobox"
         value={selected}
@@ -296,7 +294,7 @@ export function Select({
         aria-hidden="true"
         aria-label={undefined}
         aria-labelledby={undefined}
-        className="ui-select-native"
+        className="pointer-events-none absolute -m-px size-px overflow-hidden p-0 opacity-0 [clip-path:inset(50%)]"
         tabIndex={-1}
         disabled={disabled}
         value={selected}
@@ -319,7 +317,7 @@ export function Select({
         ))}
       </select>
       {open && !disabled && portalRoot && createPortal(
-        <div ref={popup} id={listId} data-slot="select-content" className="ui-select-content" style={position} role="listbox" aria-labelledby={triggerId}>
+        <div ref={popup} id={listId} data-slot="select-content" data-position={portalRoot === document.body ? "viewport" : "dialog"} className="pointer-events-auto fixed top-[var(--select-top,auto)] bottom-[var(--select-bottom,auto)] left-[var(--select-left)] z-80 max-h-[var(--select-max-height)] w-[var(--select-width)] overflow-auto overscroll-contain rounded-[10px] border border-border bg-popover p-1 text-popover-foreground shadow-[0_8px_30px_color-mix(in_srgb,var(--foreground)_12%,transparent)] data-[position=dialog]:absolute" style={position} role="listbox" aria-labelledby={triggerId}>
           {options.map((option, index) => (
             <div key={option.value}>
               {option.group && option.group !== options[index - 1]?.group && <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{option.group}</div>}
@@ -333,7 +331,7 @@ export function Select({
                 value={option.value}
                 variant="ghost"
                 tabIndex={-1}
-                className={cn("h-auto min-h-9 w-full justify-start rounded-md py-2 pr-8 pl-2 text-left font-normal whitespace-normal text-popover-foreground", active === index && "bg-accent text-accent-foreground")}
+                className={cn("relative h-auto min-h-9 w-full justify-start rounded-md py-2 pr-8 pl-2 text-left font-normal whitespace-normal text-popover-foreground", active === index && "bg-accent text-accent-foreground")}
                 onPointerDown={(event) => event.preventDefault()}
                 onPointerMove={() => !option.disabled && setActive(index)}
                 onClick={() => choose(index)}

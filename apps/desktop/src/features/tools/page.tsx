@@ -63,9 +63,9 @@ export function OrganizationPanel({
   return (
     <Card asChild>
       <section className="space-y-4">
-        <h2 className="section-title">{t("organize")}</h2>
-        <div className="filter-grid">
-          <Label className="filter-field">
+        <h2 className="mb-4 font-semibold">{t("organize")}</h2>
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(150px,100%),1fr))] gap-4">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("organizeTarget")}</span>
             <Select
               disabled={
@@ -94,7 +94,7 @@ export function OrganizationPanel({
                 ))}
             </Select>
           </Label>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("organizeTemplate")}</span>
             <Input
               disabled={
@@ -110,7 +110,7 @@ export function OrganizationPanel({
               }}
             />
           </Label>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("organizeStrategy")}</span>
             <Select
               disabled={
@@ -420,7 +420,7 @@ function Maintenance() {
     <>
       <Card asChild>
         <section className="space-y-4">
-          <h2 className="section-title">{t("watcherTitle")}</h2>
+          <h2 className="mb-4 font-semibold">{t("watcherTitle")}</h2>
           <p>{t("watcherHelp")}</p>
           {watchers.data?.map((w) => (
             <div key={w.root_id}>
@@ -448,7 +448,7 @@ function Maintenance() {
       </Card>
       <Card asChild>
         <section className="space-y-4">
-          <h2 className="section-title">{t("healthIssues")}</h2>
+          <h2 className="mb-4 font-semibold">{t("healthIssues")}</h2>
           <Button
             disabled={health.isPending}
             onClick={() => {

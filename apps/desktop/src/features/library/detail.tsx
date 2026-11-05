@@ -1,6 +1,5 @@
 import { Card } from "../../components/ui/card";
 import { MediaArtwork } from "./media-artwork";
-import "./library.css";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { LockKeyhole } from "lucide-react";
@@ -104,9 +103,9 @@ export function MediaDetailPage({
           </Link>
         </Button>
       </PageHeading>
-      <div className="detail-layout">
+      <div className="grid grid-cols-[220px_minmax(0,1fr)] gap-7 [@media(width<=760px)]:grid-cols-[minmax(0,1fr)] [@media(width<=760px)]:[&>div:first-child]:max-w-[220px]">
         <div>
-          <div className="poster-image rounded-2xl border border-border">
+          <div className="poster-image aspect-2/3 overflow-hidden rounded-[10px] border border-border bg-muted">
             <MediaArtwork
               uri={adult && !settings.covers_visible ? null : data.poster_uri}
               title={data.media.title}
@@ -143,7 +142,7 @@ export function MediaDetailPage({
                 className="space-y-3"
                 aria-label={t("libraryNfoOutput")}>
                 <div className="flex flex-wrap items-center gap-3">
-                  <h2 className="section-title mb-0">{t("libraryNfoOutput")}</h2>
+                  <h2 className="mb-4 font-semibold">{t("libraryNfoOutput")}</h2>
                   <Badge
                     variant={
                       data.health.includes("nfo_output_failed")
@@ -175,7 +174,7 @@ export function MediaDetailPage({
           )}
           <Card asChild>
             <section>
-              <h2 className="section-title">{t("files")}</h2>
+              <h2 className="mb-4 font-semibold">{t("files")}</h2>
               {data.files.length ? (
                 <ul className="divide-y divide-border">
                   {data.files.map((file) => (
@@ -198,7 +197,7 @@ export function MediaDetailPage({
           </Card>
           <Card asChild>
             <section>
-              <h2 className="section-title">{t("metadata")}</h2>
+              <h2 className="mb-4 font-semibold">{t("metadata")}</h2>
               {data.metadata_values.length ? (
                 <dl className="divide-y divide-border">
                   {data.metadata_values.map((field) => (
@@ -236,7 +235,7 @@ export function MediaDetailPage({
           </Card>
           <Card asChild>
             <section>
-              <h2 className="section-title">{t("externalIds")}</h2>
+              <h2 className="mb-4 font-semibold">{t("externalIds")}</h2>
               {data.external_ids.length ? (
                 <ul>
                   {data.external_ids.map((id) => (
@@ -252,7 +251,7 @@ export function MediaDetailPage({
           </Card>
           <Card asChild>
             <section>
-              <h2 className="section-title">{t("artworks")}</h2>
+              <h2 className="mb-4 font-semibold">{t("artworks")}</h2>
               {data.artworks.length ? (
                 <ul>
                   {data.artworks.map((art) => (
@@ -269,7 +268,7 @@ export function MediaDetailPage({
           {data.relations.length > 0 && (
             <Card asChild>
               <section>
-                <h2 className="section-title">{t("relations")}</h2>
+                <h2 className="mb-4 font-semibold">{t("relations")}</h2>
                 <ul>
                   {data.relations.map((relation) => (
                     <li key={relation.id} className="py-1">

@@ -22,7 +22,6 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { toast } from "../../components/ui/sonner";
-import "../library/library.css";
 import { MediaDetailPage } from "../library/detail";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { MediaToolsPage } from "../tools/page";
@@ -51,7 +50,7 @@ export function AdultMetadata({ detail }: { detail: AdultDetail }) {
   return (
     <Card asChild>
       <section>
-        <h2 className="section-title">
+        <h2 className="mb-4 font-semibold">
           {c.normalized} · {detail.identity.title}
           {c.is_primary && (
             <Badge variant="secondary" className="ml-2">{t("adultPrimaryCatalog")}</Badge>
@@ -112,7 +111,7 @@ export function OutputDiff({ preview }: { preview: AdultOutputPreview }) {
   return (
     <Card asChild>
       <section>
-        <h3 className="section-title">{t("adultOutputFiles")}</h3>
+        <h3 className="mb-4 font-semibold">{t("adultOutputFiles")}</h3>
         <Alert asChild>
           <p className="mb-3">{t("adultPreserve")}</p>
         </Alert>
@@ -446,7 +445,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
     <div className="space-y-5">
       <Card asChild>
         <section>
-          <h2 className="section-title">{t("adultProviders")}</h2>
+          <h2 className="mb-4 font-semibold">{t("adultProviders")}</h2>
           <Button asChild variant="outline">
             <Link className="mb-4" to="/settings">
               {t("providerAuthOpenSettings")}
@@ -506,7 +505,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
       </Card>
       <Card asChild>
         <form className="space-y-4" onSubmit={submit}>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("adultCatalog")}</span>
             <Input
               required
@@ -515,7 +514,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
               maxLength={128}
             />
           </Label>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("adultNamespace")}</span>
             <Input
               required
@@ -524,7 +523,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
               maxLength={64}
             />
           </Label>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("adultStudio")}</span>
             <Input
               value={studio}
@@ -550,7 +549,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
       {search && (
         <Card asChild>
           <section>
-            <h2 className="section-title">{t("candidates")}</h2>
+            <h2 className="mb-4 font-semibold">{t("candidates")}</h2>
             {search.failures.map((f) => (
               <Alert asChild role="note" key={f.provider_id}>
                 <p>
@@ -617,7 +616,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
               ) : (
                 <>
                   {" "}
-                  <Label className="filter-field">
+                  <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                     <span>{t("adultTarget")}</span>
                     <Select
                       value={target}
@@ -727,7 +726,7 @@ function CatalogScraper({ mediaId }: { mediaId?: string }) {
           {merge && (
             <Card asChild>
               <section className="space-y-4">
-                <h2 className="section-title">{t("adultMergePreview")}</h2>
+                <h2 className="mb-4 font-semibold">{t("adultMergePreview")}</h2>
                 <p>{t("adultNeedsReview")}</p>
                 {merge.fields.map((field) => (
                   <div
@@ -829,7 +828,7 @@ function AdultTasks() {
   return (
     <Card asChild>
       <section>
-        <h2 className="section-title">{t("adultTaskTitle")}</h2>
+        <h2 className="mb-4 font-semibold">{t("adultTaskTitle")}</h2>
         {snapshot.isPending ? (
           <Loading />
         ) : snapshot.error ? (

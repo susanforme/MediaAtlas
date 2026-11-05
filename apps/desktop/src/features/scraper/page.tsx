@@ -3,7 +3,6 @@ import { Alert } from "../../components/ui/alert";
 import { Badge } from "../../components/ui/badge";
 import { Card } from "../../components/ui/card";
 import { Label } from "../../components/ui/label";
-import "./styles.css";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
@@ -260,7 +259,7 @@ function ScraperWorkspace({
                     setLocalQuery(localSearch.trim());
                   }}
                 >
-                  <Label className="filter-field min-w-0 flex-1">
+                  <Label className="flex min-w-0 flex-1 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                     <span>{t("scraperTargetSearch")}</span>
                     <Input
                       type="search"
@@ -272,7 +271,7 @@ function ScraperWorkspace({
                     {t("scraperLocalSearch")}
                   </Button>
                 </form>
-                <Label className="filter-field max-w-2xl">
+                <Label className="flex min-w-0 max-w-2xl flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("scraperTarget")}</span>
                   <Select
                     value={target}
@@ -306,7 +305,7 @@ function ScraperWorkspace({
         {snapshot.isPending && <Loading />}
         {snapshot.error && <ErrorNotice error={snapshot.error} />}
           <form
-            className="scraper-search"
+            className="max-w-5xl pb-5 [&_[data-slot=input]]:h-9 [&_[data-slot=select]]:h-9"
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -319,8 +318,8 @@ function ScraperWorkspace({
                 run.mutate();
               }
             }}>
-            <div className="scraper-search-fields">
-              <Label className="filter-field">
+            <div className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-end gap-3 [@media(max-width:640px)]:grid-cols-[minmax(0,1fr)_100px] [@media(max-width:640px)]:[&>:first-child]:col-span-full">
+              <Label className="flex min-w-0 flex-col gap-[5px] text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("scraperTitle")}</span>
                 <Input
                   value={title}
@@ -335,7 +334,7 @@ function ScraperWorkspace({
                   disabled={busy}
                 />
               </Label>
-              <Label className="filter-field">
+              <Label className="flex min-w-0 flex-col gap-[5px] text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("type")}</span>
                 <Select
                   value={kind}
@@ -362,7 +361,7 @@ function ScraperWorkspace({
                   ))}
                 </Select>
               </Label>
-              <Label className="filter-field">
+              <Label className="flex min-w-0 flex-col gap-[5px] text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("scraperYear")}</span>
                 <Input
                   type="number"
@@ -385,7 +384,7 @@ function ScraperWorkspace({
             <Details className="mt-3 rounded-none border-0 p-0">
               <DetailsSummary>{t("scraperAdvanced")}</DetailsSummary>
               <div className="mt-3 grid max-w-2xl gap-3 sm:grid-cols-2">
-                <Label className="filter-field">
+                <Label className="flex min-w-0 flex-col gap-[5px] text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("scraperExternalNamespace")}</span>
                   <Input
                     value={namespace}
@@ -394,7 +393,7 @@ function ScraperWorkspace({
                     disabled={busy}
                   />
                 </Label>
-                <Label className="filter-field">
+                <Label className="flex min-w-0 flex-col gap-[5px] text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("scraperExternalId")}</span>
                   <Input
                     value={externalId}
@@ -505,12 +504,14 @@ function ScraperWorkspace({
             <h2 id="scraper-results" className="text-lg font-semibold">
               {t("scraperResults")}
             </h2>
-            <div className="scraper-candidates">
+            <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4">
               {search.candidates.map((c, index) => (
-                <Card asChild key={index}>
-                  <article
-                    className={candidateIndex === index ? "scraper-chosen" : ""}
-                  >
+                <Card
+                  asChild
+                  key={index}
+                  className={candidateIndex === index ? "border-primary shadow-[0_0_0_1px_var(--color-primary)]" : ""}
+                >
+                  <article>
                     <h3 className="font-semibold">
                       {c.candidate.data.title} ·{" "}
                       {c.candidate.data.year ?? t("unknownYear")}
@@ -586,12 +587,12 @@ function ScraperWorkspace({
               {t(output.strategy === "update_nfo" ? "scraperOutputUpdateHelp" : "scraperOutputHelp")}
             </p>
             {output.files.map((file, index) => (
-              <article key={index} className="scraper-output-file">
+              <article key={index} className="mt-4 border-t border-border pt-4">
                 <h3 className="font-medium break-all">{file.destination}</h3>
                 {file.protected && (
                   <Badge variant="secondary">{t("scraperOutputProtected")}</Badge>
                 )}
-                <div className="scraper-output-text">
+                <div className="mt-[0.7rem] grid grid-cols-2 gap-4 [&_pre]:max-h-80 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:text-[0.75rem] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [@media(max-width:640px)]:grid-cols-[1fr]">
                   <div>
                     <h4>{t("scraperOld")}</h4>
                     <pre>{file.old_text ?? t("none")}</pre>

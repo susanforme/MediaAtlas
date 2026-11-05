@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
 import { Toaster as Sonner } from "sonner";
 import { useTheme } from "../../lib/theme";
-import "./sonner.css";
 import "./sonner-translations";
 
 export { toast } from "sonner";
@@ -18,12 +17,7 @@ export function Toaster() {
       containerAriaLabel={t("notifications")}
       toastOptions={{
         closeButtonAriaLabel: t("dismissNotification"),
-        style: {
-          background: "var(--color-surface)",
-          color: "var(--color-foreground)",
-          borderColor: "var(--color-border)",
-          fontFamily: "inherit",
-        },
+        className: "bg-surface! text-foreground! border-border! [font-family:inherit]!",
       }}
     />
   );

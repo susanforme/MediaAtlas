@@ -17,7 +17,6 @@ import { RootSourceReadiness } from "./root-source-readiness";
 import type { ScannerSearch } from "./scanner-navigation";
 import { useRootActivity } from "./use-root-activity";
 import { useRootEditor } from "./use-root-editor";
-import "./root-management.css";
 import "./translations";
 import "../adult/translations";
 import { Button } from "../../components/ui/button";
@@ -99,10 +98,10 @@ export function RootsPage({
         </Button>
       </PageHeading>
       {form && (
-        <Card asChild>
-          <form className="root-editor space-y-5" onSubmit={submit} noValidate>
-            <h2 className="section-title">{t(form.id ? "edit" : "addRoot")}</h2>
-            <div className="root-path-picker">
+        <Card asChild className="mb-7 max-w-[760px] p-[clamp(20px,3vw,32px)] sm:p-[clamp(20px,3vw,32px)]">
+          <form className="space-y-5" onSubmit={submit} noValidate>
+            <h2 className="mb-4 font-semibold">{t(form.id ? "edit" : "addRoot")}</h2>
+            <div className="flex flex-wrap items-center gap-4 rounded-xl bg-muted p-[18px]">
               <Button
                 variant="outline"
                 disabled={
@@ -130,7 +129,7 @@ export function RootsPage({
             </div>
             {pickerError !== undefined && <ErrorNotice error={pickerError} />}
             <div className="grid gap-4 sm:grid-cols-2">
-              <Label className="filter-field">
+              <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("rootName")}</span>
                 <Input
                   value={form.name}
@@ -139,7 +138,7 @@ export function RootsPage({
                   required
                 />
               </Label>
-              <Label className="filter-field">
+              <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("rootType")}</span>
                 <Select
                   disabled={working}
@@ -171,7 +170,7 @@ export function RootsPage({
             </div>
             {rootSupportsNfoExport(form.kind) && (
               <div className="space-y-2">
-                <Label className="filter-field max-w-sm">
+                <Label className="flex min-w-0 max-w-sm flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("rootNfoExportMode")}</span>
                   <Select
                     value={form.nfo_export_mode ?? "online"}
@@ -212,7 +211,7 @@ export function RootsPage({
                 id={advancedId}
                 className="space-y-4 border-t border-border pt-4"
               >
-                <Label className="filter-field">
+                <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("rootPath")}</span>
                   <Input
                     value={form.path}
@@ -222,7 +221,7 @@ export function RootsPage({
                     required
                   />
                 </Label>
-                <Label className="filter-field">
+                <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("excludePatterns")}</span>
                   <Textarea
                     value={excludes}
@@ -317,7 +316,7 @@ export function RootsPage({
               )?.focus();
             }}
           >
-            <DialogTitle className="section-title">
+            <DialogTitle className="mb-4 font-semibold">
               {t("removeRoot")}
             </DialogTitle>
             <p>{t("removeConfirm", { name: remove.name })}</p>
@@ -343,7 +342,7 @@ export function RootsPage({
       ) : !roots.data.length ? (
         <Empty title={t("noRoots")} />
       ) : (
-        <div className="root-grid">
+        <div className="border-y border-border">
           {roots.data.map((root) => (
             <RootCard
               key={root.id}

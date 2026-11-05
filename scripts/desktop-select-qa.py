@@ -105,7 +105,7 @@ def main():
         assert not errors, errors
         browser.close()
 
-    source = ["apps/desktop/src/components/ui/select.tsx", "apps/desktop/src/components/ui/select.css", "apps/desktop/src/styles.css", "apps/desktop/src/components/shell/shell.css", "apps/desktop/src/features/library/library.css"]
+    source = ["apps/desktop/src/components/ui/select.tsx", "apps/desktop/src/components/ui/filter-bar.tsx", "apps/desktop/src/styles.css", "apps/desktop/src/components/shell/app-shell.tsx", "apps/desktop/src/features/library/browse.tsx", "apps/desktop/src/features/library/library-filters.tsx", "apps/desktop/src/features/library/library-poster-card.tsx"]
     report = {"date":"2026-11-04", "mode":"real Chromium + synthetic IPC; disabled/invalid are explicit DOM style fixtures", "source_commit":subprocess.check_output(["git","rev-parse","HEAD"],cwd=ROOT,text=True).strip(),
               "source_sha256":{name:hashlib.sha256((ROOT/name).read_bytes()).hexdigest() for name in source}, "observations":observations,
               "checks":["custom button triggers and theme-aware listbox options", "single SVG chevron and consistent typography", "keyboard selection updates real library URL", "keyboard focus visible", "disabled cursor/opacity and invalid border", "empty/content, language switching, 390px and reduced motion, no page or right-content overflow"],

@@ -170,7 +170,7 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
         }}
         noValidate
       >
-        <Label className="filter-field">
+        <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
           <span>{t("providerAuthMethod")}</span>
           <Select
             value={method}
@@ -199,7 +199,7 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
               ))}
           </Select>
         </Label>
-        <Label className="filter-field">
+        <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
           <span>{t("providerAuthStorage")}</span>
           <Select
             value={storage}
@@ -214,7 +214,7 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
             <option value="session_only">{t("providerAuthSession")}</option>
           </Select>
         </Label>
-        <Label className="filter-field">
+        <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
           <span>
             {t(
               method === "affiliate"
@@ -237,7 +237,7 @@ function AuthEditor({ providerId, setup, root, onSetupComplete }: EditorProps) {
           />
         </Label>
         {method === "affiliate" && (
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("providerAuthAffiliateId")}</span>
             <Input
               type="password"
@@ -375,7 +375,7 @@ function ProviderAuthForm({
   return (
     <Card asChild>
       <section aria-labelledby="provider-auth-title">
-        <h2 id="provider-auth-title" className="section-title">
+        <h2 id="provider-auth-title" className="mb-4 font-semibold">
           {t("providerAuthTitle")}
         </h2>
         {root && (
@@ -383,7 +383,7 @@ function ProviderAuthForm({
             {t("setupForRoot", { name: root.name })}
           </p>
         )}
-        <Label className="filter-field">
+        <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
           <span>{t("providerAuthProvider")}</span>
           <Select
             value={selectedProvider}

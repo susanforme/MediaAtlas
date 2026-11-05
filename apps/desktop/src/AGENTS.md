@@ -57,8 +57,8 @@
 - 保留 label、键盘、焦点、disabled、错误及校验语义。原生 checkbox 使用其 checked/onChange 契约；若新增自定义控件，按真实组件契约处理 onCheckedChange 等事件。
 - 确认操作复用已有的预览/确认流程；首次需要公共确认时提供可 await 的结果入口，确认成功后才执行。不要用 `window.confirm`、`alert` 或同步假确认替代应用内流程。通过系统关联应用打开媒体的既有能力照常保留。
 - 使用现有主题 token 和基础控件统一状态、颜色、间距。当前未建立完整明暗主题；新增控件须考虑明暗模式，不把仅浅色硬编码推广为新约定，设计参数遵循已建立的根 `design.md`；外部 UI 依赖必须有实际需要。
-- 项目已有 Tailwind 4 和全局业务 CSS。新增业务样式优先归所属 feature/组件，以局部 utility、响应式/状态变体或按需局部样式表达；不要继续堆叠全局业务 selector、页面专属 media query。
-- `styles.css` 的新增内容限主题、reset 和真正共享的基础样式。既有业务 class 随相关修改逐步局部化，不为遵守规范重写全部旧样式，语义 HTML 交互控件仅由共享层封装输出。
+- CSS 编码只使用已有 Tailwind 4，在组件中用完整、静态可识别的 utility、响应式/状态变体和任意值表达样式；不定义业务 CSS selector、自定义样式 class、CSS Modules、CSS-in-JS 或内联样式声明，也不用 `@apply` 包装样式类。`styles.css` 仅保留 Tailwind 入口、主题 token 和用 Tailwind `@apply` 表达的基础 reset；运行时测量值只通过 CSS 自定义属性传给 Tailwind utility。
+- 删除仅用于样式的 className；className、id 可为真实语义、行为或单元测试保留，但不得再承载自定义样式。迁移逐项保持原尺寸、间距、颜色、行高、层叠、响应式、交互状态和可访问性；语义 HTML 交互控件仍仅由共享层封装输出。
 
 ## 文案与验证
 

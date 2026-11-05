@@ -19,7 +19,6 @@ import { LibraryFilters } from "./library-filters";
 import { LibraryPosterCard } from "./library-poster-card";
 import { LibrarySourceRecovery } from "./library-source-recovery";
 import { useLibraryBrowse } from "./use-library-browse";
-import "./library.css";
 import { NativeOpen } from "./native-open";
 import { Empty, ErrorNotice, HealthBadges, Loading, Pager } from "./shared";
 
@@ -42,7 +41,8 @@ function LibrarySearchForm({
       ref={form}
       role="search"
       aria-label={t("search")}
-      className="library-search"
+      data-slot="library-search"
+      className="relative flex w-full min-w-0 items-center [&_[data-slot=input]]:pl-[43px] [&_[data-slot=input]]:pr-11 [&>[data-slot=button]]:absolute [&>[data-slot=button]]:right-0.5 [&>[data-slot=button]]:rounded-full"
       onSubmit={(event) => {
         event.preventDefault();
         const query = new FormData(event.currentTarget).get("q");
@@ -51,7 +51,7 @@ function LibrarySearchForm({
         });
       }}
     >
-      <Search className="app-search-icon" size={19} aria-hidden="true" />
+      <Search className="pointer-events-none absolute left-4 z-1 text-muted-foreground" size={19} aria-hidden="true" />
       <Input
         type="search"
         name="q"
@@ -102,10 +102,10 @@ export function LibraryPage({
   if (!allowed)
     return adultAvailable ? <Loading /> : <Empty title={t("noResults")} />;
   return (
-    <div className="library-page">
-      <div className="library-page-heading">
+    <div className="min-w-0">
+      <div className="mb-[18px] flex flex-wrap items-center justify-between gap-3 [&_h1]:text-[26px] [&_h1]:leading-[1.25] [&_h1]:font-semibold [&_h1]:tracking-[-0.025em] [@media(width<=760px)]:mb-3.5 [@media(width<=760px)]:[&_h1]:text-[23px]">
         <h1>{t("library")}</h1>
-        <div className="library-heading-actions">
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
           <Button asChild variant="ghost" size="sm">
             <Link to="/tools" search={adult ? { kind: "adult_video" } : {}}>
               {t("videoTools")}
@@ -125,7 +125,7 @@ export function LibraryPage({
         </div>
       </div>
       {!adult && (
-        <div className="library-background-activity">
+        <div className="[&>section]:mb-4 [&>section]:px-4 [&>section]:py-3">
           <LibraryActivity activity={activity} search={search} />
         </div>
       )}
@@ -243,7 +243,7 @@ export function LibraryPage({
           </TableBody>
         </Table>
       ) : (
-        <div className="poster-grid library-poster-grid">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-x-[18px] gap-y-[22px] [@media(width<=760px)]:grid-cols-[repeat(auto-fill,minmax(min(100%,125px),1fr))] [@media(width<=760px)]:gap-x-3 [@media(width<=760px)]:gap-y-[18px]">
           {media.data.items.map((card) => (
             <LibraryPosterCard key={card.media.id} card={card} adult={adult} />
           ))}

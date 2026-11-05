@@ -82,7 +82,7 @@ export function CandidateFilters({
       }
       filters={
         <>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("root")}</span>
             <Select
               value={search.root ?? ""}
@@ -98,7 +98,7 @@ export function CandidateFilters({
               ))}
             </Select>
           </Label>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("health")}</span>
             <Select
               value={search.health ?? ""}
@@ -123,7 +123,7 @@ export function CandidateFilters({
         ref={form}
         role="search"
         aria-label={t("toolsSearch")}
-        className="filter-bar-search"
+        className="relative min-w-0 flex-[1_1_220px] max-w-[360px] [@media(max-width:640px)]:basis-full [@media(max-width:640px)]:max-w-none"
         onSubmit={(event) => {
           event.preventDefault();
           const value = new FormData(event.currentTarget).get("q");
@@ -132,6 +132,7 @@ export function CandidateFilters({
         }}
       >
         <Input
+          className="pr-10"
           name="q"
           type="search"
           maxLength={256}
@@ -139,7 +140,7 @@ export function CandidateFilters({
           placeholder={t("toolsSearch")}
           defaultValue={search.q ?? ""}
         />
-        <Button type="submit" variant="ghost" size="icon" aria-label={t("search")}>
+        <Button type="submit" variant="ghost" size="icon" className="absolute top-0.5 right-0.5 size-8 p-0" aria-label={t("search")}>
           <Search size={16} aria-hidden="true" />
         </Button>
       </form>

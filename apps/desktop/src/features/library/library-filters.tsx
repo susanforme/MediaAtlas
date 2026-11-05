@@ -30,7 +30,7 @@ function FacetSelect({
 }) {
   const { number } = useFormat();
   return (
-    <Label className="filter-field">
+    <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
       <span>{label}</span>
       <Select
         value={value ?? ""}
@@ -132,7 +132,7 @@ export function LibraryFilters({
               {t("clearFilters")}
             </Button>
           )}
-          <fieldset className="library-view-options" aria-label={t("wall")}>
+          <fieldset className="ml-auto flex items-center gap-0.5 rounded-[9px] bg-muted p-0.5 [&_button]:h-8 [&_button]:px-2.5" aria-label={t("wall")}>
             <Button
               size="sm"
               variant={search.view !== "list" ? "secondary" : "ghost"}
@@ -156,7 +156,7 @@ export function LibraryFilters({
       }
       filters={
         <>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("root")}</span>
             <Select
               value={search.root ?? ""}
@@ -172,7 +172,7 @@ export function LibraryFilters({
               ))}
             </Select>
           </Label>
-          <Label className="filter-field">
+          <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("health")}</span>
             <Select
               value={health ?? ""}

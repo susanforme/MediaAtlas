@@ -43,7 +43,7 @@ export function MaintenancePage({
             )}
             {status.data && (
               <>
-                <Label className="filter-field">
+                <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("maintenanceDirectory")}</span>
                   <Input readOnly value={status.data.directory} />
                 </Label>

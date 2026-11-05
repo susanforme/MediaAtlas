@@ -6,7 +6,6 @@ import { ErrorNotice } from "./features/library/shared";
 import { NfoStandalone } from "./features/nfo/page";
 import i18n from "./i18n";
 import { initializeTheme } from "./lib/theme";
-import "./styles.css";
 
 initializeTheme();
 document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";

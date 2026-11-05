@@ -138,8 +138,8 @@ export function SettingsPage({
                 <div className="space-y-6">
                   <Card asChild>
                     <section>
-                      <h2 className="section-title">{t("appearance")}</h2>
-                      <Label className="filter-field mb-5">
+                      <h2 className="mb-4 font-semibold">{t("appearance")}</h2>
+                      <Label className="mb-5 flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                         <span>{t("theme")}</span>
                         <Select
                           value={theme}
@@ -151,7 +151,7 @@ export function SettingsPage({
                           <option value="light">{t("theme_light")}</option>
                         </Select>
                       </Label>
-                      <Label className="filter-field">
+                      <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                         <span>{t("language")}</span>
                         <Select
                           value={i18n.resolvedLanguage ?? "zh-CN"}
@@ -185,7 +185,7 @@ function ContentPreferences() {
   return (
     <Card asChild>
       <section>
-        <h2 className="section-title">{t("settingsMediaTypes")}</h2>
+        <h2 className="mb-4 font-semibold">{t("settingsMediaTypes")}</h2>
         <Label className="mb-4 flex items-center gap-3">
           <Checkbox
             checked={value}

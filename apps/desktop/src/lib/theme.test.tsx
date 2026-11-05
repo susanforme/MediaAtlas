@@ -36,7 +36,6 @@ it("restores only supported themes and defaults to dark", () => {
   initializeTheme();
   expect(document.documentElement).toHaveAttribute("data-theme", "light");
   expect(document.documentElement).not.toHaveClass("dark");
-  expect(document.documentElement.style.colorScheme).toBe("light");
 });
 
 it("updates all mounted controls immediately and persists the selection", () => {

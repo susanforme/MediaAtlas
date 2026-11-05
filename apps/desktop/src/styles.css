@@ -49,14 +49,6 @@
   --sidebar-active-hover: #d9d0f6;
   --rating: #8b6500;
   --overlay: #18122266;
-  font-family: var(--font-sans);
-  color: var(--color-foreground);
-  background: var(--color-background);
-  color-scheme: light;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 .dark {
   --background: #101016;
@@ -76,91 +68,48 @@
   --sidebar-active-hover: #443f80;
   --rating: #f1c74e;
   --overlay: #000000b3;
-  color-scheme: dark;
-}
-html,
-body,
-#root {
-  height: 100%;
-  overscroll-behavior: none;
-}
-/* Standalone NFO documents keep document scrolling. */
-html:has(.app-shell),
-body:has(.app-shell),
-#root:has(.app-shell) {
-  overflow: hidden;
-}
-body {
-  margin: 0;
-  min-width: 320px;
 }
 @layer base {
+  html {
+    @apply bg-background font-sans text-foreground antialiased [color-scheme:light] [font-synthesis:none] [text-rendering:optimizeLegibility] [&.dark]:[color-scheme:dark];
+  }
+  html,
+  body {
+    @apply h-full overscroll-none [&:has([data-slot=app-shell])]:overflow-hidden;
+  }
+  body {
+    @apply m-0 min-w-[320px];
+  }
   * {
-    border-color: var(--color-border);
+    @apply border-border [scrollbar-width:thin] [scrollbar-color:var(--input)_transparent];
   }
   button,
   select,
   input,
   textarea {
-    font: inherit;
+    @apply [font:inherit];
   }
   a {
-    color: inherit;
-    text-decoration: none;
+    @apply text-inherit no-underline focus-visible:[outline:2px_solid_var(--color-ring)]! focus-visible:outline-offset-4!;
   }
-}
-button:not(:disabled),
-select:not(:disabled) {
-  cursor: pointer;
-}
-button,
-a,
-input,
-textarea,
-select,
-summary {
-  -webkit-tap-highlight-color: transparent;
-}
-a:focus-visible {
-  outline: 2px solid var(--color-ring);
-  outline-offset: 4px;
-}
-::selection {
-  color: var(--primary-foreground);
-  background: var(--primary);
-}
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--input) transparent;
-}
-
-/* Shared page layout; visual components live in components/ui. */
-.section-title {
-  margin-bottom: 16px;
-  font-weight: 600;
-}
-.filter-grid,
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
-  gap: 16px;
-}
-.filter-field {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 8px;
-  font-size: 13px;
-}
-@media (prefers-reduced-motion: reduce) {
+  button:not(:disabled),
+  select:not(:disabled) {
+    @apply cursor-pointer;
+  }
+  button,
+  a,
+  input,
+  textarea,
+  select,
+  summary {
+    @apply [-webkit-tap-highlight-color:transparent];
+  }
+  ::selection {
+    @apply bg-primary text-primary-foreground;
+  }
   *,
   *::before,
   *::after {
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preference must override animation utilities. */
-    animation: none !important;
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preference must override hover transitions. */
-    transition: none !important;
-    /* biome-ignore lint/complexity/noImportantStyles: Reduced-motion preference must override component scroll behavior. */
-    scroll-behavior: auto !important;
+    @apply motion-reduce:animate-none! motion-reduce:transition-none! motion-reduce:scroll-auto!;
   }
 }

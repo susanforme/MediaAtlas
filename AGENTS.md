@@ -9,6 +9,8 @@
 
 # 桌面设计约束
 
+- CSS 编码只使用 Tailwind CSS：在组件中使用完整、静态可识别的 utility class、响应式/状态变体和任意值；禁止自定义样式 class、CSS Modules、CSS-in-JS、内联样式声明和新增业务 CSS selector，不用 `@apply` 包装自定义样式类。全局 CSS 仅保留 Tailwind 入口、主题 token 和用 Tailwind `@apply` 表达的基础 reset。运行时测量值仅通过 CSS 自定义属性传给 Tailwind utility，不在其中编码样式规则。
+- 移除仅为样式存在的旧 className；className、id 可为真实语义、行为或单元测试保留，但不得再作为自定义样式入口。样式迁移必须保留原 UI 的尺寸、间距、颜色、行高、层叠、响应式、交互状态和可访问性，不借迁移改版。
 - 新增或修改桌面 UI 前必须阅读根 `design.md`，以其 MediaAtlas 业务边界与视觉验收为准。参考图仅供风格，不复制品牌、导航、业务或虚构数据。
 - 所有业务交互 UI 使用 `apps/desktop/src/components/ui/` 的仓库 shadcn；缺失组件先补共享层，页面禁止直接使用原生交互控件以及 window.confirm/alert。
 - 保留只读媒体库、系统关联 App 打开、成人隔离、Token 手动配置保存及可配置常显入口；禁止内嵌播放器、捆绑浏览器引擎、虚构观看进度和死按钮。
