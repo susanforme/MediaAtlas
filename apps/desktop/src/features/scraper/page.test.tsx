@@ -381,7 +381,7 @@ it("blocks export while directory defaults fail and uses the retried default", a
   vi.mocked(scraperOutputApi.defaultMode).mockRejectedValueOnce(new DesktopError("request_failed")).mockResolvedValue("offline");
   await searchAndChoose();
   await confirmMerge();
-  const button = screen.getByRole("button", { name: "Preview NFO and poster output" });
+  const button = await screen.findByRole("button", { name: "Preview NFO and poster output" });
   await waitFor(() => expect(button).toBeDisabled());
   expect(scraperOutputApi.preview).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -396,7 +396,7 @@ it("does not let a late directory default replace an explicitly chosen export mo
   vi.mocked(scraperOutputApi.defaultMode).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
   await searchAndChoose();
   await confirmMerge();
-  const mode = screen.getByRole("combobox", { name: "NFO export mode" });
+  const mode = await screen.findByRole("combobox", { name: "NFO export mode" });
   expect(screen.getByRole("button", { name: "Preview NFO and poster output" })).toBeDisabled();
   chooseSelectOption(mode, "offline");
   await act(async () => finish("online"));
