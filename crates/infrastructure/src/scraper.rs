@@ -1518,6 +1518,7 @@ mod tests {
 
     #[tokio::test]
     async fn default_watching_restores_deleted_nfo_without_a_click_even_after_automatic_review() {
+        let _native_guard = crate::test_support::native_watcher_guard().await;
         let s = setup().await;
         // Keep database/cache writes outside the watched media root.
         let media_dir = s.dir.path().join("media");

@@ -5,12 +5,14 @@ use mediaatlas_domain::TaskState;
 use tempfile::TempDir;
 
 async fn fixture() -> (
+    Option<tokio::sync::OwnedMutexGuard<()>>,
     TempDir,
     LibraryRepository,
     ScanService,
     WatcherService,
     LibraryRoot,
 ) {
+    let native_guard = crate::test_support::native_watcher_guard().await;
     let dir = crate::test_support::tempdir().unwrap();
     let path = dir.path().join("media");
     std::fs::create_dir(&path).unwrap();
@@ -33,7 +35,7 @@ async fn fixture() -> (
         .root;
     let scans = ScanService::new(repo.clone());
     let watcher = WatcherService::new(repo.clone(), scans.clone());
-    (dir, repo, scans, watcher, root)
+    (native_guard, dir, repo, scans, watcher, root)
 }
 fn injected_signals_only(watcher: &WatcherService) {
     // Queue/overflow/lifecycle tests provide their own causal event source.
@@ -85,7 +87,7 @@ async fn settled(scans: &ScanService, id: Uuid) {
 }
 #[tokio::test]
 async fn video_roots_are_watched_by_default_but_an_explicit_opt_out_survives_restart() {
-    let (_dir, repo, scans, watcher, root) = fixture().await;
+    let (_native_guard, _dir, repo, scans, watcher, root) = fixture().await;
     injected_signals_only(&watcher);
     watcher.reconcile().await.unwrap();
     let status = watcher.list().await.unwrap().remove(0);
@@ -102,7 +104,7 @@ async fn video_roots_are_watched_by_default_but_an_explicit_opt_out_survives_res
 
 #[tokio::test]
 async fn native_events_are_debounced_into_unconfirmed_candidates_and_restart_restores_opt_in() {
-    let (_dir, repo, scans, watcher, root) = fixture().await;
+    let (_native_guard, _dir, repo, scans, watcher, root) = fixture().await;
     assert!(watcher.list().await.unwrap()[0].opted_in);
     assert!(watcher.configure(root.id, true).await.unwrap().active);
     let path = Path::new(&root.path).join("Fixture.2020.mkv");
@@ -157,7 +159,7 @@ async fn native_events_are_debounced_into_unconfirmed_candidates_and_restart_res
 }
 #[tokio::test]
 async fn overflow_active_scan_merge_and_root_lifecycle_preserve_one_pipeline() {
-    let (_dir, repo, scans, watcher, mut root) = fixture().await;
+    let (_native_guard, _dir, repo, scans, watcher, mut root) = fixture().await;
     injected_signals_only(&watcher);
     std::fs::write(Path::new(&root.path).join("Fixture.2020.mkv"), b"generated").unwrap();
     let manual = scans.start(root.id).await.unwrap();
@@ -197,7 +199,7 @@ async fn overflow_active_scan_merge_and_root_lifecycle_preserve_one_pipeline() {
 }
 #[tokio::test]
 async fn private_quarantine_events_are_ignored_and_user_hidden_files_are_preserved() {
-    let (_dir, repo, scans, watcher, root) = fixture().await;
+    let (_native_guard, _dir, repo, scans, watcher, root) = fixture().await;
     watcher.configure(root.id, true).await.unwrap();
     let hidden = Path::new(&root.path).join(".mediaatlas-tag-backup");
     std::fs::create_dir(&hidden).unwrap();
@@ -235,7 +237,7 @@ fn access_events_and_only_private_paths_do_not_enqueue() {
 
 #[tokio::test]
 async fn queued_old_generation_and_overflow_cannot_trigger_reenabled_or_reconfigured_root() {
-    let (dir, repo, scans, watcher, mut root) = fixture().await;
+    let (_native_guard, dir, repo, scans, watcher, mut root) = fixture().await;
     // This test injects queue/overflow generations deliberately. A new native
     // stream may also report creation of new-media on macOS; that is a valid
     // current-generation event, not evidence that the injected old one ran.
@@ -361,7 +363,7 @@ fn bounded_queue_overflow_retains_full_rescan_signal_with_bounded_memory() {
 
 #[tokio::test]
 async fn shutdown_acknowledgement_waits_for_dispatch_and_rejects_queued_events() {
-    let (_dir, repo, _scans, watcher, root) = fixture().await;
+    let (_native_guard, _dir, repo, _scans, watcher, root) = fixture().await;
     injected_signals_only(&watcher);
     watcher.configure(root.id, true).await.unwrap();
     let signal = watcher.runtime.live.lock().unwrap().handles[&root.id].signal;
@@ -388,7 +390,7 @@ async fn shutdown_acknowledgement_waits_for_dispatch_and_rejects_queued_events()
 
 #[tokio::test]
 async fn restore_catches_up_changes_made_while_process_was_stopped_without_a_native_event() {
-    let (_dir, repo, scans, watcher, root) = fixture().await;
+    let (_native_guard, _dir, repo, scans, watcher, root) = fixture().await;
     watcher.configure(root.id, true).await.unwrap();
     watcher.shutdown().await;
     // The previous watcher is stopped before this file exists.
@@ -425,7 +427,7 @@ async fn restore_catches_up_changes_made_while_process_was_stopped_without_a_nat
 }
 #[tokio::test]
 async fn replaced_or_missing_filesystem_root_retires_native_generation_and_can_recover() {
-    let (dir, repo, scans, watcher, root) = fixture().await;
+    let (_native_guard, dir, repo, scans, watcher, root) = fixture().await;
     injected_signals_only(&watcher);
     std::fs::write(
         Path::new(&root.path).join("Old.2023.mkv"),

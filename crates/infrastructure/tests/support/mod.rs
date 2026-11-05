@@ -33,6 +33,17 @@ pub fn tempdir() -> io::Result<tempfile::TempDir> {
     tempdir_in(&std::env::temp_dir())
 }
 
+pub async fn native_watcher_guard() -> Option<tokio::sync::OwnedMutexGuard<()>> {
+    #[cfg(target_os = "macos")]
+    {
+        // Dropping a notify 8.2.1 watcher purges device-wide FSEvents.
+        static GATE: std::sync::OnceLock<std::sync::Arc<tokio::sync::Mutex<()>>> = std::sync::OnceLock::new();
+        Some(GATE.get_or_init(|| std::sync::Arc::new(tokio::sync::Mutex::new(()))).clone().lock_owned().await)
+    }
+    #[cfg(not(target_os = "macos"))]
+    { None }
+}
+
 fn tempdir_in(parent: &Path) -> io::Result<tempfile::TempDir> {
     tempfile::tempdir_in(canonical_root_path(parent)?)
 }
