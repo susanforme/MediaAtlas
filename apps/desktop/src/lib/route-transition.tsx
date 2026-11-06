@@ -1,6 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { type ErrorComponentProps, useRouter, useRouterState } from "@tanstack/react-router";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import type { AdultSettings } from "../api/adult-privacy";
 import { ErrorNotice, Loading } from "../features/library/shared";
 
@@ -23,7 +23,7 @@ export function cancelRoutePreparations() {
 export async function prepareDesktopRoute(
   controller: AbortController,
   load: () => Promise<unknown>,
-  component: { preload?: () => Promise<unknown> },
+  component: { preload?: () => Promise<unknown> | undefined },
   data: (check: () => void) => Promise<unknown>,
 ) {
   let active = true;
@@ -44,12 +44,12 @@ export async function prepareDesktopRoute(
   }
 }
 
-export function InitialRouteLoading({ children }: { children: ReactNode }) {
-  const initial = useRouterState({ select: (state) => state.matches.length === 0 });
+export function InitialRouteLoading({ children }: { children: ReactNode }): ReactElement {
+  const initial: boolean = useRouterState({ select: (state) => state.matches.length === 0 });
   return <>{initial && <Loading />}{children}</>;
 }
 
-export function RouteFailure({ error, reset }: ErrorComponentProps) {
+export function RouteFailure({ error, reset }: ErrorComponentProps): ReactElement {
   const router = useRouter();
   return <ErrorNotice error={error} retry={() => { void router.invalidate({ sync: true }).then(reset); }} />;
 }
