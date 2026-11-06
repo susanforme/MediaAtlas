@@ -2,7 +2,7 @@
   "schema_version": 1,
   "scope": "Complete Cargo.lock and pnpm-lock.yaml package union; includes dependencies not shipped on every target.",
   "lockfiles": {
-    "Cargo.lock": "1da868afaf13e7043a859b5a387137b0910a3ea9e462d3d065131de848cf5148",
+    "Cargo.lock": "21c2ed6c2c17980a50c71dd1e53cba2762e9f3e4ff36d0d438d5804b4ee52cc2",
     "pnpm-lock.yaml": "7528b7d05ef3627253a4525312003d21530993b16e6f8a90b9bad322396dc531"
   },
   "missing_notices": [],
