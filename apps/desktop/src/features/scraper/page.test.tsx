@@ -451,7 +451,7 @@ it.each(["title", "year", "id", "providers"] as const)(
       fireEvent.change(screen.getByLabelText("ID namespace (optional)"), { target: { value: "imdb" } });
       fireEvent.change(screen.getByLabelText("Link or external ID (optional)"), { target: { value: "tt1234567" } });
     } else {
-      fireEvent.click(screen.getByRole("checkbox", { name: "Wikipedia", exact: true }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Wikipedia" }));
     }
     expect(screen.getByText("Search conditions changed. Search again before choosing a candidate.")).toBeVisible();
     expect(oldCandidate).toBeDisabled();
