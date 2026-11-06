@@ -31,6 +31,8 @@ const resources = {
     mergeConfirm: "确认合并（{{count}} 处变更）",
     mergeValidating: "正在校验当前选择…",
     mergeNoChanges: "当前选择没有变更。",
+    mergeExportSavedPreview: "预览已保存资料输出",
+    mergeExportSavedHelp: "输出使用已保存资料，未确认的来源字段不会写入。",
     mergePosterNotLoaded: "所选海报尚未加载，请预览图片。",
   },
   "en-US": {
@@ -64,6 +66,8 @@ const resources = {
     mergeConfirm: "Confirm merge ({{count}} changes)",
     mergeValidating: "Validating current selection…",
     mergeNoChanges: "No changes in the current selection.",
+    mergeExportSavedPreview: "Preview saved metadata output",
+    mergeExportSavedHelp: "Output uses saved metadata. Unconfirmed source fields are excluded.",
     mergePosterNotLoaded:
       "Selected poster is not loaded. Preview the image to view it.",
   },

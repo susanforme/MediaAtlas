@@ -154,6 +154,10 @@ export function MetadataMergeWorkspace({
     overwritten: projection.counts.overwritten + identityChanges.filter((id) => id.old.length).length,
     total: projection.counts.total + identityChanges.length,
   };
+  const canExportSaved = workspace.validTarget && metadata.kind === workspace.targetKind &&
+    count.total === 0 && !workspace.mergePreviewPending && !workspace.mergePreviewError &&
+    (!preview || workspace.mergeSelectionValid);
+  const exportAvailable = done || canExportSaved;
   return (
     <Card asChild className="overflow-clip rounded-2xl bg-surface/50 p-0 sm:p-0">
       <section aria-label={t("mergeTitle")}>
@@ -569,6 +573,9 @@ export function MetadataMergeWorkspace({
               {t("mergeNoChanges")}
             </p>
           )}
+          {!done && canExportSaved && (
+            <p className="text-xs text-muted-foreground">{t("mergeExportSavedHelp")}</p>
+          )}
           {workspace.validTarget && metadata.kind !== workspace.targetKind && (
             <p role="alert" className="text-sm text-destructive">
               {t("scraperTypeMismatch")}
@@ -581,9 +588,8 @@ export function MetadataMergeWorkspace({
           )}
         </div>
         <div className="flex flex-wrap gap-3">
-          {done ? (
-            <>
-              <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
+          {exportAvailable && (
+            <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("scraperOutputMode")}</span>
                 <Select
                   value={workspace.outputModeReady ? workspace.outputMode : ""}
@@ -601,23 +607,21 @@ export function MetadataMergeWorkspace({
                   <option value="online">{t("scraperOutputOnline")}</option>
                   <option value="offline">{t("scraperOutputOffline")}</option>
                 </Select>
-              </Label>
-              <Button variant="outline" disabled={busy} onClick={onCancel}>
-                {t("mergeDone")}
-              </Button>
-              <Button
-                variant="outline"
-                disabled={busy || !workspace.outputModeReady}
-                onClick={() => workspace.outputPlan.mutate()}
-              >
-                {t("scraperOutputPreview")}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" disabled={busy} onClick={onCancel}>
-                {t("cancel")}
-              </Button>
+            </Label>
+          )}
+          <Button variant="outline" disabled={busy} onClick={onCancel}>
+            {t(done ? "mergeDone" : "cancel")}
+          </Button>
+          {exportAvailable && (
+            <Button
+              variant="outline"
+              disabled={busy || !workspace.outputModeReady}
+              onClick={() => workspace.outputPlan.mutate()}
+            >
+              {t(done ? "scraperOutputPreview" : "mergeExportSavedPreview")}
+            </Button>
+          )}
+          {!done && (
               <Button
                 disabled={
                   busy ||
@@ -635,10 +639,9 @@ export function MetadataMergeWorkspace({
               >
                 {t("mergeConfirm", { count: count.total })}
               </Button>
-            </>
           )}
         </div>
-        {done && workspace.outputModeError && (
+        {exportAvailable && workspace.outputModeError && (
           <div className="w-full">
             <ErrorNotice error={workspace.outputModeError} retry={workspace.retryOutputMode} />
           </div>

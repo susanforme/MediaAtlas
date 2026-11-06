@@ -100,6 +100,21 @@ it("jumps to a deferred item without retrying or confirming it", async () => {
   await waitFor(() => expect(navigate).toHaveBeenCalledWith("media-2"));
   expect(transition).not.toHaveBeenCalled();
 });
+it("shows each item's real state in the picker and opens a failed item without retrying it", async () => {
+  const { queue, review, transition } = fixture(4);
+  queue.items[1].state = "confirmed";
+  queue.items[2].state = "deferred";
+  queue.items[3].state = "failed";
+  const navigate = vi.fn();
+  render(<PersistentQueueNavigation review={review} busy={false} onNavigate={navigate} />);
+  const picker = screen.getByRole("combobox", { name: "Current item" });
+  const options = selectOptions(picker);
+  for (const [index, state] of ["Pending review", "Confirmed", "Deferred", "Failed"].entries())
+    expect(options[index]).toHaveTextContent(`· ${state}`);
+  chooseSelectOption(picker, "media-3");
+  await waitFor(() => expect(navigate).toHaveBeenCalledWith("media-3"));
+  expect(transition).not.toHaveBeenCalled();
+});
 it("does not navigate after a conflicting selection or while a write is in progress", async () => {
   const { review, transition } = fixture(3);
   transition.mockRejectedValue(new Error("conflict"));

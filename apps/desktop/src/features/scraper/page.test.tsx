@@ -333,8 +333,14 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
   await screen.findByText("/synthetic/library/film.nfo");
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
   expect(
-    screen.getByText("Existing local metadata is protected"),
+    screen.getByText("Keep existing file"),
   ).toBeInTheDocument();
+  const nfoChanges = screen.getByText("Compare NFO contents", { selector: "summary" });
+  const nfoContent = screen.getByText(syntheticOutput.files[0].new_text ?? "");
+  expect(nfoContent).not.toBeVisible();
+  fireEvent.click(nfoChanges);
+  expect(nfoContent).toBeVisible();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
   fireEvent.click(
     screen.getByRole("button", { name: "Confirm and write sidecars" }),
   );
@@ -344,7 +350,124 @@ it("keeps search, explicit candidate selection, protected merge and sidecar exec
     ),
   );
   expect(scraperOutputApi.execute).toHaveBeenCalledWith("output-1");
+  expect(await screen.findByText("Output recorded: 1 written, 0 preserved.")).toBeVisible();
+  fireEvent.click(screen.getByRole("button", { name: "Close output preview" }));
+  await waitFor(() => expect(screen.queryByRole("region", { name: "Sidecar output preview" })).not.toBeInTheDocument());
+  expect(screen.getByText("Output recorded: 1 written, 0 preserved.")).toBeVisible();
+  expect(scraperOutputApi.execute).toHaveBeenCalledTimes(1);
 });
+it("shows candidate identity and original title before any metadata selection or write", async () => {
+  const first = syntheticSearch.candidates[0];
+  vi.mocked(scraperApi.search).mockResolvedValue({
+    ...syntheticSearch,
+    candidates: [
+      {
+        ...first,
+        candidate: {
+          ...first.candidate,
+          data: {
+            ...first.candidate.data,
+            original_title: "Original fixture title",
+            external_ids: [
+              ...first.candidate.data.external_ids,
+              ...first.candidate.data.external_ids,
+              { namespace: "imdb", value: "tt1234567" },
+            ],
+          },
+        },
+      },
+      {
+        ...first,
+        duplicate_of: 0,
+        candidate: {
+          ...first.candidate,
+          data: { ...first.candidate.data, provider_id: "omdb", title: "Another localized title" },
+        },
+      },
+    ],
+  });
+  show("media-1");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Search providers" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Search providers" }));
+  const title = await screen.findByRole("heading", { name: "Synthetic film" });
+  const candidate = title.closest("article");
+  if (!candidate) throw new Error("Candidate is missing");
+  expect(within(candidate).getByText("Original fixture title")).toBeVisible();
+  expect(within(candidate).getByText("2024 · Movie")).toBeVisible();
+  expect(within(candidate).getByText("TMDB: fixture-1 · imdb: tt1234567")).toBeVisible();
+  expect(within(candidate).getByText("1", { exact: true })).toBeVisible();
+  expect(screen.getByText("Shares an external ID with candidate 1")).toBeVisible();
+  expect(scraperApi.detail).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+it("retries source readiness in place without enabling providers or starting a search", async () => {
+  vi.mocked(providerApi.snapshot).mockRejectedValueOnce(new DesktopError("request_failed"));
+  show("media-1");
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Search providers" })).toBeEnabled());
+  expect(providerApi.snapshot).toHaveBeenCalledTimes(2);
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+});
+it("retries a failed local target read without requiring another selection", async () => {
+  vi.mocked(libraryApi.toolsDetail).mockRejectedValueOnce(new DesktopError("request_failed"));
+  show("media-1");
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  await waitFor(() => expect(screen.getByLabelText("Title, link or ID")).toHaveValue("Local film"));
+  expect(libraryApi.toolsDetail).toHaveBeenCalledTimes(2);
+  expect(libraryApi.toolsDetail).toHaveBeenLastCalledWith("media-1");
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+});
+it.each(["title", "year", "id", "providers"] as const)(
+  "requires a new search after changing %s and never selects an old candidate",
+  async (field) => {
+    const snapshot = fixtureSnapshot();
+    snapshot.providers[0].descriptor.id = "tmdb";
+    snapshot.providers[0].descriptor.fixture = false;
+    snapshot.providers.push({
+      ...snapshot.providers[0],
+      descriptor: { ...snapshot.providers[0].descriptor, id: "wikipedia.html" },
+    });
+    vi.mocked(providerApi.snapshot).mockResolvedValue(snapshot);
+    vi.mocked(scraperApi.search)
+      .mockResolvedValueOnce(syntheticSearch)
+      .mockResolvedValue({ ...syntheticSearch, run_id: "rerun-2" });
+    show("media-1");
+    const search = screen.getByRole("button", { name: "Search providers" });
+    await waitFor(() => expect(search).toBeEnabled());
+    fireEvent.click(search);
+    const oldCandidate = await screen.findByRole("button", { name: "Choose this candidate" });
+    await waitFor(() => expect(oldCandidate).toBeEnabled());
+    if (field === "title") {
+      fireEvent.change(screen.getByLabelText("Title, link or ID"), { target: { value: "Changed title" } });
+    } else if (field === "year") {
+      fireEvent.change(screen.getByLabelText("Release year (optional)"), { target: { value: "2025" } });
+    } else if (field === "id") {
+      fireEvent.click(screen.getByText("External identifiers (advanced)", { selector: "summary" }));
+      fireEvent.change(screen.getByLabelText("ID namespace (optional)"), { target: { value: "imdb" } });
+      fireEvent.change(screen.getByLabelText("Link or external ID (optional)"), { target: { value: "tt1234567" } });
+    } else {
+      fireEvent.click(screen.getByRole("checkbox", { name: "Wikipedia", exact: true }));
+    }
+    expect(screen.getByText("Search conditions changed. Search again before choosing a candidate.")).toBeVisible();
+    expect(oldCandidate).toBeDisabled();
+    fireEvent.click(oldCandidate);
+    expect(scraperApi.detail).not.toHaveBeenCalled();
+    expect(scraperApi.search).toHaveBeenCalledTimes(1);
+    fireEvent.click(search);
+    await waitFor(() => expect(scraperApi.search).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Choose this candidate" })).toBeEnabled());
+    expect(screen.queryByText("Search conditions changed. Search again before choosing a candidate.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose this candidate" }));
+    await waitFor(() => expect(scraperApi.detail).toHaveBeenCalledExactlyOnceWith("rerun-2", 0));
+    expect(scraperApi.confirm).not.toHaveBeenCalled();
+    expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+  },
+);
 it("loads only an explicitly requested validated thumbnail without changing artwork selection", async () => {
   await searchAndChoose();
   fireEvent.click(screen.getByRole("button", { name: "Preview image" }));
@@ -485,6 +608,7 @@ it("shows the existing-NFO update consequence before the same explicit write con
   vi.mocked(scraperOutputApi.preview).mockResolvedValue({
     ...syntheticOutput,
     strategy: "update_nfo",
+    files: syntheticOutput.files.map((file) => ({ ...file, protected: false })),
   });
   await searchAndChoose();
   await confirmMerge();
@@ -492,7 +616,45 @@ it("shows the existing-NFO update consequence before the same explicit write con
   expect(await screen.findByText(
     "Confirmation updates the existing NFO. Video files are not modified.",
   )).toBeInTheDocument();
+  expect(screen.getByText("Update existing file")).toBeVisible();
   expect(screen.getByRole("button", { name: "Confirm and write sidecars" })).toBeEnabled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("keeps output destinations and create decisions visible without rendering binary hashes as content", async () => {
+  vi.mocked(scraperOutputApi.preview).mockResolvedValue({
+    ...syntheticOutput,
+    files: [
+      { ...syntheticOutput.files[0], old_text: null, expected_hash: null, protected: false },
+      {
+        destination: "/synthetic/library/poster.jpg",
+        kind: "poster",
+        old_text: null,
+        new_text: null,
+        expected_hash: null,
+        content_hash: "synthetic-binary-content-hash",
+        protected: false,
+      },
+    ],
+  });
+  await searchAndChoose();
+  await confirmMerge();
+  await openOutputPreview();
+  expect(await screen.findByText("/synthetic/library/poster.jpg")).toBeVisible();
+  expect(screen.getByText("/synthetic/library/film.nfo")).toBeVisible();
+  expect(screen.getAllByText("Create file")).toHaveLength(2);
+  expect(screen.getAllByText("Compare NFO contents", { selector: "summary" })).toHaveLength(1);
+  expect(screen.queryByText("synthetic-binary-content-hash")).not.toBeInTheDocument();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
+
+it("explains an empty sidecar plan without offering a write", async () => {
+  vi.mocked(scraperOutputApi.preview).mockResolvedValue({ ...syntheticOutput, files: [] });
+  await searchAndChoose();
+  await confirmMerge();
+  await openOutputPreview();
+  expect(await screen.findByText("No sidecars to write")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Confirm and write sidecars" })).toBeDisabled();
   expect(scraperOutputApi.execute).not.toHaveBeenCalled();
 });
 
@@ -803,7 +965,7 @@ it("uses the independent Anime query and displays aliases", async () => {
   await screen.findByText("Synthetic alias");
   expect(screen.getByText("12")).toBeInTheDocument();
 });
-it("restores saved candidates without issuing a new provider search", async () => {
+it.each([undefined, "media-1"])("restores saved query conditions without searching for target %s", async (mediaId) => {
   vi.mocked(scraperOutputApi.history).mockResolvedValue([
     {
       id: "saved-run",
@@ -819,7 +981,8 @@ it("restores saved candidates without issuing a new provider search", async () =
       candidate_count: 1,
     },
   ]);
-  show();
+  show(mediaId);
+  if (mediaId) await waitFor(() => expect(screen.getByLabelText("Title, link or ID")).toHaveValue("Local film"));
   await screen.findByRole("button", { name: "Restore candidates" });
   fireEvent.click(screen.getByRole("button", { name: "Restore candidates" }));
   await waitFor(() =>
@@ -829,6 +992,10 @@ it("restores saved candidates without issuing a new provider search", async () =
   );
   expect(scraperApi.searchPreview).toHaveBeenCalledWith("saved-run");
   expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(screen.getByLabelText("Title, link or ID")).toHaveValue("Saved query");
+  expect(screen.getByLabelText("Release year (optional)")).toHaveValue(2024);
+  expect(screen.queryByText("Search conditions changed. Search again before choosing a candidate.")).not.toBeInTheDocument();
+  await waitFor(() => expect(screen.getByRole("button", { name: "Choose this candidate" })).toBeEnabled());
   fireEvent.click(
     screen.getByRole("button", { name: "Choose this candidate" }),
   );

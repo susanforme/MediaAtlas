@@ -26,6 +26,7 @@ pub struct ScraperService {
     engine: Arc<NetworkEngine>,
     cache: PathBuf,
     gate: Arc<Mutex<()>>,
+    detail_requests: Arc<crate::detail_requests::DetailRequests>,
     auth: Option<crate::provider_auth::ProviderAuthService>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +56,7 @@ impl ScraperService {
             engine,
             cache,
             gate: Arc::default(),
+            detail_requests: Arc::default(),
             auth: None,
         }
     }
@@ -236,6 +238,7 @@ impl ScraperService {
         index: usize,
         cancellation: CancellationToken,
     ) -> Result<VideoMetadata, RepositoryError> {
+        let _request = self.detail_requests.lock(run_id, index, &cancellation).await?;
         let (query, jobs, search) = self.session(run_id).await?;
         let candidate = &search
             .candidates
@@ -1198,6 +1201,37 @@ mod tests {
                 namespace: namespace.into(), external_id: value.into(), is_primary: false, created_at: Utc::now(),
             }).await.unwrap();
         }
+    }
+
+    #[tokio::test]
+    async fn concurrent_candidate_details_fetch_once_and_failures_remain_retryable() {
+        let s = setup().await;
+        s.slow.store(true, Ordering::SeqCst);
+        let search = s.service.search(request()).await.unwrap();
+        let (first, second) = tokio::join!(
+            s.service.detail(search.run_id, 0),
+            s.service.detail(search.run_id, 0),
+        );
+        assert_eq!(json(&first.unwrap()).unwrap(), json(&second.unwrap()).unwrap());
+        let requests: i64 = sqlx::query_scalar("SELECT count(*) FROM provider_requests WHERE task_id=?")
+            .bind(search.run_id.to_string()).fetch_one(s.repo.pool()).await.unwrap();
+        assert_eq!(requests, 2, "one search and one shared candidate detail request");
+
+        let mut config = s.providers.config("tmdb").await.unwrap();
+        config.timeout_ms = 100;
+        s.providers.update_config("tmdb", &config).await.unwrap();
+        let retry = s.service.search(request()).await.unwrap();
+        assert!(matches!(s.service.detail(retry.run_id, 0).await,
+            Err(RepositoryError::Provider(ProviderFailure::Timeout))));
+        let cached: i64 = sqlx::query_scalar("SELECT count(*) FROM video_scrape_details WHERE task_id=?")
+            .bind(retry.run_id.to_string()).fetch_one(s.repo.pool()).await.unwrap();
+        assert_eq!(cached, 0);
+        s.slow.store(false, Ordering::SeqCst);
+        assert!(s.service.detail(retry.run_id, 0).await.is_ok());
+        assert!(s.service.media_detail(s.media.id).await.unwrap().is_none());
+        assert!(!s.dir.path().join("Example.nfo").exists());
+        s.server.abort();
+        s.repo.pool().close().await;
     }
 
     #[tokio::test]

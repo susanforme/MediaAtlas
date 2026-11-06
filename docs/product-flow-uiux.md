@@ -66,6 +66,8 @@ flowchart LR
 
 媒体工具本轮的公开实践、源码依据与验证边界见 [媒体工具 UI/UX 调整](media-tools-uiux.md)。
 
+后续刮削全流程的社区参考、前后端增量和验证边界见 [刮削工作流优化](scraper-workflow-uiux.md)。
+
 ## 2. 添加目录与自动更新
 
 ```mermaid

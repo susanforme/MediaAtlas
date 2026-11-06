@@ -31,6 +31,7 @@ pub struct AdultScraperService {
     engine: Arc<NetworkEngine>,
     cache: PathBuf,
     gate: Arc<Mutex<()>>,
+    detail_requests: Arc<crate::detail_requests::DetailRequests>,
     auth: Option<crate::provider_auth::ProviderAuthService>,
     access: Option<crate::media_output::AdultOutputAccess>,
     automatic_artwork: bool,
@@ -65,6 +66,7 @@ impl AdultScraperService {
             engine,
             cache,
             gate: Arc::default(),
+            detail_requests: Arc::default(),
             auth: None,
             access: None,
             automatic_artwork: false,
@@ -296,6 +298,7 @@ impl AdultScraperService {
         index: usize,
         cancellation: CancellationToken,
     ) -> Result<AdultDetail> {
+        let _request = self.detail_requests.lock(run_id, index, &cancellation).await?;
         let (query, jobs, search) = self.session(run_id).await?;
         let candidate = &search
             .candidates
@@ -1285,6 +1288,57 @@ mod tests {
         )
         .with_auth_service(auth);
         (server, started, response_gate)
+    }
+    #[tokio::test]
+    async fn concurrent_private_details_share_only_their_own_authorized_request() {
+        let mut s = setup().await;
+        let (server, started, response_gate) = automatic_mock(&mut s, true).await;
+        let grant = crate::media_output::AdultOutputAccess::new();
+        let service = s.service.clone().with_access(grant.clone());
+        let search = service.search(AdultSearchRequest {
+            query: AdultQuery { namespace: "dmm.product".into(), ..query() },
+            providers: vec!["dmm".into()],
+        }).await.unwrap();
+        let first = {
+            let service = service.clone();
+            tokio::spawn(async move { service.detail(search.run_id, 0).await })
+        };
+        tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            while !started.load(std::sync::atomic::Ordering::Acquire) {
+                tokio::task::yield_now().await;
+            }
+        }).await.unwrap();
+        let second = service.detail(search.run_id, 0);
+        tokio::pin!(second);
+        tokio::select! {
+            biased;
+            _ = &mut second => panic!("the first detail is still awaiting its source"),
+            _ = tokio::task::yield_now() => {}
+        }
+        response_gate.notify_one();
+        let (first, second) = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            tokio::join!(first, second)
+        }).await.expect("one released source response must serve both detail callers");
+        assert_eq!(json(&first.unwrap().unwrap()).unwrap(), json(&second.unwrap()).unwrap());
+        let requests: i64 = sqlx::query_scalar("SELECT count(*) FROM provider_requests WHERE task_id=?")
+            .bind(search.run_id.to_string()).fetch_one(s.repo.pool()).await.unwrap();
+        assert_eq!(requests, 2, "the private search and detail each contact the source once");
+        assert!(s.providers.snapshot().await.unwrap().requests.is_empty());
+        let cancel = CancellationToken::new();
+        let gate = service.detail_requests.lock(search.run_id, 0, &cancel).await.unwrap();
+        let after_revoke = service.detail(search.run_id, 0);
+        tokio::pin!(after_revoke);
+        tokio::select! {
+            biased;
+            _ = &mut after_revoke => panic!("same candidate should wait"),
+            _ = tokio::task::yield_now() => {}
+        }
+        grant.revoke();
+        drop(gate);
+        assert!(after_revoke.await.is_err(), "queued cache reads recheck the grant after acquiring the lock");
+        assert!(s.repo.list_metadata_values(s.media.id).await.unwrap().is_empty());
+        server.abort();
+        s.repo.pool().close().await;
     }
     #[tokio::test]
     async fn automatic_context_uses_stored_normalized_file_identity() {

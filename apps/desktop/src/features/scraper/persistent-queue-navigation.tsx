@@ -99,7 +99,7 @@ export function PersistentQueueNavigation({
                 {t("reviewPosition", {
                   index: item.position + 1,
                   count: queue.items.length,
-                })}
+                })} · {t(`reviewState_${item.state}`)}
               </option>
             ))}
           </Select>

@@ -154,6 +154,7 @@ function ScraperWorkspace({
     providerState,
     selectedProviders,
     searchValid,
+    staleSearch,
     selectCandidate,
     clearDetail,
   } = workspace;
@@ -238,7 +239,7 @@ function ScraperWorkspace({
               targetDetail.isPending ? (
                 <Loading />
               ) : targetDetail.error ? (
-                <ErrorNotice error={targetDetail.error} />
+                <ErrorNotice error={targetDetail.error} retry={() => void targetDetail.refetch()} />
               ) : validTarget ? (
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-semibold">
@@ -295,10 +296,10 @@ function ScraperWorkspace({
                 </Label>
                 </div>
                 {local.isPending && <Loading />}
-                {local.error && <ErrorNotice error={local.error} />}
+                {local.error && <ErrorNotice error={local.error} retry={() => void local.refetch()} />}
               </Details>
             )}
-            {!mediaId && targetDetail.error && <ErrorNotice error={targetDetail.error} />}
+            {!mediaId && targetDetail.error && <ErrorNotice error={targetDetail.error} retry={() => void targetDetail.refetch()} />}
             {target && targetDetail.data && !validTarget && (
               <Alert asChild variant="destructive">
                 <p role="alert">
@@ -308,7 +309,7 @@ function ScraperWorkspace({
             )}
           </section>
         {snapshot.isPending && <Loading />}
-        {snapshot.error && <ErrorNotice error={snapshot.error} />}
+        {snapshot.error && <ErrorNotice error={snapshot.error} retry={() => void snapshot.refetch()} />}
           <form
             className="rounded-xl border border-border bg-surface/40 p-4 sm:p-5 [&_[data-slot=input]]:h-10 [&_[data-slot=select]]:h-10"
             noValidate
@@ -515,6 +516,9 @@ function ScraperWorkspace({
               <h2 id="scraper-results" className="text-lg font-semibold">{t("scraperResults")}</h2>
               <span className="text-sm text-muted-foreground">{format.number(search.candidates.length)} {t("candidates")}</span>
             </div>
+            {staleSearch && (
+              <p role="status" className="mt-3 text-sm text-muted-foreground">{t("scraperSearchChanged")}</p>
+            )}
             <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
               {search.candidates.map((c, index) => (
                 <Card
@@ -523,13 +527,23 @@ function ScraperWorkspace({
                   className={`flex flex-col p-4 sm:p-4 ${candidateIndex === index ? "border-primary shadow-[0_0_0_1px_var(--color-primary)]" : ""}`}
                 >
                   <article>
-                    <h3 className="font-semibold">
-                      {c.candidate.data.title} ·{" "}
-                      {c.candidate.data.year ?? t("unknownYear")}
-                    </h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {c.candidate.data.provider_id} ·{" "}
-                      {c.candidate.data.remote_id}
+                    <div className="flex items-start gap-3">
+                      <span className="shrink-0 text-sm tabular-nums text-muted-foreground">{format.number(index + 1)}</span>
+                      <div className="min-w-0">
+                        <h3 id={`scraper-candidate-${index}`} className="break-words font-semibold">{c.candidate.data.title}</h3>
+                        {c.candidate.data.original_title && c.candidate.data.original_title !== c.candidate.data.title && (
+                          <p className="mt-1 break-words text-sm text-muted-foreground">{c.candidate.data.original_title}</p>
+                        )}
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {c.candidate.data.year ?? t("unknownYear")} · {t(c.candidate.kind === "movie" ? "scraperMovie" : c.candidate.kind === "tv" ? "scraperTv" : "scraperAnime")}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="mt-3 break-all text-xs leading-5 text-muted-foreground">
+                      {[...new Set([
+                        { namespace: c.candidate.data.provider_id, value: c.candidate.data.remote_id },
+                        ...c.candidate.data.external_ids,
+                      ].map((id) => `${providerNames[id.namespace] ?? id.namespace}: ${id.value}`))].join(" · ")}
                     </p>
                     <ul className="mt-3 list-disc pl-5 text-sm">
                       {c.reasons.map((reason, i) => (
@@ -551,7 +565,8 @@ function ScraperWorkspace({
                     <Button
                       className="mt-4 self-start"
                       variant="outline"
-                      disabled={busy}
+                      disabled={busy || staleSearch}
+                      aria-describedby={`scraper-candidate-${index}`}
                       onClick={() => selectCandidate(index)}
                     >
                       {t("scraperSelect")}
@@ -588,6 +603,11 @@ function ScraperWorkspace({
           />
         </>
       )}
+      {write.isSuccess && write.data && (
+        <p role="status" className="mt-5 rounded-lg border border-border bg-surface/40 px-4 py-3 text-sm">
+          {t("scraperOutputDone", { written: write.data.written, preserved: write.data.preserved })}
+        </p>
+      )}
       {output && (
         <Card asChild>
           <section className="mt-6" aria-labelledby="scraper-output">
@@ -597,28 +617,38 @@ function ScraperWorkspace({
             <p className="mt-2 text-sm text-muted-foreground">
               {t(output.strategy === "update_nfo" ? "scraperOutputUpdateHelp" : "scraperOutputHelp")}
             </p>
+            {output.files.length === 0 && (
+              <p role="status" className="mt-4 text-sm text-muted-foreground">{t("scraperOutputEmpty")}</p>
+            )}
             {output.files.map((file, index) => (
               <article key={index} className="mt-4 border-t border-border pt-4">
-                <h3 className="font-medium break-all">{file.destination}</h3>
-                {file.protected && (
-                  <Badge variant="secondary">{t("scraperOutputProtected")}</Badge>
-                )}
-                <div className="mt-[0.7rem] grid grid-cols-2 gap-4 [&_pre]:max-h-80 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:text-[0.75rem] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [@media(max-width:640px)]:grid-cols-[1fr]">
-                  <div>
-                    <h4 className="mb-2 text-xs font-medium text-muted-foreground">{t("scraperOld")}</h4>
-                    <pre>{file.old_text ?? t("none")}</pre>
-                  </div>
-                  <div>
-                    <h4 className="mb-2 text-xs font-medium text-muted-foreground">{t("scraperNew")}</h4>
-                    <pre>{file.new_text ?? file.content_hash}</pre>
-                  </div>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="min-w-0 flex-1 break-all text-sm font-medium">{file.destination}</h3>
+                  <Badge variant={file.protected ? "secondary" : "outline"}>
+                    {t(file.protected ? "scraperOutputProtected" : file.expected_hash ? "scraperOutputReplace" : "scraperOutputCreate")}
+                  </Badge>
                 </div>
+                {file.kind === "nfo" && (
+                  <Details className="mt-3 rounded-none border-0 p-0">
+                    <DetailsSummary>{t("scraperOutputChanges")}</DetailsSummary>
+                    <div className="mt-3 grid grid-cols-2 gap-4 [&_pre]:max-h-80 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:text-[0.75rem] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [@media(max-width:640px)]:grid-cols-[1fr]">
+                      <div>
+                        <h4 className="mb-2 text-xs font-medium text-muted-foreground">{t("scraperOld")}</h4>
+                        <pre>{file.old_text ?? t("none")}</pre>
+                      </div>
+                      <div>
+                        <h4 className="mb-2 text-xs font-medium text-muted-foreground">{t("scraperNew")}</h4>
+                        <pre>{file.new_text ?? t("none")}</pre>
+                      </div>
+                    </div>
+                  </Details>
+                )}
               </article>
             ))}
             <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-4">
               <Button
                 className="w-full sm:w-auto"
-                disabled={busy || write.isSuccess || output.files.length === 0}
+                disabled={busy || (write.isSuccess && write.data?.preview_id === output.preview_id) || output.files.length === 0}
                 onClick={() => write.mutate()}
               >
                 {t("scraperOutputExecute")}
@@ -629,7 +659,7 @@ function ScraperWorkspace({
                 disabled={busy}
                 onClick={() => discard.mutate()}
               >
-                {t("scraperOutputDiscard")}
+                {t(write.isSuccess && write.data?.preview_id === output.preview_id ? "scraperOutputClose" : "scraperOutputDiscard")}
               </Button>
             </div>
           </section>
@@ -641,7 +671,7 @@ function ScraperWorkspace({
               {t("scraperHistory")}
             </h2>
             {history.isPending && <Loading />}
-            {history.error && <ErrorNotice error={history.error} />}
+            {history.error && <ErrorNotice error={history.error} retry={() => void history.refetch()} />}
             <ul className="mt-3 divide-y divide-border">
               {history.data?.map((entry) => (
                 <li

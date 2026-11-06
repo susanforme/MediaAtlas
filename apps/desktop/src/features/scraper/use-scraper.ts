@@ -18,6 +18,7 @@ import {
   type NfoExportMode,
   type OutputPreview,
   type SearchPreview,
+  type SearchRequest,
   scraperApi,
   scraperOutputApi,
   type VideoKind,
@@ -45,6 +46,10 @@ type OutputPlanAction = {
   outputEpoch: number;
 };
 
+function searchInputKey(kind: VideoKind, title: string, year: string, namespace: string, id: string, providers: string[], language: string) {
+  return JSON.stringify([kind, title.trim(), year.trim(), id.trim() ? namespace.trim() : "", id.trim(), [...providers].sort(), language]);
+}
+
 export function useScraper(
   mediaId?: string,
   review?: {
@@ -63,6 +68,10 @@ export function useScraper(
   const [externalId, setExternalId] = useState("");
   const [providers, setProviders] = useState<string[]>(["tmdb"]);
   const [search, setSearch] = useState<SearchPreview>();
+  const [searchInputs, setSearchInputs] = useState<string>();
+  const language = i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN";
+  const inputKey = searchInputKey(kind, title, year, namespace, externalId, providers, language);
+  const staleSearch = Boolean(search && searchInputs !== inputKey);
   const [metadata, setMetadata] = useState<VideoMetadata>();
   const [candidateIndex, setCandidateIndex] = useState<number>();
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
@@ -148,7 +157,7 @@ export function useScraper(
       })
     : undefined;
   const liveMerge = useLiveMergePreview(
-    validTarget &&
+    validTarget && !staleSearch &&
       metadata && metadata.kind === targetKind &&
       search &&
       candidateIndex !== undefined &&
@@ -209,7 +218,7 @@ export function useScraper(
       outputModeReady,
       mergeId: preview?.preview_id,
       mergeReady: Boolean(
-        mergeSelectionValid && !liveMerge.pending && mergeChangeCount,
+        !staleSearch && mergeSelectionValid && !liveMerge.pending && mergeChangeCount,
       ),
       outputId: outputChanged ? undefined : output?.preview_id,
     };
@@ -270,30 +279,16 @@ export function useScraper(
     }
   }
   const run = useMutation({
-    mutationFn: (epoch: number) =>
-      guarded(
-        () =>
-          scraperApi.search({
-            query: {
-              kind,
-              title: title.trim(),
-              year: year === "" ? null : Number(year),
-              external_ids: externalId.trim()
-                ? [{ namespace: namespace.trim(), value: externalId.trim() }]
-                : [],
-              language: i18n.resolvedLanguage === "en-US" ? "en-US" : "zh-CN",
-            },
-            providers: selectedProviders,
-          }),
-        epoch,
-      ),
-    onSuccess: ({ value: result, epoch }) => {
+    mutationFn: ({ epoch, request }: { epoch: number; inputs: string; request: SearchRequest }) =>
+      guarded(() => scraperApi.search(request), epoch),
+    onSuccess: ({ value: result, epoch }, action) => {
       if (!current(epoch)) return;
+      setSearchInputs(action.inputs);
       setSearch(result);
       if (!result.candidates.length && result.failures.length) review?.failed();
       void client.invalidateQueries({ queryKey: ["scraper-history"] });
     },
-    onError: (_error, epoch) => {
+    onError: (_error, { epoch }) => {
       if (current(epoch)) review?.failed();
     },
   });
@@ -306,20 +301,23 @@ export function useScraper(
       setSearch(result);
       toast.info(t("scraperRestored"));
       const saved = history.data?.find((entry) => entry.id === runId);
-      if (saved && !target) {
-        setKind(saved.query.kind);
+      if (saved) {
+        const restoredKind = target ? kind : saved.query.kind;
+        const restoredYear = saved.query.year === null ? "" : String(saved.query.year);
+        const restoredNamespace = saved.query.external_ids[0]?.namespace ?? "";
+        const restoredId = saved.query.external_ids[0]?.value ?? "";
+        const restoredProviders = [...new Set([
+          ...result.candidates.map((candidate) => candidate.candidate.data.provider_id),
+          ...result.failures.map((failure) => failure.provider_id),
+        ])];
+        setKind(restoredKind);
         setTitle(saved.query.title);
-        setYear(saved.query.year === null ? "" : String(saved.query.year));
-        setNamespace(saved.query.external_ids[0]?.namespace ?? "");
-        setExternalId(saved.query.external_ids[0]?.value ?? "");
-        setProviders([
-          ...new Set(
-            result.candidates.map(
-              (candidate) => candidate.candidate.data.provider_id,
-            ),
-          ),
-        ]);
-      }
+        setYear(restoredYear);
+        setNamespace(restoredNamespace);
+        setExternalId(restoredId);
+        setProviders(restoredProviders);
+        setSearchInputs(searchInputKey(saved.query.kind, saved.query.title, restoredYear, restoredNamespace, restoredId, restoredProviders, saved.query.language));
+      } else setSearchInputs(undefined);
     },
   });
   const detail = useMutation({
@@ -358,6 +356,11 @@ export function useScraper(
         setThumbnails((old) => ({ ...old, [index]: result.thumbnail }));
     },
   });
+  function refreshLocalMedia() {
+    return Promise.all([
+      "media", "detail", "video-source-detail", "tools-detail", "tools-media", "scraper-local", "facets",
+    ].map((key) => client.invalidateQueries({ queryKey: [key] })));
+  }
   const confirm = useMutation({
     mutationFn: (action: PreviewAction) => {
       if (!validAction(action, "merge"))
@@ -366,16 +369,14 @@ export function useScraper(
         ? review.confirmPreview(action.previewId)
         : scraperApi.confirm(action.previewId);
     },
-    onSuccess: (result, action) => {
+    onSuccess: async (result, action) => {
+      await refreshLocalMedia();
       if (!current(action.epoch)) return;
       toast.success(
         t(result.already_applied ? "scraperAlready" : "scraperConfirmed", {
           count: result.applied_fields,
         }),
       );
-      void client.invalidateQueries({ queryKey: ["media"] });
-      void client.invalidateQueries({ queryKey: ["detail"] });
-      void client.invalidateQueries({ queryKey: ["video-source-detail"] });
       void client.invalidateQueries({ queryKey: ["scraper-history"] });
     },
   });
@@ -400,9 +401,10 @@ export function useScraper(
     onSuccess: ({ value, epoch }, action) => {
       if (current(epoch) && action.outputEpoch === outputGeneration.current &&
         action.mediaId === latestActions.current.mediaId &&
-        action.mode === latestActions.current.outputMode && latestActions.current.outputModeReady)
+        action.mode === latestActions.current.outputMode && latestActions.current.outputModeReady) {
+        write.reset();
         setOutput(value);
-      else void releaseOutput(value.preview_id).catch(() => {});
+      } else void releaseOutput(value.preview_id).catch(() => {});
     },
     onError: (error, action) => {
       if (error instanceof DesktopError && error.envelope?.code === "conflict" &&
@@ -426,7 +428,7 @@ export function useScraper(
       )
         return;
       setOutput(undefined);
-      write.reset();
+      if (!write.isSuccess) write.reset();
     },
   });
   const write = useMutation({
@@ -438,7 +440,8 @@ export function useScraper(
         throw new DesktopError("request_failed");
       return scraperOutputApi.execute(action.previewId);
     },
-    onSuccess: (result, action) => {
+    onSuccess: async (result, action) => {
+      await refreshLocalMedia();
       if (!current(action.epoch)) return;
       toast.success(
         t("scraperOutputDone", {
@@ -446,9 +449,6 @@ export function useScraper(
           preserved: result.preserved,
         }),
       );
-      void client.invalidateQueries({ queryKey: ["media"] });
-      void client.invalidateQueries({ queryKey: ["detail"] });
-      void client.invalidateQueries({ queryKey: ["video-source-detail"] });
     },
   });
   const busy =
@@ -577,7 +577,7 @@ export function useScraper(
     updateOnlyMissing(value);
   }
   const selectCandidate = (index: number) => {
-    if (!search) return;
+    if (!search || staleSearch || busy) return;
     clearDetail();
     setCandidateIndex(index);
     detail.mutate({ runId: search.run_id, index, epoch: generation.current });
@@ -596,6 +596,7 @@ export function useScraper(
     providers,
     setProviders,
     search,
+    staleSearch,
     setSearch,
     metadata,
     candidateIndex,
@@ -639,7 +640,21 @@ export function useScraper(
     snapshot,
     history,
     local,
-    run: { ...run, mutate: () => run.mutate(generation.current) },
+    run: {
+      ...run,
+      mutate: () => run.mutate({
+        epoch: generation.current,
+        inputs: inputKey,
+        request: {
+          query: {
+            kind, title: title.trim(), year: year === "" ? null : Number(year),
+            external_ids: externalId.trim() ? [{ namespace: namespace.trim(), value: externalId.trim() }] : [],
+            language,
+          },
+          providers: selectedProviders,
+        },
+      }),
+    },
     restore: {
       ...restore,
       mutate: (runId: string) =>
