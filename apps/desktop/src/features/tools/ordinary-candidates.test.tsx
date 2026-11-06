@@ -211,10 +211,10 @@ it("uses the same type selector and table while switching backend adapters and c
   );
   chooseSelectOption(screen.getByRole("combobox", { name: "Media type" }), "adult_video");
   expect(
-    await screen.findByRole("cell", { name: privateCard.media.title }),
+    await screen.findByText(privateCard.media.title),
   ).toBeInTheDocument();
   expect(
-    screen.queryByRole("cell", { name: first.media.title }),
+    screen.queryByText(first.media.title),
   ).not.toBeInTheDocument();
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(
@@ -234,7 +234,7 @@ it("uses the same type selector and table while switching backend adapters and c
     }),
   ).not.toBeChecked();
   expect(
-    screen.queryByRole("cell", { name: privateCard.media.title }),
+    screen.queryByText(privateCard.media.title),
   ).not.toBeInTheDocument();
 });
 
@@ -255,7 +255,8 @@ it("renders ordinary candidate metadata in a table with independent view and sel
   show();
   expect(await screen.findByRole("table")).toBeInTheDocument();
   expect(screen.getAllByText(first.media.title)).toHaveLength(1);
-  expect(screen.getAllByText("2020")).toHaveLength(4);
+  expect(screen.getAllByText(/^2020 · /)).toHaveLength(4);
+  expect(screen.getByText("2020 · Movie")).toBeInTheDocument();
   expect(screen.queryByText("Synthetic private title")).not.toBeInTheDocument();
   expect(screen.queryByRole("combobox", { name: "Library root" })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Filters" }));
@@ -596,7 +597,7 @@ it("keeps adult candidates on their independent endpoint without ordinary multi-
     </I18nextProvider>,
   );
   expect(
-    await screen.findByRole("cell", { name: privateCard.media.title }),
+    await screen.findByText(privateCard.media.title),
   ).toBeInTheDocument();
   expect(adultApi.toolsMedia).toHaveBeenCalledWith(
     expect.objectContaining({ include_adult: true }),
