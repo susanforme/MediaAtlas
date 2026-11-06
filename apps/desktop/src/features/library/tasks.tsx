@@ -59,13 +59,16 @@ export function TasksPage() {
               >
                 {t(`taskLogFilter_${value}`)}
                 {!loading && !errors.length && (
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {number(
-                      value === "all"
-                        ? entries.length
-                        : entries.filter((entry) => taskLogGroup(entry) === value).length,
-                    )}
-                  </span>
+                  <>
+                    {" "}
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {number(
+                        value === "all"
+                          ? entries.length
+                          : entries.filter((entry) => taskLogGroup(entry) === value).length,
+                      )}
+                    </span>
+                  </>
                 )}
               </TabsTrigger>
             ))}
