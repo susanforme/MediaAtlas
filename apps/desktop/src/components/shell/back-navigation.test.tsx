@@ -13,7 +13,7 @@ beforeEach(async () => {
 
 async function workspace(initial: string, adult = false) {
   const root = createRootRoute({
-    component: () => <div id="app-main-scroll"><Outlet /></div>,
+    component: () => <div id="app-main-scroll" ref={(element) => { if (element) element.scrollTo = vi.fn(); }}><Outlet /></div>,
   });
   const library = createRoute({
     getParentRoute: () => root,
