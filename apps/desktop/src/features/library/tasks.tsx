@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import {
   refreshIsRunning,
   refreshNeedsAttention,
@@ -9,7 +11,7 @@ import {
 } from "./library-activity-model";
 import { ScanRecovery } from "./scan-recovery";
 import { Empty, ErrorNotice, PageHeading, useFormat } from "./shared";
-import { scanLogCounts } from "./task-log-model";
+import { scanLogCounts, taskLogGroup, type TaskLogFilter } from "./task-log-model";
 import { useTaskLog } from "./use-task-log";
 import "./translations";
 import "./library-status-translations";
@@ -17,8 +19,12 @@ import "./task-log-translations";
 
 export function TasksPage() {
   const { t } = useTranslation();
-  const { date } = useFormat();
+  const { date, number } = useFormat();
   const { entries, roots, providers, loading, errors, cancel } = useTaskLog();
+  const [filter, setFilter] = useState<TaskLogFilter>("all");
+  const visibleEntries = entries.filter(
+    (entry) => filter === "all" || taskLogGroup(entry) === filter,
+  );
   return (
     <>
       <PageHeading title={t("tasks")} />
@@ -39,14 +45,41 @@ export function TasksPage() {
           {t("loading")}
         </p>
       )}
-      {!entries.length && !loading && !errors.length ? (
-        <Empty title={t("taskLogEmpty")} />
-      ) : entries.length > 0 ? (
+      <Tabs
+        value={filter}
+        onValueChange={(value) => setFilter(value as TaskLogFilter)}
+      >
+        <div className="my-4 overflow-x-auto pb-1">
+          <TabsList aria-label={t("taskLogFilter")} className="w-max">
+            {(["all", "active", "attention"] as const).map((value) => (
+              <TabsTrigger
+                key={value}
+                value={value}
+                className="flex shrink-0 items-center gap-2 whitespace-nowrap"
+              >
+                {t(`taskLogFilter_${value}`)}
+                {!loading && !errors.length && (
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {number(
+                      value === "all"
+                        ? entries.length
+                        : entries.filter((entry) => taskLogGroup(entry) === value).length,
+                    )}
+                  </span>
+                )}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
+        <TabsContent value={filter}>
+      {!visibleEntries.length && !loading && !errors.length ? (
+        <Empty title={t(filter === "all" ? "taskLogEmpty" : `taskLogEmpty_${filter}`)} />
+      ) : visibleEntries.length > 0 ? (
         <ol
           aria-label={t("taskLog")}
           className="divide-y divide-border border-y border-border"
         >
-          {entries.map((entry) => {
+          {visibleEntries.map((entry) => {
             const { task } = entry;
             const scan = entry.source === "scan" ? entry.task : null;
             const provider = entry.source === "provider" ? entry.task : null;
@@ -163,6 +196,8 @@ export function TasksPage() {
           })}
         </ol>
       ) : null}
+        </TabsContent>
+      </Tabs>
     </>
   );
 }

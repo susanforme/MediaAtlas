@@ -18,6 +18,8 @@ vi.mock("../../api/library", async (original) => ({
   libraryApi: { detail: vi.fn() },
 }));
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({ children }: { children: React.ReactNode }) => (
     <a href="/library">{children}</a>
   ),

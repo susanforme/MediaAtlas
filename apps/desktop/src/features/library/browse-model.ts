@@ -16,6 +16,18 @@ export interface LibrarySearch {
   page?: number;
   view?: "wall" | "list";
 }
+
+export function hasLibraryFilters(search: LibrarySearch): boolean {
+  return Boolean(
+    search.q ||
+      search.health ||
+      search.genre ||
+      search.person ||
+      search.studio ||
+      search.year,
+  );
+}
+
 export function validateLibrarySearch(
   value: Record<string, unknown>,
 ): LibrarySearch {

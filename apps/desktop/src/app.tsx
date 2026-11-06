@@ -370,7 +370,6 @@ const settingsRoute = createRoute({
 });
 const router = createRouter({
   scrollRestoration: true,
-  getScrollRestorationKey: (location) => location.href,
   scrollToTopSelectors: ["#app-main-scroll"],
   context: { queryClient, readSettings: () => null },
   InnerWrap: InitialRouteLoading,

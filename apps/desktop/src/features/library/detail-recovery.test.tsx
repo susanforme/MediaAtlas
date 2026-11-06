@@ -30,6 +30,8 @@ vi.mock("../scraper/source-detail", () => ({
   VideoSourceDetails: () => null,
 }));
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({
     to,
     search,

@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { mediaDetailQuery } from "./queries";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { BackNavigation } from "../../components/shell/back-navigation";
 import { usePrivacy } from "./context";
 import { DetailRecoveryAction } from "./detail-recovery-action";
 import { NativeOpen } from "./native-open";
@@ -72,15 +73,7 @@ export function MediaDetailPage({
     );
   return (
     <>
-      <Button asChild variant="ghost">
-        <Link
-          to="/library"
-          search={adult ? { kind: "adult_video" } : {}}
-          className="mb-5 inline-block text-sm text-ring"
-        >
-          ← {t("backToLibrary")}
-        </Link>
-      </Button>
+      <BackNavigation adult={adult} />
       <PageHeading
         title={data.media.title}
         description={`${t(`kind_${data.media.kind}`)} · ${data.media.year ?? t("unknownYear")}`}

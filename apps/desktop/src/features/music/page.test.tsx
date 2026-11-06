@@ -14,6 +14,8 @@ import i18n from "../../i18n";
 import { chooseSelectOption } from "../../test/select";
 
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: React.ReactNode; className?: string }) => {
     const href = Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, encodeURIComponent(value)), to);
     return <a {...props} href={href}>{children}</a>;

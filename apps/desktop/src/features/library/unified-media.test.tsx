@@ -25,6 +25,8 @@ const privacy = vi.hoisted(() => ({
 }));
 vi.mock("./context", () => ({ usePrivacy: () => privacy }));
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({ to, children }: { to: string; children: ReactNode }) => (
     <a href={to}>{children}</a>
   ),

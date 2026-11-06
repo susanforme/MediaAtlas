@@ -325,3 +325,69 @@ it("preserves private detail scope and hides rows immediately when the feature i
   expect(screen.queryByText(/Private folder/)).not.toBeInTheDocument();
   expect(libraryApi.tasks).toHaveBeenCalledWith(false);
 });
+
+it("filters actual task records without losing history, recovery or keyboard navigation", async () => {
+  vi.mocked(libraryApi.tasks).mockResolvedValue([
+    task,
+    { ...task, id: "review", mode: "manual", state: "waiting_for_user" },
+    { ...task, id: "complete", state: "succeeded", review_count: 0, unconfigured_count: 0, metadata_failed_count: 0 },
+  ]);
+  vi.mocked(providerApi.snapshot).mockResolvedValue({
+    ...fixtureSnapshot(),
+    tasks: [
+      { ...fixtureTask, id: "failed-source", state: "failed", failure: "captcha" },
+      { ...fixtureTask, id: "complete-source", state: "succeeded", query: "Completed movie" },
+    ],
+  });
+  show();
+  const all = await screen.findByRole("tab", { name: "All 5" });
+  expect(all).toHaveAttribute("aria-selected", "true");
+  expect(within(screen.getByRole("list", { name: "Task log" })).getAllByRole("listitem")).toHaveLength(5);
+
+  const active = screen.getByRole("tab", { name: "In progress 1" });
+  fireEvent.click(active);
+  expect(within(screen.getByRole("list", { name: "Task log" })).getAllByRole("listitem")).toHaveLength(1);
+  expect(screen.getByText("Refresh library · Movies")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Cancel task" })).toBeEnabled();
+
+  fireEvent.keyDown(active, { key: "End" });
+  expect(screen.getByRole("tab", { name: "To resolve 2" })).toHaveFocus();
+  expect(within(screen.getByRole("list", { name: "Task log" })).getAllByRole("listitem")).toHaveLength(2);
+  expect(screen.getByText("Scan folder · Movies")).toBeInTheDocument();
+  expect(screen.getByText("Captcha required; no bypass attempted")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Details" })).toHaveAttribute(
+    "data-search",
+    JSON.stringify({ root: root.id, task: "review" }),
+  );
+
+  fireEvent.click(all);
+  expect(screen.getByText("Offline demo · Search for Completed movie")).toBeInTheDocument();
+  expect(libraryApi.cancel).not.toHaveBeenCalled();
+  expect(providerApi.cancel).not.toHaveBeenCalled();
+});
+
+it("keeps incomplete automatic results in the actionable filter and gives empty filters their own state", async () => {
+  vi.mocked(libraryApi.tasks).mockResolvedValue([
+    { ...task, state: "succeeded", phase: "complete" },
+  ]);
+  show();
+  fireEvent.click(await screen.findByRole("tab", { name: "To resolve 1" }));
+  expect(screen.getByText("Needs attention")).toBeInTheDocument();
+  expect(screen.getByText(/Metadata source setup required/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "In progress 0" }));
+  expect(screen.getByText("No tasks in progress")).toBeInTheDocument();
+  expect(screen.queryByText("No task records yet")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("tab", { name: "All 1" }));
+  expect(screen.getByText("Refresh library · Movies")).toBeInTheDocument();
+});
+
+it("keeps channel errors visible in every filter and avoids presenting partial totals", async () => {
+  vi.mocked(providerApi.snapshot).mockRejectedValue(new DesktopError("invalid_response"));
+  show();
+  await screen.findByRole("alert");
+  fireEvent.click(screen.getByRole("tab", { name: "To resolve", exact: true }));
+  expect(screen.getByRole("alert")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: i18n.t("retry") })).toBeEnabled();
+  expect(screen.queryByText("No tasks to resolve")).not.toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "All", exact: true })).toBeInTheDocument();
+});

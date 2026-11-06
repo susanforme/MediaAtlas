@@ -11,7 +11,11 @@ import { Button } from "../../components/ui/button";
 import { FilterBar, FilterChip } from "../../components/ui/filter-bar";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
-import { type LibrarySearch, supportedLibraryHealth } from "./browse-model";
+import {
+  hasLibraryFilters,
+  type LibrarySearch,
+  supportedLibraryHealth,
+} from "./browse-model";
 import { HEALTH, LIBRARY_CATEGORIES } from "./library-model";
 import { useFormat } from "./shared";
 import "./browse-translations";
@@ -100,12 +104,7 @@ export function LibraryFilters({
       : []),
   ].filter((item) => item.value);
   const filtered = Boolean(
-    search.health ||
-      search.q ||
-      search.genre ||
-      search.person ||
-      search.studio ||
-      search.year ||
+    hasLibraryFilters(search) ||
       (search.sort && search.sort !== "updated_desc"),
   );
   return (

@@ -1,10 +1,22 @@
 import type { ScanTask } from "../../api/library";
 import type { ProviderTask } from "../../api/providers";
-import { refreshCounts } from "./library-activity-model";
+import { refreshCounts, refreshNeedsAttention } from "./library-activity-model";
 
 export type TaskLogEntry =
   | { source: "scan"; task: ScanTask; adult: boolean }
   | { source: "provider"; task: ProviderTask };
+
+export type TaskLogFilter = "all" | "active" | "attention";
+
+export function taskLogGroup(entry: TaskLogEntry) {
+  if (["queued", "running"].includes(entry.task.state)) return "active";
+  if (
+    ["failed", "interrupted", "waiting_for_user"].includes(entry.task.state) ||
+    (entry.source === "scan" && refreshNeedsAttention(entry.task))
+  )
+    return "attention";
+  return "complete";
+}
 
 // shortcut: tasks expose only their latest state; add event history when the backend persists it.
 export function taskLogEntries(

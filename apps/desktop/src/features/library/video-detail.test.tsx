@@ -20,6 +20,8 @@ vi.mock("../../components/ui/sonner", () => ({
   toast: { success: vi.fn() },
 }));
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({ to, children }: { to: string; children: ReactNode }) => (
     <a href={to}>{children}</a>
   ),

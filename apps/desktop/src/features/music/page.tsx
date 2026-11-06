@@ -9,6 +9,7 @@ import {
   musicApi,
 } from "../../api/music";
 import { Badge } from "../../components/ui/badge";
+import { BackNavigation } from "../../components/shell/back-navigation";
 import { Anchor, Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
@@ -347,7 +348,7 @@ export function MusicArtistPage({ artistId }: { artistId: string }) {
   if (!query.data) return null;
   return (
     <div className="space-y-5">
-      <Button asChild variant="link" className="h-auto justify-start p-0 whitespace-normal underline"><Link to="/music">{t("musicBack")}</Link></Button>
+      <BackNavigation fallbackTo="/music" />
       <PageHeading
         title={query.data.artist.name}
         description={query.data.artist.sort_name ?? undefined}
@@ -369,7 +370,7 @@ export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
   const graph = album.data;
   return (
     <div className="space-y-6">
-      <Button asChild variant="link" className="h-auto justify-start p-0 whitespace-normal underline"><Link to="/music">{t("musicBack")}</Link></Button>
+      <BackNavigation fallbackTo="/music" />
       <Card asChild>
         <section>
           <ReleaseContents graph={graph} />

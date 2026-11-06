@@ -28,6 +28,8 @@ import { MediaDetailPage } from "./detail";
 import { NativeOpen } from "./native-open";
 
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
     <a href={to}>{children}</a>
   ),

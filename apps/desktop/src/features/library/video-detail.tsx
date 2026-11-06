@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, FileVideo, Film, Wrench } from "lucide-react";
+import { FileVideo, Film, Wrench } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MediaDetail } from "../../api/library";
@@ -8,6 +8,7 @@ import { scraperApi, type SeasonDetail } from "../../api/scraper";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
+import { BackNavigation } from "../../components/shell/back-navigation";
 import { VideoSourceDetails } from "../scraper/source-detail";
 import { DetailRecoveryAction } from "./detail-recovery-action";
 import { MediaDetailSections, MediaDetailView } from "./media-detail-view";
@@ -127,14 +128,7 @@ export function VideoDetail({
       poster={{ uri: detail.poster_uri, updatedAt: detail.media.updated_at }}
       overview={fields.overview}
       facts={facts}
-      navigation={
-          <Button asChild variant="secondary" className="mb-6">
-            <Link to="/library" search={{}}>
-              <ArrowLeft size={17} aria-hidden="true" />
-              {t("backToLibrary")}
-            </Link>
-          </Button>
-      }
+      navigation={<BackNavigation />}
       actions={
         <>
             <NativeOpen files={detail.files} />

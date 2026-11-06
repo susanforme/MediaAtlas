@@ -4,6 +4,21 @@
 
 本文按当前路由、页面和后台工作流整理；视觉参数引用仓库 `design.md`，不代表已经完成本轮视觉验收。
 
+## 2026-11-06 主流程增量优化
+
+研究范围是本地媒体管理桌面 App 的目录添加、浏览、详情和后台任务。沿用当前桌面布局、共享控件与用户已有截图；不以浏览器网页或播放器重建产品。
+
+| 公开依据 | 当前代码中的问题 | 本轮处理 |
+| --- | --- | --- |
+| [GNOME 内容浏览规范](https://developer.gnome.org/hig/patterns/nav/browsing.html)要求一致的返回入口；[Jellyfin 社区反馈](https://www.reddit.com/r/jellyfin/comments/mgv02b)反映返回媒体库丢失滚动位置的摩擦 | 详情里的固定媒体库链接清空原筛选；按 URL 保存滚动位置会让相同 URL 的不同历史条目互相覆盖 | 使用真实应用历史返回，首次直达详情则回对应媒体库；滚动恢复使用框架历史条目键，保留原查询与分页 |
+| [Jellyfin 筛选讨论](https://www.reddit.com/r/jellyfin/comments/1qf9hwk/filtering_was_one_of_my_biggest_pain_points_just/)指出难以清除条件；[GNOME Search](https://developer.gnome.org/hig/patterns/nav/search.html)要求明确空结果并支持搜索快捷键 | 无匹配结果时主要入口仍是目录管理；主搜索没有桌面快捷键 | 空结果直接清除搜索和细分条件，保留类型、目录、布局；Ctrl+F / Cmd+F 聚焦并选中主搜索，模态窗口内不抢焦点 |
+| [tinyMediaManager 的电影面板](https://www.tinymediamanager.org/docs/movies/moviepanel)将选择条目查看详情与文件操作分开 | 海报点击看详情，列表标题却启动系统应用 | 列表标题统一进入详情，系统打开保留明确动作 |
+| [GNOME 进度反馈](https://developer.gnome.org/hig/patterns/feedback/progress-bars.html)强调非阻塞反馈；[tinyMediaManager 导入与刮削流程](https://www.tinymediamanager.org/docs/quickstart)区分本地收录和资料获取 | 正在进行和需要处理的任务混在历史日志中，目录更新时缺少直接查看任务的入口 | 任务中心提供全部、进行中、待处理筛选和真实计数；更新中目录可直接查看任务，保留取消与恢复操作 |
+
+以上社区讨论是定性案例，不代表用户占比或故障频率；是否适用以本仓库已确认的交互为依据。继续保持源文件只读、NFO 写入授权、成人查询隔离和手动凭据保存，不引入依赖或虚构进度。
+
+验证边界：按用户要求只在本地静态读改，行为测试交由云端 CI；未启动本机应用、安装依赖或生成本轮运行截图。新版本发布另由四目标原生构建和包内检查验证；实机安装与视觉验收不由单元测试替代。
+
 MediaAtlas 围绕本地媒体文件提供浏览、资料补全、核对和输出。日常路径是：**添加目录 → 后台收录 → 浏览海报墙 → 查看详情 → 通过系统应用打开**。缺少资料不阻止浏览，歧义和失败进入可处理状态。
 
 ## 1. 信息架构

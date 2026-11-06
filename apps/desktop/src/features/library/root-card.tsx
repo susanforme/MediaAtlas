@@ -16,6 +16,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
 import { validateProviderSetupSearch } from "../settings/setup-search";
+import { refreshNeedsAttention } from "./library-activity-model";
 import { useFormat } from "./shared";
 
 export function RootCard({
@@ -38,11 +39,7 @@ export function RootCard({
   const { t } = useTranslation();
   const { date } = useFormat();
   const active = task?.state === "queued" || task?.state === "running";
-  const attention =
-    task &&
-    ["waiting_for_user", "failed", "cancelled", "interrupted"].includes(
-      task.state,
-    );
+  const attention = task && refreshNeedsAttention(task);
   const indexed =
     task?.mode === "automatic" &&
     (task.phase === "metadata" || task.phase === "complete");
@@ -150,13 +147,13 @@ export function RootCard({
               </Link>
             </Button>
           )}
-          {attention && (
+          {task && (active || attention) && (
             <Button asChild size="sm" variant="ghost">
               <Link
                 to="/scanner"
                 search={{ root: root.id, task: task.id, ...scope }}
               >
-                {t("rootReviewUpdate")}
+                {t(active ? "details" : "rootReviewUpdate")}
               </Link>
             </Button>
           )}

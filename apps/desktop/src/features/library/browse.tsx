@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { Plus, Search } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
@@ -13,13 +13,12 @@ import {
   TableBody,
   TableCell,
 } from "../../components/ui/table";
-import type { LibrarySearch } from "./browse-model";
+import { hasLibraryFilters, type LibrarySearch } from "./browse-model";
 import { LibraryActivity } from "./library-activity";
 import { LibraryFilters } from "./library-filters";
 import { LibraryPosterCard } from "./library-poster-card";
 import { LibrarySourceRecovery } from "./library-source-recovery";
 import { useLibraryBrowse } from "./use-library-browse";
-import { NativeOpen } from "./native-open";
 import { Empty, ErrorNotice, HealthBadges, Loading, Pager } from "./shared";
 
 export { type LibrarySearch, validateLibrarySearch } from "./browse-model";
@@ -27,9 +26,11 @@ export { type LibrarySearch, validateLibrarySearch } from "./browse-model";
 function LibrarySearchForm({
   search,
   onSearch,
+  inputRef,
 }: {
   search: LibrarySearch;
   onSearch: (patch: LibrarySearch) => void;
+  inputRef: RefObject<HTMLInputElement | null>;
 }) {
   const { t } = useTranslation();
   const form = useRef<HTMLFormElement>(null);
@@ -53,9 +54,11 @@ function LibrarySearchForm({
     >
       <Search className="pointer-events-none absolute left-4 z-1 text-muted-foreground" size={19} aria-hidden="true" />
       <Input
+        ref={inputRef}
         type="search"
         name="q"
         aria-label={t("search")}
+        aria-keyshortcuts="Control+f Meta+f"
         placeholder={t("shellSearchPlaceholder")}
         defaultValue={search.q ?? ""}
       />
@@ -89,16 +92,19 @@ export function LibraryPage({
     adultAvailable,
   } = useLibraryBrowse(search, onSearch, adult);
   const [toolbarSearch, setToolbarSearch] = useState<HTMLElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   useLayoutEffect(() => {
     setToolbarSearch(document.getElementById("library-toolbar-search"));
   }, []);
   const searchInput = (
-    <LibrarySearchForm search={search} onSearch={filter} />
+    <LibrarySearchForm search={search} onSearch={filter} inputRef={searchInputRef} />
   );
   const searchField = toolbarSearch
     ? createPortal(searchInput, toolbarSearch)
     : searchInput;
   const page = search.page ?? 1;
+  const filtered = hasLibraryFilters(search);
+  const scoped = filtered || search.kind || search.root;
   if (!allowed)
     return adultAvailable ? <Loading /> : <Empty title={t("noResults")} />;
   return (
@@ -162,28 +168,14 @@ export function LibraryPage({
         <>
           <Empty
             title={
-              search.q ||
-              search.kind ||
-              search.root ||
-              search.health ||
-              search.genre ||
-              search.person ||
-              search.studio ||
-              search.year
+              scoped
                 ? t("libraryNoResults")
                 : roots.data?.length
                   ? t("libraryNoFiles")
                   : t("emptyLibrary")
             }
             body={
-              search.q ||
-              search.kind ||
-              search.root ||
-              search.health ||
-              search.genre ||
-              search.person ||
-              search.studio ||
-              search.year
+              scoped
                 ? undefined
                 : roots.data?.length
                   ? activity.active.length > 0
@@ -192,7 +184,19 @@ export function LibraryPage({
                   : t("emptyLibraryBody")
             }
           />
-          {!adult && (
+          {filtered ? (
+            <div className="mt-4 flex justify-center">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  searchInputRef.current?.focus();
+                  reset();
+                }}
+              >
+                {t("libraryResetSearch")}
+              </Button>
+            </div>
+          ) : !adult && (
             <div className="mt-4 flex justify-center">
               <Button asChild variant="outline">
                 <Link
@@ -219,17 +223,18 @@ export function LibraryPage({
             {media.data.items.map((card) => (
               <TableRow key={card.media.id}>
                 <TableCell>
-                  <NativeOpen mediaId={card.media.id} adult={adult}>
-                    {card.media.title}
-                  </NativeOpen>
-                  <Button asChild variant="ghost">
+                  <Button
+                    asChild
+                    variant="link"
+                    className="h-auto justify-start whitespace-normal px-0 text-left text-foreground"
+                  >
                     <Link
                       to="/media/$mediaId"
                       params={{ mediaId: card.media.id }}
                       search={adult ? { kind: "adult_video" } : {}}
-                      className="font-medium text-ring"
+                      aria-label={t("libraryPosterOpen", { title: card.media.title })}
                     >
-                      {t("detailsAction")}
+                      {card.media.title}
                     </Link>
                   </Button>
                 </TableCell>

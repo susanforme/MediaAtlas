@@ -18,6 +18,7 @@ import { Input } from "../ui/input";
 import { Toaster } from "../ui/sonner";
 import { LibraryNavigation, navItemClassName } from "./library-navigation";
 import { useTaskEvents } from "./use-task-events";
+import { useSearchShortcut } from "./use-search-shortcut";
 import { useWindowChrome, type WindowChrome } from "./use-window-controls";
 import { WindowControls } from "./window-controls";
 
@@ -110,6 +111,7 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
   }
   return (
     <header
+      data-slot="app-toolbar"
       className="app-toolbar fixed inset-x-0 top-0 left-[var(--sidebar-width)] z-30 flex h-[var(--toolbar-height)] items-center gap-6 px-10 py-0 bg-[linear-gradient(color-mix(in_srgb,var(--color-background)_93%,transparent),color-mix(in_srgb,var(--color-background)_80%,transparent))] backdrop-blur-[16px] [@media(600px<width<=1050px)]:px-6 [@media(max-width:600px)]:gap-1.5 [@media(max-width:600px)]:px-2 [@media(width>600px)]:group-data-[window-platform=windows]/shell:pr-[168px] [@media(max-width:600px)]:group-data-[window-platform=windows]/shell:px-4 [@media(max-width:600px)]:group-data-[window-platform=windows]/shell:pt-9"
       data-tauri-drag-region={chrome.platform ? "deep" : undefined}
     >
@@ -137,6 +139,7 @@ function Toolbar({ chrome }: { chrome: WindowChrome }) {
             type="search"
             name="q"
             aria-label={t("search")}
+            aria-keyshortcuts="Control+f Meta+f"
             placeholder={t("shellSearchPlaceholder")}
           />
           <Button
@@ -175,6 +178,7 @@ export function AppShell() {
   const { i18n } = useTranslation();
   const chrome = useWindowChrome();
   useTaskEvents();
+  useSearchShortcut();
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? "zh-CN";
   }, [i18n.resolvedLanguage]);

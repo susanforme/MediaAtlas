@@ -340,6 +340,74 @@ it("opens directory creation directly from the empty library", async () => {
     screen.queryByRole("button", { name: "Previous" }),
   ).not.toBeInTheDocument();
 });
+it("clears an empty search in place while retaining its folder, media type and layout", async () => {
+  vi.mocked(libraryApi.media).mockImplementation(async (query) => ({
+    items: query.query || query.health ? [] : [card],
+    next_cursor: null,
+  }));
+  const { onSearch } = show({
+    root: root.id,
+    kind: "movie",
+    q: "No match",
+    health: "missing_poster",
+    cursor: "old-page",
+    page: 4,
+    view: "list",
+  });
+  const clear = await screen.findByRole("button", { name: "Clear search and filters" });
+  expect(screen.getByText("No media matches these filters")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Manage media folders" })).not.toBeInTheDocument();
+  clear.focus();
+  fireEvent.click(clear);
+  expect(onSearch).toHaveBeenLastCalledWith(
+    { root: root.id, kind: "movie", view: "list" },
+    undefined,
+  );
+  expect(screen.getByRole("searchbox")).toHaveFocus();
+  expect(screen.getByRole("searchbox")).toHaveValue("");
+  await screen.findByRole("link", { name: "Details: Synthetic film" });
+  expect(libraryApi.media).toHaveBeenLastCalledWith(expect.objectContaining({
+    root_id: root.id, kind: "movie", query: null, health: null, cursor: null,
+  }));
+  expect(screen.queryByRole("button", { name: "Clear search and filters" })).not.toBeInTheDocument();
+  expect(nativeOpenApi.open).not.toHaveBeenCalled();
+});
+it("keeps empty adult search recovery within its authorized query scope", async () => {
+  privacy.settings.entry_visible = true;
+  privacy.includeAdult = true;
+  vi.mocked(adultApi.media).mockResolvedValue({ items: [], next_cursor: null });
+  const { onSearch } = show({ root: root.id, kind: "adult_video", q: "No match" });
+  fireEvent.click(await screen.findByRole("button", { name: "Clear search and filters" }));
+  expect(onSearch).toHaveBeenLastCalledWith(
+    { root: root.id, kind: "adult_video", view: undefined },
+    undefined,
+  );
+  await waitFor(() => expect(adultApi.media).toHaveBeenLastCalledWith(expect.objectContaining({
+    root_id: root.id, kind: "adult_video", query: null, cursor: null,
+  })));
+  expect(libraryApi.media).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button", { name: "Clear search and filters" })).not.toBeInTheDocument();
+});
+it("does not offer a no-op clear action for an empty folder or type scope", async () => {
+  vi.mocked(libraryApi.media).mockResolvedValue({ items: [], next_cursor: null });
+  show({ root: root.id, kind: "movie" });
+  await screen.findByText("No media matches these filters");
+  expect(screen.queryByRole("button", { name: "Clear search and filters" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Manage media folders" })).toHaveAttribute("href", "/roots");
+});
+it("opens list titles as details links without launching an external app", async () => {
+  show({ view: "list" });
+  const table = await screen.findByRole("table");
+  const title = within(table).getByRole("link", { name: "Details: Synthetic film" });
+  expect(title).toHaveTextContent("Synthetic film");
+  expect(title).toHaveAttribute("href", "/media/synthetic-film");
+  title.focus();
+  expect(title).toHaveFocus();
+  fireEvent.click(title);
+  expect(within(table).queryByRole("button")).not.toBeInTheDocument();
+  expect(nativeOpenApi.open).not.toHaveBeenCalled();
+  expect(libraryApi.detail).not.toHaveBeenCalled();
+});
 it("keeps explicit list view and recovers a failed media request without fake cards", async () => {
   vi.mocked(libraryApi.media).mockRejectedValueOnce(
     new DesktopError("request_failed"),

@@ -53,6 +53,8 @@ vi.mock("../../components/ui/sonner", () => ({
 }));
 vi.mock("../library/context", () => ({ usePrivacy: () => privacy }));
 vi.mock("@tanstack/react-router", () => ({
+  useRouter: () => ({ history: { back: vi.fn() } }),
+  useCanGoBack: () => false,
   Link: ({
     to,
     params,
