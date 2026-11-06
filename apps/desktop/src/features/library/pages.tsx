@@ -367,5 +367,3 @@ export function RootsPage({
     </>
   );
 }
-
-export { SettingsPage } from "../settings/page";

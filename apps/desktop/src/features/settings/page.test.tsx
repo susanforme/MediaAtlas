@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
 import { chooseSelectOption } from "../../test/select";
 import { initializeTheme, THEME_STORAGE_KEY } from "../../lib/theme";
-import { useState } from "react";
-import { SettingsPage } from "./page";
+import { type ComponentProps, useState } from "react";
+import { preloadSettingsTab, SettingsPage } from "./page";
 import type { SettingsTab } from "./setup-search";
 
 vi.mock("@tanstack/react-router", async (original) => ({
@@ -43,6 +43,12 @@ beforeEach(async () => {
   initializeTheme();
   await i18n.changeLanguage("en-US");
 });
+
+async function renderReadySettings(props: ComponentProps<typeof SettingsPage> = {}) {
+  await preloadSettingsTab(props.setup ?? { tab: props.returnToScraper ? "auth" : "general" });
+  return render(<SettingsPage {...props} />);
+}
+
 it("switches appearance immediately and restores the saved theme", () => {
   const view = render(<SettingsPage />);
   const theme = screen.getByRole("combobox", { name: "Theme" });
@@ -55,14 +61,14 @@ it("switches appearance immediately and restores the saved theme", () => {
   render(<SettingsPage />);
   expect(screen.getByRole("combobox", { name: "Theme" })).toHaveValue("light");
 });
-it("returns to the originating media without accepting an arbitrary destination", () => {
-  render(<SettingsPage returnToScraper returnMediaId="media-1" />);
+it("returns to the originating media without accepting an arbitrary destination", async () => {
+  await renderReadySettings({ returnToScraper: true, returnMediaId: "media-1" });
   expect(
     screen.getByRole("link", { name: "Return to scraper" }),
   ).toHaveAttribute("href", "/scraper?media=media-1");
 });
 
-it("returns to the originating library query instead of sending browsing users to folders", () => {
+it("returns to the originating library query instead of sending browsing users to folders", async () => {
   const search = {
     root: "folder-1",
     q: "Solaris",
@@ -70,11 +76,7 @@ it("returns to the originating library query instead of sending browsing users t
     cursor: "page-3",
     view: "list" as const,
   };
-  render(
-    <SettingsPage
-      setup={{ from: "library", return: { to: "library", search } }}
-    />,
-  );
+  await renderReadySettings({ setup: { from: "library", return: { to: "library", search } } });
   const link = screen.getByRole("link", { name: "Return to library" });
   const url = new URL(link.getAttribute("href") ?? "", "https://example.test");
   expect(url.pathname).toBe("/library");
@@ -83,8 +85,8 @@ it("returns to the originating library query instead of sending browsing users t
   expect(url.searchParams.get("cursor")).toBe("page-3");
   expect(url.searchParams.get("view")).toBe("list");
 });
-it("provides a fixed anonymous scraper return and hides it outside the workflow", () => {
-  const view = render(<SettingsPage returnToScraper />);
+it("provides a fixed anonymous scraper return and hides it outside the workflow", async () => {
+  const view = await renderReadySettings({ returnToScraper: true });
   expect(
     screen.getByRole("link", { name: "Return to scraper" }),
   ).toHaveAttribute("href", "/scraper");
@@ -94,14 +96,8 @@ it("provides a fixed anonymous scraper return and hides it outside the workflow"
   ).not.toBeInTheDocument();
 });
 
-it("preserves the ordered review queue when returning from credentials", () => {
-  render(
-    <SettingsPage
-      returnToScraper
-      returnMediaId="media-2"
-      returnQueue={["media-1", "media-2"]}
-    />,
-  );
+it("preserves the ordered review queue when returning from credentials", async () => {
+  await renderReadySettings({ returnToScraper: true, returnMediaId: "media-2", returnQueue: ["media-1", "media-2"] });
   const url = new URL(
     screen
       .getByRole("link", { name: "Return to scraper" })
@@ -118,9 +114,13 @@ it("preserves the ordered review queue when returning from credentials", () => {
 
 it("hosts management pages as keyboard-accessible tabs without loading inactive panels", async () => {
   const change = vi.fn();
+  let preparing = Promise.resolve();
   function ControlledSettings() {
     const [tab, setTab] = useState<SettingsTab>("general");
-    return <SettingsPage setup={{ tab }} onTabChange={(next) => { change(next); setTab(next); }} />;
+    return <SettingsPage setup={{ tab }} onTabChange={(next) => {
+      change(next);
+      preparing = preloadSettingsTab({ tab: next }).then(() => setTab(next));
+    }} />;
   }
   render(<ControlledSettings />);
   const general = screen.getByRole("tab", { name: "General" });
@@ -133,7 +133,10 @@ it("hosts management pages as keyboard-accessible tabs without loading inactive 
     screen.queryByRole("region", { name: "Authentication" }),
   ).not.toBeInTheDocument();
   general.focus();
-  fireEvent.keyDown(general, { key: "ArrowRight" });
+  await act(async () => {
+    fireEvent.keyDown(general, { key: "ArrowRight" });
+    await preparing;
+  });
   const auth = screen.getByRole("tab", { name: "Authentication" });
   expect(auth).toHaveFocus();
   expect(auth).toHaveAttribute("aria-selected", "true");
@@ -143,13 +146,17 @@ it("hosts management pages as keyboard-accessible tabs without loading inactive 
   );
   expect(screen.getAllByRole("tab", { selected: true })).toHaveLength(1);
   await screen.findByRole("region", { name: "Authentication" });
-  fireEvent.keyDown(auth, { key: "ArrowRight" });
+  await act(async () => {
+    fireEvent.keyDown(auth, { key: "ArrowRight" });
+    await preparing;
+  });
   await screen.findByRole("region", { name: "Provider management" });
   expect(
     screen.queryByRole("region", { name: "Authentication" }),
   ).not.toBeInTheDocument();
-  fireEvent.keyDown(screen.getByRole("tab", { name: "Data sources" }), {
-    key: "End",
+  await act(async () => {
+    fireEvent.keyDown(screen.getByRole("tab", { name: "Data sources" }), { key: "End" });
+    await preparing;
   });
   await screen.findByRole("region", { name: "Diagnostics" });
   expect(
@@ -170,18 +177,24 @@ it("keeps the displayed settings panel until its router-controlled tab is ready"
   expect(change).toHaveBeenCalledWith("auth");
   expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("region", { name: "Authentication" })).not.toBeInTheDocument();
-  view.rerender(<SettingsPage setup={{ tab: "auth" }} onTabChange={change} />);
+  await act(async () => {
+    await preloadSettingsTab({ tab: "auth" });
+    view.rerender(<SettingsPage setup={{ tab: "auth" }} onTabChange={change} />);
+  });
   await screen.findByRole("region", { name: "Authentication" });
   expect(screen.getByRole("tab", { name: "Authentication" })).toHaveAttribute("aria-selected", "true");
 });
 
 it("follows the tab supplied by route state and labels its active panel", async () => {
-  const view = render(<SettingsPage setup={{ tab: "network" }} />);
+  const view = await renderReadySettings({ setup: { tab: "network" } });
   const network = screen.getByRole("tab", { name: "Network inspector" });
   expect(network).toHaveAttribute("aria-selected", "true");
   await screen.findByRole("region", { name: "Network records" });
 
-  view.rerender(<SettingsPage setup={{ tab: "diagnostics" }} />);
+  await act(async () => {
+    await preloadSettingsTab({ tab: "diagnostics" });
+    view.rerender(<SettingsPage setup={{ tab: "diagnostics" }} />);
+  });
   const diagnostics = screen.getByRole("tab", {
     name: "Connection diagnostics",
   });
@@ -206,17 +219,15 @@ it("translates media settings independently of the library page bundle", async (
   expect(screen.getByRole("tab", { name: "网络检查器" })).toBeInTheDocument();
 });
 
-it("keeps the durable session and current media when returning from setup", () => {
+it("keeps the durable session and current media when returning from setup", async () => {
   const session = "11111111-1111-4111-8111-111111111111";
-  render(
-    <SettingsPage
-      setup={{
+  await renderReadySettings({
+    setup: {
         from: "scraper",
         session,
         media: "22222222-2222-4222-8222-222222222222",
-      }}
-    />,
-  );
+    },
+  });
   const url = new URL(
     screen
       .getByRole("link", { name: "Return to scraper" })
