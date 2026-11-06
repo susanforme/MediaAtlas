@@ -385,9 +385,9 @@ it("keeps channel errors visible in every filter and avoids presenting partial t
   vi.mocked(providerApi.snapshot).mockRejectedValue(new DesktopError("invalid_response"));
   show();
   await screen.findByRole("alert");
-  fireEvent.click(screen.getByRole("tab", { name: "To resolve", exact: true }));
+  fireEvent.click(screen.getByRole("tab", { name: "To resolve" }));
   expect(screen.getByRole("alert")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: i18n.t("retry") })).toBeEnabled();
   expect(screen.queryByText("No tasks to resolve")).not.toBeInTheDocument();
-  expect(screen.getByRole("tab", { name: "All", exact: true })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "All" })).toBeInTheDocument();
 });
