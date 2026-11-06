@@ -1057,18 +1057,51 @@ mod tests {
             wait(&service, old).await.state,
             mediaatlas_domain::TaskState::Succeeded
         );
-        configured(&service, "mock.slow", 1000).await;
-        let cancelled = service.start("mock.slow", "Cancel query").await.unwrap();
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let cancel_url = format!("http://{}/fixture", listener.local_addr().unwrap());
+        let (started, request_started) = tokio::sync::oneshot::channel();
+        let (release, response_released) = tokio::sync::oneshot::channel();
+        let cancel_server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 2048];
+            stream.read(&mut request).await.unwrap();
+            started.send(()).unwrap();
+            response_released.await.unwrap();
+            let body = r#"{"id":"fixture-1"}"#;
+            let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+            let _ = stream.write_all(response.as_bytes()).await;
+        });
+        service.register_adapter(Arc::new(MockAdapter {
+            id: "mock.cancel".into(), url: cancel_url,
+        })).await.unwrap();
+        configured(&service, "mock.cancel", 5000).await;
+        let cancelled = service.start("mock.cancel", "Cancel query").await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), request_started).await.unwrap().unwrap();
         assert!(service.cancel(cancelled).await.unwrap());
         assert_eq!(
             wait(&service, cancelled).await.state,
             mediaatlas_domain::TaskState::Cancelled
         );
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Cancellation publishes task state before the worker persists its network history.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if service.snapshot().await.unwrap().requests.iter().any(|record| {
+                    record.task_id == cancelled && record.failure == Some(ProviderFailure::Cancelled)
+                }) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        }).await.expect("the cancelled in-flight request was not persisted");
+        release.send(()).unwrap();
+        cancel_server.await.unwrap();
         assert_eq!(
             wait(&service, cancelled).await.failure,
             Some(ProviderFailure::Cancelled)
+        );
+        assert_eq!(
+            wait(&service, cancelled).await.state,
+            mediaatlas_domain::TaskState::Cancelled
         );
         let saved: String = sqlx::query_scalar("SELECT state FROM scrape_runs WHERE task_id=?")
             .bind(cancelled.to_string())
