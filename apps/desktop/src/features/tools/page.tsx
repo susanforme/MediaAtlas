@@ -9,14 +9,17 @@ import {
   maintenanceApi,
   type OrganizationStrategy,
 } from "../../api/organization";
-import { Anchor, Button } from "../../components/ui/button";
+import { Button } from "../../components/ui/button";
+import { Badge } from "../../components/ui/badge";
 import { Card } from "../../components/ui/card";
 import { Checkbox } from "../../components/ui/checkbox";
+import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
-import { ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { Empty, ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { OrdinaryCandidates } from "./ordinary-candidates";
+import { ToolsSectionNavigation } from "./section-navigation";
 import { type ToolsRouteSearch, validateToolsRouteSearch } from "./search";
 import { useOrganization } from "./use-organization";
 import "./translations";
@@ -27,9 +30,6 @@ const AdultScraper = lazy(() =>
 );
 const AdultOutput = lazy(() =>
   import("../adult/page").then((m) => ({ default: m.AdultOutput })),
-);
-const ScraperPage = lazy(() =>
-  import("../scraper/page").then((m) => ({ default: m.ScraperPage })),
 );
 export function OrganizationPanel({
   mediaId,
@@ -63,7 +63,6 @@ export function OrganizationPanel({
   return (
     <Card asChild>
       <section className="space-y-4">
-        <h2 className="mb-4 font-semibold">{t("organize")}</h2>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(min(150px,100%),1fr))] gap-4">
           <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("organizeTarget")}</span>
@@ -385,7 +384,10 @@ function LocalCandidateDetail({
           </ul>
         </section>
       </Card>
-      <OrganizationPanel key={mediaId} mediaId={mediaId} adult={adult} />
+      <Details>
+        <DetailsSummary>{t("organize")}</DetailsSummary>
+        <div className="mt-4"><OrganizationPanel key={mediaId} mediaId={mediaId} adult={adult} /></div>
+      </Details>
       {adult && (
         <Suspense fallback={<Loading />}>
           <AdultScraper key={mediaId} mediaId={mediaId} />
@@ -396,7 +398,7 @@ function LocalCandidateDetail({
     </>
   );
 }
-function Maintenance() {
+function Maintenance({ search }: { search: ToolsRouteSearch }) {
   const { t } = useTranslation();
   const [cursor, setCursor] = useState<string | null>(null);
   const watchers = useQuery({
@@ -421,10 +423,11 @@ function Maintenance() {
       <Card asChild>
         <section className="space-y-4">
           <h2 className="mb-4 font-semibold">{t("watcherTitle")}</h2>
-          <p>{t("watcherHelp")}</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{t("watcherHelp")}</p>
+          {watchers.isPending && <Loading />}
           {watchers.data?.map((w) => (
-            <div key={w.root_id}>
-              <Label className="flex gap-3">
+            <div key={w.root_id} className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-4 last:border-0">
+              <Label className="flex items-center gap-3">
                 <Checkbox
                   checked={w.opted_in}
                   disabled={configure.isPending}
@@ -433,44 +436,48 @@ function Maintenance() {
                   }
                 />
                 {t("watcherEnable")}:{" "}
-                {roots.data?.find((r) => r.id === w.root_id)?.name ?? w.root_id}
+                {roots.data?.find((r) => r.id === w.root_id)?.name ?? t("root")}
               </Label>
-              <p>
-                {t(w.active ? "watcherActive" : "watcherInactive")}
-                {w.pending_rescan ? ` · ${t("watcherPending")}` : ""}
-                {w.error_code ? ` · ${w.error_code}` : ""}
-              </p>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant={w.active ? "secondary" : "outline"}>{t(w.active ? "watcherActive" : "watcherInactive")}</Badge>
+                {w.pending_rescan && <Badge variant="secondary">{t("watcherPending")}</Badge>}
+                {w.error_code && <Badge variant="destructive">{t("watcherError")}</Badge>}
+              </div>
             </div>
           ))}
           {watchers.error && <ErrorNotice error={watchers.error} />}
           {configure.error && <ErrorNotice error={configure.error} />}
+          {roots.error && <ErrorNotice error={roots.error} retry={() => void roots.refetch()} />}
+          {watchers.isSuccess && watchers.data.length === 0 && <Button asChild variant="outline"><Link to="/roots">{t("roots")}</Link></Button>}
         </section>
       </Card>
       <Card asChild>
         <section className="space-y-4">
-          <h2 className="mb-4 font-semibold">{t("healthIssues")}</h2>
-          <Button
-            disabled={health.isPending}
-            onClick={() => {
-              setCursor(null);
-              health.mutate(null);
-            }}
-          >
-            {t("healthCheck")}
-          </Button>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="font-semibold">{t("healthIssues")}</h2>
+            <Button
+              disabled={health.isPending}
+              onClick={() => {
+                setCursor(null);
+                health.mutate(null);
+              }}
+            >
+              {t("healthCheck")}
+            </Button>
+          </div>
           {health.error && <ErrorNotice error={health.error} />}
-          <ul>
+          {health.isPending && <Loading />}
+          {health.isSuccess && health.data.items.length === 0 && <Empty title={t("toolsHealthClear")} />}
+          <ul className="divide-y divide-border">
             {health.data?.items.map((i) => (
-              <li className="py-3" key={i.media_id}>
-                <p>
-                  {i.title}:{" "}
-                  {i.issues
-                    .map((issue) => t(`issue_${issue}`, { defaultValue: issue }))
-                    .join(" · ")}
-                </p>
-                <Anchor href={`/tools?media=${encodeURIComponent(i.media_id)}`}>
-                  {t("toolsRepair")}
-                </Anchor>
+              <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={i.media_id}>
+                <div className="min-w-0 space-y-2">
+                  <p className="font-medium wrap-anywhere">{i.title}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {i.issues.map((issue) => <Badge key={issue} variant="secondary">{t(`issue_${issue}`, { defaultValue: issue })}</Badge>)}
+                  </div>
+                </div>
+                <Button asChild variant="outline" size="sm"><Link to="/tools" search={{ ...search, view: undefined, media: i.media_id }}>{t("toolsRepair")}</Link></Button>
               </li>
             ))}
           </ul>
@@ -520,8 +527,8 @@ function MediaToolsWorkspace({
   onSearch?: (search: ToolsRouteSearch, replace?: boolean) => void;
 }) {
   const { t } = useTranslation();
-  const [tab, setTab] = useState<"local" | "scraper" | "health">("local");
   const adult = search?.kind === "adult_video";
+  const context = validateToolsRouteSearch({ ...search, media: search?.media ?? mediaId });
 
   return (
     <>
@@ -535,41 +542,15 @@ function MediaToolsWorkspace({
           </Link>
         </Button>
       </PageHeading>
-      {!adult && (
-        <fieldset
-          className="mb-7 flex flex-wrap gap-2"
-          aria-label={t("videoTools")}
-        >
-          {(["local", "scraper", "health"] as const).map((v) => (
-            <Button
-              key={v}
-              variant={v === tab ? "secondary" : "ghost"}
-              aria-pressed={v === tab}
-              onClick={() => setTab(v)}
-            >
-              {t(
-                v === "local"
-                  ? "toolsSelect"
-                  : v === "scraper"
-                    ? "scraper"
-                    : "healthIssues",
-              )}
-            </Button>
-          ))}
-        </fieldset>
-      )}
-      {adult || tab === "local" ? (
+      <ToolsSectionNavigation current={context.view === "health" ? "health" : "local"} search={context} />
+      {adult || context.view !== "health" ? (
         <LocalCandidates
           initialMediaId={mediaId}
           search={search}
           onSearch={onSearch}
         />
-      ) : tab === "scraper" ? (
-        <Suspense fallback={<Loading />}>
-          <ScraperPage mediaId={search?.media ?? mediaId} />
-        </Suspense>
       ) : (
-        <Maintenance />
+        <Maintenance search={context} />
       )}
     </>
   );

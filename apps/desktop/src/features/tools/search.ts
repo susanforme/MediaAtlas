@@ -37,6 +37,7 @@ export type ToolsFilters = Pick<
 /** Routing selects an isolated API lane; ordinary query validation stays strict. */
 export type ToolsRouteSearch = Omit<ToolsSearch, "kind"> & {
   kind?: ToolsSearch["kind"] | "adult_video";
+  view?: "health";
 };
 export type ToolsRouteFilters = Pick<
   ToolsRouteSearch,
@@ -52,7 +53,25 @@ export function validateToolsRouteSearch(
       kind: "adult_video",
     };
   }
-  return validateToolsSearch(value);
+  return {
+    ...validateToolsSearch(value),
+    ...(value.view === "health" ? { view: "health" as const } : {}),
+  };
+}
+
+export type ToolsSection = "local" | "scraper" | "health";
+
+export function toolsSectionLocation(section: ToolsSection, search: ToolsRouteSearch = {}) {
+  if (section === "scraper") {
+    return {
+      to: "/scraper" as const,
+      search: { media: search.kind === "adult_video" ? undefined : search.media },
+    };
+  }
+  return {
+    to: "/tools" as const,
+    search: validateToolsRouteSearch({ ...search, view: section === "health" ? "health" : undefined }),
+  };
 }
 function boundedString(value: unknown, max: number): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= max;

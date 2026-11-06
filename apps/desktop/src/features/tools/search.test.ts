@@ -4,6 +4,7 @@ import {
   changeToolsRouteFilters,
   toolsBrowseQuery,
   toolsRouteBrowseQuery,
+  toolsSectionLocation,
   validateToolsRouteSearch,
   validateToolsSearch,
 } from "./search";
@@ -24,6 +25,18 @@ it("routes the adult type separately without granting ordinary query visibility"
     toolsBrowseQuery(validateToolsSearch({ kind: "adult_video" }))
       .include_adult,
   ).toBe(false);
+});
+
+it("keeps the health view in route state without sending navigation fields to backend filters", () => {
+  const route = validateToolsRouteSearch({ view: "health", q: "Atlas", root: "root", media: "film" });
+  expect(route).toEqual({ view: "health", q: "Atlas", root: "root", media: "film" });
+  expect(validateToolsSearch({ ...route })).toEqual({ q: "Atlas", root: "root", media: "film" });
+  expect(toolsSectionLocation("local", route)).toEqual({ to: "/tools", search: { q: "Atlas", root: "root", media: "film" } });
+  expect(toolsSectionLocation("scraper", route)).toEqual({ to: "/scraper", search: { media: "film" } });
+  expect(changeToolsRouteFilters(route, { q: "New" })).toEqual({ view: "health", q: "New", root: "root" });
+  expect(validateToolsRouteSearch({ view: "unknown" })).toEqual({});
+  expect(validateToolsRouteSearch({ kind: "adult_video", view: "health", media: "private" })).toEqual({ kind: "adult_video", media: "private" });
+  expect(toolsSectionLocation("scraper", { kind: "adult_video", media: "private" })).toEqual({ to: "/scraper", search: { media: undefined } });
 });
 
 it("accepts only bounded, whitelisted ordinary tool query fields", () => {

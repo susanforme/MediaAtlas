@@ -39,14 +39,18 @@ vi.mock("@tanstack/react-router", async (original) => {
     Link: ({
       to,
       search,
+      disabled,
       ...props
     }: {
       to: string;
       search?: Record<string, unknown>;
+      disabled?: boolean;
       children: React.ReactNode;
     }) => (
       <a
-        href={`${to}${router.defaultStringifySearch(search ?? {})}`}
+        href={disabled ? undefined : `${to}${router.defaultStringifySearch(search ?? {})}`}
+        role={disabled ? "link" : undefined}
+        aria-disabled={disabled || undefined}
         {...props}
       />
     ),
@@ -274,9 +278,10 @@ it("renders ordinary candidate metadata in a table with independent view and sel
   expect(
     screen.getByRole("heading", { name: "Detailed resource: first" }),
   ).toBeInTheDocument();
+  expect(screen.getByRole("region", { name: "Resource tools" })).toHaveFocus();
   expect(
-    screen.getByRole("button", { name: "Scrape selected" }),
-  ).toBeDisabled();
+    screen.queryByRole("button", { name: "Scrape selected" }),
+  ).not.toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("checkbox", {
       name: `Select for scraping: ${second.media.title}`,
@@ -346,8 +351,8 @@ it("sends every filter and sort to the backend instead of filtering only the vis
   );
   expect(screen.getByText("Page 1")).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "Scrape selected" }),
-  ).toBeDisabled();
+    screen.queryByRole("button", { name: "Scrape selected" }),
+  ).not.toBeInTheDocument();
   const serverSelection = screen.getByRole("checkbox", {
     name: "Select for scraping: Server result",
   });
@@ -439,6 +444,9 @@ it("selects only supported ordinary media on the current page and can remove an 
     second.media.id,
     third.media.id,
   ]);
+  expect(screen.getByRole("region", { name: "3 selected" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: `View resource: ${first.media.title}` })).toBeDisabled();
+  expect(screen.getAllByRole("link", { name: "Scrape this media" })[0]).toHaveAttribute("aria-disabled", "true");
   expect(
     screen.getByRole("checkbox", {
       name: `Select for scraping: ${episode.media.title}`,
@@ -533,8 +541,8 @@ it.each([
     );
     expect(screen.getByText("Page 1")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Scrape selected" }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: "Scrape selected" }),
+    ).not.toBeInTheDocument();
   },
 );
 
@@ -635,8 +643,8 @@ it("does not overwrite a pending router reset with the previous filter state", a
   );
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(
-    screen.getByRole("button", { name: "Scrape selected" }),
-  ).toBeDisabled();
+    screen.queryByRole("button", { name: "Scrape selected" }),
+  ).not.toBeInTheDocument();
   expect(onSearch).toHaveBeenCalledExactlyOnceWith({}, false);
 });
 

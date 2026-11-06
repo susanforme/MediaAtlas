@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect } from "react";
 import { useTranslation } from "react-i18next";
+import { ToolsSidebarNavigation } from "../../features/tools/section-navigation";
 import { setTheme, useTheme } from "../../lib/theme";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -54,7 +55,7 @@ function Sidebar({ chrome }: { chrome: WindowChrome }) {
             className="mx-3 my-[15px] h-px bg-border [@media(max-width:1050px)]:mx-2"
             aria-hidden="true"
           />
-          {workEntries.map(([to, label, Icon]) => (
+          {workEntries.map(([to, label, Icon]) => to === "/tools" ? <ToolsSidebarNavigation key={to} /> : (
             <li key={to}>
               <Button asChild variant="ghost" className={navItemClassName}>
                 <Link

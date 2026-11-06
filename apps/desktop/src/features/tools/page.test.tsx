@@ -31,8 +31,8 @@ vi.mock("../../components/ui/sonner", () => ({
 }));
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => vi.fn(),
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
+  Link: ({ to, search, children }: { to: string; search?: Record<string, unknown>; children: React.ReactNode }) => (
+    <a href={`${to}${search?.media ? `?media=${encodeURIComponent(String(search.media))}` : ""}`}>{children}</a>
   ),
 }));
 vi.mock("../../api/organization", async (original) => ({
@@ -231,8 +231,7 @@ it("saves the explicit watching choice and checks health only on request", async
     last_task_id: null,
     error_code: null,
   });
-  show(<MediaToolsPage />);
-  fireEvent.click(screen.getByRole("button", { name: "Health findings" }));
+  show(<MediaToolsPage search={{ view: "health" }} />);
   const checkbox = await screen.findByRole("checkbox", {
     name: "Watch this root: Target",
   });
@@ -244,7 +243,8 @@ it("saves the explicit watching choice and checks health only on request", async
     expect(maintenanceApi.configure).toHaveBeenCalledWith("root", true),
   );
   fireEvent.click(screen.getByRole("button", { name: "Check library health" }));
-  await screen.findByText("Synthetic issue: Offline file");
+  await screen.findByText("Synthetic issue");
+  expect(screen.getByText("Offline file")).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "Review in media tools" }),
   ).toHaveAttribute("href", "/tools?media=media");

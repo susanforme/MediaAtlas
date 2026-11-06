@@ -45,6 +45,8 @@ jobs:
         run: python -m unittest discover -s scripts/release -p 'test_portable.py' -v
       - uses: Swatinem/rust-cache@v2
       - run: pnpm install --frozen-lockfile
+      - name: Frontend typecheck
+        run: pnpm typecheck
       - name: Frontend unit tests
         run: pnpm test
       - name: Rust core and database tests

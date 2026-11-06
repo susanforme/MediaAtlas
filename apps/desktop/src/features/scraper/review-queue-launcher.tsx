@@ -67,7 +67,7 @@ export function ReviewQueueLauncher({
   });
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
+      {mediaIds.length > 0 && <div data-slot="selection-toolbar" role="region" aria-label={t("toolsSelected", { count: mediaIds.length })} className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3">
         {children}
         <Button
           size="sm"
@@ -76,7 +76,7 @@ export function ReviewQueueLauncher({
         >
           {t("toolsScrapeSelected")}
         </Button>
-      </div>
+      </div>}
       {create.error && <ErrorNotice error={create.error} />}
       {sessions.error && (
         <ErrorNotice

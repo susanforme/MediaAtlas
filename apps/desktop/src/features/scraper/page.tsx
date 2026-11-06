@@ -20,6 +20,7 @@ import {
 } from "../library/shared";
 import "./translations";
 import { validateProviderSetupSearch } from "../settings/setup-search";
+import { ToolsSectionNavigation } from "../tools/section-navigation";
 import { MetadataMergeWorkspace } from "./merge-workspace";
 import { PersistentQueueNavigation } from "./persistent-queue-navigation";
 import { ScraperQueueNavigation } from "./queue-navigation";
@@ -50,17 +51,15 @@ export function ScraperPage({
     queue,
     session: sessionId,
   });
-  if (context.session)
-    return (
-      <PersistentScraperPage
-        key={context.session}
-        mediaId={context.media}
-        sessionId={context.session}
-        onSessionNavigate={onSessionNavigate}
-        onQueueNavigate={onQueueNavigate}
-      />
-    );
-  return (
+  const content = context.session ? (
+    <PersistentScraperPage
+      key={context.session}
+      mediaId={context.media}
+      sessionId={context.session}
+      onSessionNavigate={onSessionNavigate}
+      onQueueNavigate={onQueueNavigate}
+    />
+  ) : (
     <ScraperWorkspace
       key={context.media ?? "local-selection"}
       mediaId={context.media}
@@ -68,6 +67,7 @@ export function ScraperPage({
       onQueueNavigate={onQueueNavigate}
     />
   );
+  return <><ToolsSectionNavigation current="scraper" search={{ media: context.media }} scraperSearch={context} />{content}</>;
 }
 
 function PersistentScraperPage({

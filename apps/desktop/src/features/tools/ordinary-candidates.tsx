@@ -1,7 +1,8 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronDown, X } from "lucide-react";
+import { ChevronDown, FolderOpen, X } from "lucide-react";
 import {
   type ReactNode,
+  useEffect,
   useId,
   useLayoutEffect,
   useRef,
@@ -20,6 +21,7 @@ import {
   TableCell,
 } from "../../components/ui/table";
 import { Empty, ErrorNotice, HealthBadges, Loading } from "../library/shared";
+import { MediaArtwork } from "../library/media-artwork";
 import { ReviewQueueLauncher } from "../scraper/review-queue-launcher";
 import { MAX_SCRAPE_QUEUE } from "../scraper/search";
 import { isSelectableCandidate } from "./candidate-model";
@@ -43,8 +45,15 @@ export function OrdinaryCandidates({
   const { t } = useTranslation();
   const browser = useCandidateBrowser(search, onSearch);
   const selectionId = useId();
+  const detailId = useId();
   const [showSelection, setShowSelection] = useState(false);
   const selectPage = useRef<HTMLInputElement>(null);
+  const workspacePanel = useRef<HTMLElement>(null);
+  const detailPanel = useRef<HTMLElement>(null);
+  const detailTrigger = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (browser.allowed && browser.search.media) detailPanel.current?.focus();
+  }, [browser.allowed, browser.search.media]);
   const eligible =
     browser.media.data?.items.filter(isSelectableCandidate) ?? [];
   const selectedIds = browser.selected.map((card) => card.media.id);
@@ -59,7 +68,7 @@ export function OrdinaryCandidates({
       selectPage.current.indeterminate = someSelected && !allSelected;
   }, [someSelected, allSelected]);
   return (
-    <section className="min-w-0 space-y-5">
+    <section ref={workspacePanel} className="min-w-0 space-y-5">
       <CandidateFilters
         search={browser.search}
         roots={browser.roots.data ?? []}
@@ -130,6 +139,15 @@ export function OrdinaryCandidates({
           )}
         </>
       )}
+      {browser.allowed && browser.search.media && (
+        <section id={detailId} ref={detailPanel} tabIndex={-1} aria-label={t("toolsDetails")} className="scroll-mt-[calc(var(--toolbar-height,76px)+16px)] space-y-4 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          {renderDetail(browser.search.media, () => {
+            browser.closeDetail();
+            if (detailTrigger.current?.isConnected) detailTrigger.current.focus();
+            else workspacePanel.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+          }, browser.adult)}
+        </section>
+      )}
       {!browser.allowed ? (
         browser.privacyError ? (
           <ErrorNotice error={browser.privacyError} />
@@ -148,7 +166,7 @@ export function OrdinaryCandidates({
       ) : browser.media.data.items.length === 0 ? (
         <Empty title={t("noResults")} />
       ) : (
-        <Table className="min-w-[620px]">
+        <Table className="min-w-[580px]">
           <TableHeader>
             <TableRow>
               {!browser.adult && (
@@ -165,10 +183,8 @@ export function OrdinaryCandidates({
                 </TableHead>
               )}
               <TableHead>{t("titleLabel")}</TableHead>
-              <TableHead>{t("year")}</TableHead>
-              <TableHead>{t("type")}</TableHead>
               <TableHead>{t("health")}</TableHead>
-              <TableHead>{t("toolsView")}</TableHead>
+              <TableHead>{t("toolsActions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -176,8 +192,8 @@ export function OrdinaryCandidates({
               <TableRow
                 key={card.media.id}
                 className={
-                  browser.search.media === card.media.id
-                    ? "bg-primary/5"
+                  browser.search.media === card.media.id || selectedIds.includes(card.media.id)
+                    ? "bg-primary/10"
                     : undefined
                 }
               >
@@ -195,10 +211,18 @@ export function OrdinaryCandidates({
                     />
                   </TableCell>
                 )}
-                <TableCell className="font-medium">{card.media.title}</TableCell>
-                <TableCell>{card.media.year ?? t("unknownYear")}</TableCell>
-                <TableCell>{t(`kind_${card.media.kind}`)}</TableCell>
                 <TableCell>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div aria-hidden="true" className="aspect-2/3 w-10 shrink-0 overflow-hidden rounded-md bg-muted [&_[data-slot=poster-placeholder]>span]:hidden [&_[data-slot=poster-placeholder]_svg]:size-4">
+                      <MediaArtwork uri={card.poster_uri} title="" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium wrap-anywhere">{card.media.title}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{card.media.year ?? t("unknownYear")} · {t(`kind_${card.media.kind}`)}</p>
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell className="max-w-[280px]">
                   {card.health.length ? (
                     <HealthBadges health={card.health} />
                   ) : (
@@ -206,25 +230,31 @@ export function OrdinaryCandidates({
                   )}
                 </TableCell>
                 <TableCell>
+                  <div className="flex flex-wrap items-center gap-2">
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
+                    disabled={selectedIds.length > 0}
                     aria-label={
                       browser.adult
                         ? `${t("scraperThisMedia")}: ${card.media.title}`
                         : t("toolsViewResource", { title: card.media.title })
                     }
-                    onClick={() => browser.view(card.media.id)}
+                    aria-expanded={browser.search.media === card.media.id}
+                    aria-controls={browser.search.media === card.media.id ? detailId : undefined}
+                    onClick={(event) => { detailTrigger.current = event.currentTarget; browser.view(card.media.id); }}
                   >
+                    <FolderOpen size={15} aria-hidden="true" />
                     {t(browser.adult ? "scraperThisMedia" : "toolsView")}
                   </Button>
                   {!browser.adult && isSelectableCandidate(card) ? (
-                    <Button asChild variant="ghost" size="sm">
-                      <Link to="/scraper" search={{ media: card.media.id }}>
+                    <Button asChild variant="outline" size="sm" className="aria-disabled:pointer-events-none aria-disabled:opacity-45">
+                      <Link to="/scraper" search={{ media: card.media.id }} disabled={selectedIds.length > 0}>
                         {t("scraperThisMedia")}
                       </Link>
                     </Button>
                   ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -256,9 +286,6 @@ export function OrdinaryCandidates({
           {t("toolsMore")}
         </Button>
       </div>
-      {browser.allowed &&
-        browser.search.media &&
-        renderDetail(browser.search.media, browser.closeDetail, browser.adult)}
     </section>
   );
 }
