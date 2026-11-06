@@ -143,7 +143,7 @@ export function OrdinaryCandidates({
         <section id={detailId} ref={detailPanel} tabIndex={-1} aria-label={t("toolsDetails")} className="scroll-mt-[calc(var(--toolbar-height,76px)+16px)] space-y-4 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
           {renderDetail(browser.search.media, () => {
             browser.closeDetail();
-            if (detailTrigger.current?.isConnected) detailTrigger.current.focus();
+            if (detailTrigger.current?.isConnected && !detailTrigger.current.disabled) detailTrigger.current.focus();
             else workspacePanel.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
           }, browser.adult)}
         </section>

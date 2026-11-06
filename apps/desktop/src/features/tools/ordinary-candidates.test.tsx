@@ -251,6 +251,16 @@ it("does not fetch or render the adult type while its setting is disabled", asyn
   expect(screen.queryByRole("table")).not.toBeInTheDocument();
 });
 
+it("returns focus to search when batch mode has disabled the detail's row action", async () => {
+  show();
+  fireEvent.click(await screen.findByRole("button", { name: `View resource: ${first.media.title}` }));
+  fireEvent.click(screen.getByRole("checkbox", { name: `Select for scraping: ${first.media.title}` }));
+  expect(screen.getByRole("button", { name: `View resource: ${first.media.title}` })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Close fixture detail" }));
+  expect(screen.getByRole("searchbox", { name: "Search local candidates" })).toHaveFocus();
+  expect(screen.getByRole("checkbox", { name: `Select for scraping: ${first.media.title}` })).toBeChecked();
+});
+
 it("renders ordinary candidate metadata in a table with independent view and selection actions", async () => {
   show();
   expect(await screen.findByRole("table")).toBeInTheDocument();
