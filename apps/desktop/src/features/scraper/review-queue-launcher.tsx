@@ -1,9 +1,12 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { reviewQueueApi } from "../../api/review-queue";
+import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
+import { Details, DetailsSummary } from "../../components/ui/details";
 import { ErrorNotice, useFormat } from "../library/shared";
 import { type ToolsRouteSearch, validateToolsSearch } from "../tools/search";
 import { MAX_SCRAPE_QUEUE } from "./search";
@@ -85,28 +88,28 @@ export function ReviewQueueLauncher({
         />
       )}
       {Boolean(sessions.data?.length) && (
-        <section aria-label={t("reviewQueues")} className="space-y-2">
-          <h3 className="text-sm font-medium">{t("reviewQueues")}</h3>
+        <section aria-label={t("reviewQueues")}>
+          <Details open className="group/queues rounded-lg border border-border bg-surface/30 px-3 py-2">
+            <DetailsSummary className="flex items-center gap-2 text-xs text-muted-foreground">
+              <ChevronRight size={14} className="shrink-0 transition-transform group-open/queues:rotate-90" aria-hidden="true" />
+              {t("reviewQueues")}
+              <Badge variant="outline" className="ml-auto">{sessions.data?.length}</Badge>
+            </DetailsSummary>
+            <div className="mt-2 divide-y divide-border">
           {sessions.data?.map((queue) => (
             <div
               key={queue.id}
-              className="flex flex-wrap items-center justify-between gap-3 text-sm"
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-2 text-xs"
             >
-              <p>
-                {date(queue.updated_at)} ·{" "}
-                {t("reviewSummary", {
-                  count: queue.items.length,
-                  confirmed: queue.items.filter(
-                    (item) => item.state === "confirmed",
-                  ).length,
-                  deferred: queue.items.filter(
-                    (item) => item.state === "deferred",
-                  ).length,
-                  failed: queue.items.filter((item) => item.state === "failed")
-                    .length,
+              <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-muted-foreground">{date(queue.updated_at)}</span>
+                <span>{t("reviewItemCount", { count: queue.items.length })}</span>
+                {(["confirmed", "deferred", "failed"] as const).map((state) => {
+                  const count = queue.items.filter((item) => item.state === state).length;
+                  return count > 0 ? <Badge key={state} variant={state === "failed" ? "destructive" : "secondary"}>{t(`reviewCount_${state}`, { count })}</Badge> : null;
                 })}
-              </p>
-              <Button asChild variant="outline" size="sm">
+              </div>
+              <Button asChild variant="ghost" size="sm">
                 <Link
                   to="/scraper"
                   search={{
@@ -123,6 +126,8 @@ export function ReviewQueueLauncher({
               </Button>
             </div>
           ))}
+            </div>
+          </Details>
         </section>
       )}
     </div>

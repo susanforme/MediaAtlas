@@ -391,7 +391,7 @@ it("retains selection across cursor pages and creates a durable queue from order
       name: `Select for scraping: ${first.media.title}`,
     }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "More candidates" }));
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
   fireEvent.click(
     await screen.findByRole("checkbox", {
       name: `Select for scraping: ${third.media.title}`,
@@ -429,7 +429,7 @@ it("retains selection across cursor pages and creates a durable queue from order
   expect(vi.mocked(reviewQueueApi.create).mock.calls.at(-1)?.[1]).toMatchObject(
     { cursor: "page-two", page: 2 },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Previous candidates" }));
+  fireEvent.click(screen.getByRole("button", { name: "Previous page" }));
   expect(
     await screen.findByRole("checkbox", {
       name: `Select for scraping: ${first.media.title}`,
@@ -499,7 +499,7 @@ it("rejects a whole-page addition above the limit without silently truncating th
       name: "Select supported media on this page",
     }),
   );
-  fireEvent.click(screen.getByRole("button", { name: "More candidates" }));
+  fireEvent.click(screen.getByRole("button", { name: "Next page" }));
   await screen.findByText(pageTwo[0].media.title);
   fireEvent.click(
     screen.getByRole("checkbox", {
@@ -681,6 +681,20 @@ it("offers an explicit saved-session resume without recreating or replaying the 
   ]);
   show();
   const resume = await screen.findByRole("link", { name: "Resume review" });
+  const queues = screen.getByRole("region", { name: "Saved review queues" });
+  expect(within(queues).getByText("2 items")).toBeInTheDocument();
+  expect(within(queues).getByText("1 deferred")).toBeInTheDocument();
+  expect(within(queues).queryByText("0 confirmed")).not.toBeInTheDocument();
+  expect(within(queues).queryByText("0 failed")).not.toBeInTheDocument();
+  const href = resume.getAttribute("href");
+  const disclosure = queues.querySelector("details")!;
+  const summary = within(queues).getByText("Saved review queues").closest("summary")!;
+  fireEvent.click(summary);
+  expect(disclosure).not.toHaveAttribute("open");
+  expect(resume).not.toBeVisible();
+  fireEvent.click(summary);
+  expect(disclosure).toHaveAttribute("open");
+  expect(within(queues).getByRole("link", { name: "Resume review" })).toHaveAttribute("href", href);
   const url = new URL(
     resume.getAttribute("href") ?? "",
     "https://fixture.invalid",

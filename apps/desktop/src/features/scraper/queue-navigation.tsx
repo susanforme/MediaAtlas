@@ -24,7 +24,7 @@ export function ScraperQueueNavigation({
     if (id && !busy) onNavigate?.(id);
   }
   return (
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-border pb-4">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-surface/40 px-4 py-3">
       <p className="text-sm font-medium" aria-live="polite">
         {t("scraperQueuePosition", { index: index + 1, count: queue.length })}
       </p>

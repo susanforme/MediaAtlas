@@ -1,9 +1,9 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window-chrome",
-  "description": "Only the local main window can drag, minimize, maximize, restore and close itself.",
-  "windows": ["main"],
-  "platforms": ["windows", "macOS"],
+  "description": "Local main and NFO preview windows can drag, minimize, maximize, restore and close themselves.",
+  "windows": ["main", "nfo-*"],
+  "platforms": ["windows", "macOS", "linux"],
   "permissions": [
     "core:window:allow-is-maximized",
     "core:window:allow-is-focused",

@@ -65,6 +65,10 @@ it("uses a fixed set of controls for a full queue instead of 32 pending buttons"
     "media-0",
   );
   expect(screen.getByRole("button", { name: "Previous" })).toBeDisabled();
+  expect(screen.getByText("32 items")).toBeInTheDocument();
+  expect(screen.queryByText("0 confirmed")).not.toBeInTheDocument();
+  expect(screen.queryByText("0 deferred")).not.toBeInTheDocument();
+  expect(screen.queryByText("0 failed")).not.toBeInTheDocument();
 });
 it("selects the next pending item before navigating", async () => {
   const { review, transition } = fixture(3, 1);
@@ -91,6 +95,7 @@ it("jumps to a deferred item without retrying or confirming it", async () => {
       onNavigate={navigate}
     />,
   );
+  expect(screen.getByText("1 deferred")).toBeInTheDocument();
   chooseSelectOption(screen.getByRole("combobox", { name: "Current item" }), "media-2");
   await waitFor(() => expect(navigate).toHaveBeenCalledWith("media-2"));
   expect(transition).not.toHaveBeenCalled();

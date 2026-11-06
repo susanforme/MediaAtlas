@@ -49,7 +49,7 @@ export function MediaDetailView({
   const background = backdrop || poster?.uri;
   return (
     <article data-slot="media-detail" className="min-w-0 [&_h2:not([data-slot=video-status-heading])]:mb-3 [&_h2:not([data-slot=video-status-heading])]:text-[20px] [&_h2:not([data-slot=video-status-heading])]:font-semibold">
-      <header className={cn("relative isolate pt-0 pb-9", (poster || backdrop) && "min-h-[300px] [@media(width<=760px)]:min-h-0")}>
+      <header className={cn("relative isolate pt-0 pb-9", background && "min-h-[300px] pb-[100px] [@media(width<=760px)]:min-h-0 [@media(width<=760px)]:pb-9")}>
         {background && (
           <div data-slot="media-backdrop" className={cn("pointer-events-none absolute -top-[104px] -right-10 -bottom-[70px] left-[35%] -z-1 overflow-hidden opacity-40 [mask-image:linear-gradient(to_right,transparent,black_35%),linear-gradient(to_bottom,black_40%,transparent)] [mask-composite:intersect] [&_img]:object-[right_top] [&_[data-slot=poster-placeholder]]:hidden [@media(width<=760px)]:-right-6 [@media(width<=760px)]:left-[20%] [@media(width<=760px)]:opacity-25", backdrop ? "[&_img]:object-cover" : "[&_img]:object-contain")} aria-hidden="true">
             <MediaArtwork uri={background} title="" eager />
@@ -79,7 +79,7 @@ export function MediaDetailView({
           {actions && <div className="mt-6 flex flex-wrap items-center gap-3 [&>[data-slot=button]]:min-h-[46px]">{actions}</div>}
         </div>
       </header>
-      <div className={poster ? "grid grid-cols-[minmax(180px,260px)_minmax(0,1fr)] items-start gap-8 [@media(760px<width<=1350px)]:grid-cols-[minmax(160px,220px)_minmax(0,1fr)] [@media(width<=1350px)]:gap-6 [@media(width<=760px)]:grid-cols-[minmax(0,1fr)]" : "min-w-0"}>
+      <div className={cn("relative z-10", background && "-mt-16 [@media(width<=760px)]:mt-0", poster ? "grid grid-cols-[minmax(180px,260px)_minmax(0,1fr)] items-start gap-8 [@media(760px<width<=1350px)]:grid-cols-[minmax(160px,220px)_minmax(0,1fr)] [@media(width<=1350px)]:gap-6 [@media(width<=760px)]:grid-cols-[minmax(0,1fr)]" : "min-w-0")}>
         {poster && (
           <aside className="[@media(width<=760px)]:max-w-[180px]">
             <div className="poster-image aspect-2/3 overflow-hidden rounded-[14px] border border-input bg-muted">

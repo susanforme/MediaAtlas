@@ -7,7 +7,7 @@ import "./window-translations";
 
 export function WindowControls({ chrome }: { chrome: WindowChrome }) {
   const { t } = useTranslation();
-  if (chrome.platform !== "windows") return null;
+  if (chrome.platform !== "windows" && chrome.platform !== "linux") return null;
   const disabled = !chrome.ready || chrome.busy;
   const MaximizeIcon = chrome.maximized ? Copy : Square;
   return (

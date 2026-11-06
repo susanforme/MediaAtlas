@@ -6,30 +6,34 @@ import {
 } from "@tauri-apps/api/window";
 import { useEffect, useRef, useState } from "react";
 
-export type WindowPlatform = "macos" | "windows";
+export type WindowPlatform = "macos" | "windows" | "linux";
 type Session = { platform: WindowPlatform; window: NativeWindow };
 type Operation = "minimize" | "toggleMaximize" | "close";
 
-function currentSession(): Session | null {
+function currentSession(linuxControls: boolean): Session | null {
   if (!isTauri()) return null;
   const identity = navigator.platform || navigator.userAgent;
   const platform = /Mac/i.test(identity)
     ? "macos"
     : /Win/i.test(identity)
       ? "windows"
-      : null;
+      : linuxControls && /Linux/i.test(identity)
+        ? "linux"
+        : null;
   if (!platform) return null;
   try {
     const window = getCurrentWindow();
-    return window.label === "main" ? { platform, window } : null;
+    return window.label === "main" || window.label.startsWith("nfo-")
+      ? { platform, window }
+      : null;
   } catch {
     // Browser IPC fixtures do not have native window metadata.
     return null;
   }
 }
 
-export function useWindowChrome() {
-  const [session] = useState(currentSession);
+export function useWindowChrome({ linuxControls = false }: { linuxControls?: boolean } = {}) {
+  const [session] = useState(() => currentSession(linuxControls));
   const [attempt, setAttempt] = useState(0);
   const attempts = useRef(0);
   const [state, setState] = useState({
@@ -47,7 +51,7 @@ export function useWindowChrome() {
 
   useEffect(() => {
     const epoch = ++scope.current;
-    if (session?.platform !== "windows") return;
+    if (!session || session.platform === "macos") return;
     const native = session.window;
     const unlisten: UnlistenFn[] = [];
     let alive = true;
@@ -115,7 +119,7 @@ export function useWindowChrome() {
   async function perform(operation: Operation) {
     const read = refresh.current;
     if (
-      session?.platform !== "windows" ||
+      !session || session.platform === "macos" ||
       !latestReady.current ||
       locked.current ||
       !read

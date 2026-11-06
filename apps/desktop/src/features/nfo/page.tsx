@@ -2,6 +2,7 @@ import { isTauri } from "@tauri-apps/api/core";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type NfoDocument, nfoApi } from "../../api/nfo";
+import { StandaloneWindow } from "../../components/shell/standalone-window";
 import { Card } from "../../components/ui/card";
 import { Details, DetailsSummary } from "../../components/ui/details";
 import { MediaArtwork } from "../library/media-artwork";
@@ -102,8 +103,8 @@ export function NfoPage() {
 
 export function NfoStandalone() {
   return (
-    <main className="mx-auto min-h-screen max-w-[1440px] overflow-x-clip px-6 py-8 sm:px-10 sm:py-10">
+    <StandaloneWindow linuxControls>
       <NfoPage />
-    </main>
+    </StandaloneWindow>
   );
 }

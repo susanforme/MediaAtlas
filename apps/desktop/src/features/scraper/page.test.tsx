@@ -258,6 +258,7 @@ function clickFirstEnabledCommit(name: string | RegExp) {
 
 async function searchAndChoose() {
   const view = show();
+  fireEvent.click(screen.getByText("Local media item", { selector: "summary span" }));
   const localItem = screen.getByRole("combobox", { name: "Local media item" });
   await waitFor(() => expect(localItem).toBeEnabled());
   selectOptions(localItem);
@@ -281,6 +282,26 @@ async function searchAndChoose() {
   await screen.findByRole("region", { name: "Merge media metadata" });
   return view;
 }
+it("keeps optional local targeting collapsed until requested without sending a provider search", async () => {
+  show();
+  const summary = screen.getByText("Local media item", { selector: "summary span" });
+  const chooser = summary.closest("details");
+  await screen.findByText("TMDB");
+  expect(chooser).not.toHaveAttribute("open");
+  expect(screen.queryByRole("combobox", { name: "Local media item" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Search providers" })).toBeDisabled();
+  fireEvent.click(summary);
+  expect(chooser).toHaveAttribute("open");
+  expect(screen.getByRole("combobox", { name: "Local media item" })).toBeEnabled();
+  expect(screen.getByRole("searchbox", { name: "Find local media" })).toBeInTheDocument();
+  fireEvent.click(summary);
+  expect(chooser).not.toHaveAttribute("open");
+  fireEvent.change(screen.getByLabelText("Title, link or ID"), { target: { value: "Atlas" } });
+  await waitFor(() => expect(screen.getByRole("button", { name: "Search providers" })).toBeEnabled());
+  expect(scraperApi.search).not.toHaveBeenCalled();
+  expect(scraperApi.confirm).not.toHaveBeenCalled();
+  expect(scraperOutputApi.execute).not.toHaveBeenCalled();
+});
 it("keeps search, explicit candidate selection, protected merge and sidecar execution separate", async () => {
   await searchAndChoose();
   expect(scraperApi.confirm).not.toHaveBeenCalled();
@@ -1005,6 +1026,7 @@ it("filters private and unsupported titles out of local target choices", async (
     next_cursor: null,
   });
   show();
+  fireEvent.click(screen.getByText("Local media item", { selector: "summary span" }));
   await waitFor(() =>
     expect(screen.getByLabelText("Local media item")).toBeEnabled(),
   );

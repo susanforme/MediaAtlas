@@ -52,7 +52,11 @@ impl NfoState {
             if label == "main" { continue; }
             let result = tauri::WebviewWindowBuilder::new(app, &label, tauri::WebviewUrl::App("index.html".into()))
                 .title(title).inner_size(1120.0, 760.0).min_inner_size(480.0, 360.0)
-                .decorations(true).build();
+                .decorations(true)
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .traffic_light_position(tauri::LogicalPosition::new(16.0, 18.0))
+                .build();
             if result.is_err() {
                 self.forget(&label);
                 eprintln!("The NFO preview window could not be opened.");
@@ -78,11 +82,10 @@ pub async fn nfo_startup_mode(window: tauri::WebviewWindow) -> Result<ApiRespons
         if window.label() == "main" { windows.main_decided = true; }
         drop(windows);
         if let Some(path) = preview {
-            window.set_decorations(true).map_err(|_| failure("internal_error"))?;
-            #[cfg(target_os = "macos")]
-            window.set_title_bar_style(tauri::TitleBarStyle::Visible).map_err(|_| failure("internal_error"))?;
             window.set_title(&path.file_name().unwrap_or_default().to_string_lossy())
                 .map_err(|_| failure("internal_error"))?;
+            #[cfg(not(target_os = "macos"))]
+            window.set_decorations(false).map_err(|_| failure("internal_error"))?;
             return Ok(ApiResponse::new(true));
         }
         if window.label() != "main" { return Err(failure("invalid_input")); }

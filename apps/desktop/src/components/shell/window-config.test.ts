@@ -36,11 +36,11 @@ it("removes only platform caption chrome while preserving configured window geom
   });
 });
 
-it("grants only local main-window caption and drag operations on macOS and Windows", () => {
+it("grants only local main and NFO preview caption and drag operations", () => {
   const capability = config("capabilities/window-chrome.json");
-  expect(capability.windows).toEqual(["main"]);
+  expect(capability.windows).toEqual(["main", "nfo-*"]);
   expect(capability.local).toBe(true);
-  expect(capability.platforms.sort()).toEqual(["macOS", "windows"]);
+  expect(capability.platforms.sort()).toEqual(["linux", "macOS", "windows"]);
   expect(capability.remote).toBeUndefined();
   expect(capability.permissions.sort()).toEqual(
     [

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { isNfoStartup } from "./api/nfo";
 import { App } from "./app";
+import { StandaloneWindow } from "./components/shell/standalone-window";
 import { ErrorNotice } from "./features/library/shared";
 import { NfoStandalone } from "./features/nfo/page";
 import i18n from "./i18n";
@@ -19,10 +20,11 @@ async function start() {
     <StrictMode>{nfo ? <NfoStandalone /> : <App />}</StrictMode>,
   );
 }
-void start().catch((error: unknown) => {
+function renderStartupError(error: unknown) {
   appRoot.render(
-    <main className="p-6">
-      <ErrorNotice error={error} retry={() => window.location.reload()} />
-    </main>,
+    <StandaloneWindow>
+      <ErrorNotice error={error} retry={() => void start().catch(renderStartupError)} />
+    </StandaloneWindow>,
   );
-});
+}
+void start().catch(renderStartupError);

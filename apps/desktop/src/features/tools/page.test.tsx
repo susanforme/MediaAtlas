@@ -5,6 +5,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { I18nextProvider } from "react-i18next";
 import { beforeEach, expect, it, vi } from "vitest";
@@ -233,8 +234,10 @@ it("saves the explicit watching choice and checks health only on request", async
   });
   show(<MediaToolsPage search={{ view: "health" }} />);
   const checkbox = await screen.findByRole("checkbox", {
-    name: "Watch this root: Target",
+    name: "Target",
   });
+  expect(screen.getByRole("heading", { level: 1, name: "Checks and monitoring" })).toBeInTheDocument();
+  expect(screen.getByText("Not checked yet")).toBeInTheDocument();
   expect(checkbox).not.toBeChecked();
   expect(maintenanceApi.configure).not.toHaveBeenCalled();
   expect(maintenanceApi.health).not.toHaveBeenCalled();
@@ -249,6 +252,52 @@ it("saves the explicit watching choice and checks health only on request", async
     screen.getByRole("link", { name: "Review in media tools" }),
   ).toHaveAttribute("href", "/tools?media=media");
   expect(api.execute).not.toHaveBeenCalled();
+});
+
+it("distinguishes an unchecked library, a running check and an empty completed batch", async () => {
+  let finish!: (value: { items: []; next_cursor: null }) => void;
+  vi.mocked(maintenanceApi.health).mockReturnValueOnce(new Promise((resolve) => { finish = resolve; }));
+  show(<MediaToolsPage search={{ view: "health" }} />);
+  await screen.findByRole("checkbox", { name: "Target" });
+  const section = screen.getByRole("region", { name: "Library health" });
+  expect(within(section).getByRole("status")).toHaveTextContent("Not checked yet");
+  fireEvent.click(within(section).getByRole("button", { name: "Check library health" }));
+  expect(section).toHaveAttribute("aria-busy", "true");
+  expect(within(section).getByRole("status")).toHaveTextContent("Checking library…");
+  expect(within(section).getByRole("button", { name: "Check library health" })).toBeDisabled();
+  await act(async () => finish({ items: [], next_cursor: null }));
+  expect(within(section).getByRole("status")).toHaveTextContent("No health findings in this batch");
+  expect(section).toHaveAttribute("aria-busy", "false");
+  expect(maintenanceApi.health).toHaveBeenCalledTimes(1);
+  expect(api.execute).not.toHaveBeenCalled();
+});
+
+it("retries the failed health-results batch only after an explicit retry", async () => {
+  vi.mocked(maintenanceApi.health)
+    .mockResolvedValueOnce({ items: [], next_cursor: "next-health-batch" })
+    .mockRejectedValueOnce(new Error("private diagnostic detail"))
+    .mockResolvedValueOnce({ items: [], next_cursor: null });
+  show(<MediaToolsPage search={{ view: "health" }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Check library health" }));
+  fireEvent.click(await screen.findByRole("button", { name: "More findings" }));
+  await screen.findByRole("alert");
+  expect(screen.queryByText("private diagnostic detail")).not.toBeInTheDocument();
+  expect(maintenanceApi.health).toHaveBeenCalledTimes(2);
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+  await waitFor(() => expect(maintenanceApi.health).toHaveBeenCalledTimes(3));
+  expect(vi.mocked(maintenanceApi.health).mock.calls.map(([cursor]) => cursor)).toEqual([null, "next-health-batch", "next-health-batch"]);
+  await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+  expect(api.execute).not.toHaveBeenCalled();
+});
+
+it("provides directory management when no folders can be watched", async () => {
+  vi.mocked(libraryApi.roots).mockResolvedValueOnce([]);
+  vi.mocked(maintenanceApi.watchers).mockResolvedValueOnce([]);
+  show(<MediaToolsPage search={{ view: "health" }} />);
+  expect(await screen.findByText("No folders available for watching")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Library roots" })).toHaveAttribute("href", "/roots");
+  expect(maintenanceApi.configure).not.toHaveBeenCalled();
+  expect(maintenanceApi.health).not.toHaveBeenCalled();
 });
 
 it("freezes target and other planning actions while Preview or rollback Preview is pending", async () => {

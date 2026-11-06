@@ -68,7 +68,7 @@ export function OrdinaryCandidates({
       selectPage.current.indeterminate = someSelected && !allSelected;
   }, [someSelected, allSelected]);
   return (
-    <section ref={workspacePanel} className="min-w-0 space-y-5">
+    <section ref={workspacePanel} className="min-w-0 space-y-4">
       <CandidateFilters
         search={browser.search}
         roots={browser.roots.data ?? []}
@@ -166,11 +166,12 @@ export function OrdinaryCandidates({
       ) : browser.media.data.items.length === 0 ? (
         <Empty title={t("noResults")} />
       ) : (
-        <Table className="min-w-[580px]">
+        <div className="[&>[data-slot=table-container]]:rounded-none [&>[data-slot=table-container]]:border-x-0 [&>[data-slot=table-container]]:border-t-0 [&>[data-slot=table-container]]:bg-transparent">
+        <Table className="min-w-[620px] [&_th]:h-10 [&_td]:py-3">
           <TableHeader>
             <TableRow>
               {!browser.adult && (
-                <TableHead>
+                <TableHead className="w-11 pl-3 pr-0">
                   <Checkbox
                     ref={selectPage}
                     checked={allSelected}
@@ -182,9 +183,9 @@ export function OrdinaryCandidates({
                   />
                 </TableHead>
               )}
-              <TableHead>{t("titleLabel")}</TableHead>
-              <TableHead>{t("health")}</TableHead>
-              <TableHead>{t("toolsActions")}</TableHead>
+              <TableHead className="min-w-[220px] pl-3">{t("titleLabel")}</TableHead>
+              <TableHead className="w-44">{t("health")}</TableHead>
+              <TableHead className="w-[240px] text-right">{t("toolsActions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -198,7 +199,7 @@ export function OrdinaryCandidates({
                 }
               >
                 {!browser.adult && (
-                  <TableCell>
+                  <TableCell className="pl-3 pr-0">
                     <Checkbox
                       checked={selectedIds.includes(card.media.id)}
                       disabled={!isSelectableCandidate(card)}
@@ -211,7 +212,7 @@ export function OrdinaryCandidates({
                     />
                   </TableCell>
                 )}
-                <TableCell>
+                <TableCell className="pl-3">
                   <div className="flex min-w-0 items-center gap-3">
                     <div aria-hidden="true" className="aspect-2/3 w-10 shrink-0 overflow-hidden rounded-md bg-muted [&_[data-slot=poster-placeholder]>span]:hidden [&_[data-slot=poster-placeholder]_svg]:size-4">
                       <MediaArtwork uri={card.poster_uri} title="" />
@@ -222,7 +223,7 @@ export function OrdinaryCandidates({
                     </div>
                   </div>
                 </TableCell>
-                <TableCell className="max-w-[280px]">
+                <TableCell className="max-w-[220px] text-muted-foreground">
                   {card.health.length ? (
                     <HealthBadges health={card.health} />
                   ) : (
@@ -230,10 +231,11 @@ export function OrdinaryCandidates({
                   )}
                 </TableCell>
                 <TableCell>
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-1.5">
                   <Button
                     variant="ghost"
                     size="sm"
+                    className="h-8 px-2.5 text-xs"
                     disabled={selectedIds.length > 0}
                     aria-label={
                       browser.adult
@@ -248,7 +250,7 @@ export function OrdinaryCandidates({
                     {t(browser.adult ? "scraperThisMedia" : "toolsView")}
                   </Button>
                   {!browser.adult && isSelectableCandidate(card) ? (
-                    <Button asChild variant="outline" size="sm" className="aria-disabled:pointer-events-none aria-disabled:opacity-45">
+                    <Button asChild variant="outline" size="sm" className="h-8 px-2.5 text-xs aria-disabled:pointer-events-none aria-disabled:opacity-45">
                       <Link to="/scraper" search={{ media: card.media.id }} disabled={selectedIds.length > 0}>
                         {t("scraperThisMedia")}
                       </Link>
@@ -260,10 +262,15 @@ export function OrdinaryCandidates({
             ))}
           </TableBody>
         </Table>
+        </div>
       )}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <nav aria-label={t("toolsPagination")} className="flex flex-wrap items-center justify-end gap-2 pt-1">
+        <span className="mr-2 text-sm text-muted-foreground">
+          {t("page", { page: browser.page })}
+        </span>
         <Button
           variant="outline"
+          size="sm"
           disabled={
             !browser.allowed || browser.page <= 1 || browser.media.isPending
           }
@@ -271,11 +278,9 @@ export function OrdinaryCandidates({
         >
           {t("toolsBack")}
         </Button>
-        <span className="text-sm text-muted-foreground">
-          {t("page", { page: browser.page })}
-        </span>
         <Button
           variant="outline"
+          size="sm"
           disabled={
             !browser.allowed ||
             browser.media.isPending ||
@@ -285,7 +290,7 @@ export function OrdinaryCandidates({
         >
           {t("toolsMore")}
         </Button>
-      </div>
+      </nav>
     </section>
   );
 }

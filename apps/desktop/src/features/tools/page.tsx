@@ -1,5 +1,6 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { Activity, CheckCircle2, FileVideo, LoaderCircle } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { adultApi } from "../../api/adult";
@@ -17,7 +18,7 @@ import { Details, DetailsSummary } from "../../components/ui/details";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
-import { Empty, ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { OrdinaryCandidates } from "./ordinary-candidates";
 import { ToolsSectionNavigation } from "./section-navigation";
 import { type ToolsRouteSearch, validateToolsRouteSearch } from "./search";
@@ -61,9 +62,8 @@ export function OrganizationPanel({
     discard,
   } = useOrganization(mediaId, adult);
   return (
-    <Card asChild>
-      <section className="space-y-4">
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(150px,100%),1fr))] gap-4">
+      <section className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_minmax(140px,0.8fr)]">
           <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
             <span>{t("organizeTarget")}</span>
             <Select
@@ -224,16 +224,17 @@ export function OrganizationPanel({
           .map((e, index) => (
             <ErrorNotice key={String(index)} error={e} />
           ))}
-        <h3>{t("organizeHistory")}</h3>
-        <ul>
+        {Boolean(history.data?.length) && <section className="border-t border-border pt-4">
+        <h3 className="mb-3 text-sm font-medium">{t("organizeHistory")}</h3>
+        <ul className="divide-y divide-border text-sm">
           {history.data?.map((h) => (
-            <li key={h.id} className="py-2">
+            <li key={h.id} className="flex flex-wrap items-center gap-2 py-3">
               <p>
                 {h.id} · {t(`state_${h.state}`, { defaultValue: h.state })} ·{" "}
                 {h.completed}
                 {h.error_code ? ` · ${h.error_code}` : ""}
               </p>
-              <Button variant="outline" onClick={() => setHistoryId(h.id)}>
+              <Button variant="ghost" size="sm" onClick={() => setHistoryId(h.id)}>
                 {t("organizeLog")}
               </Button>
               {["succeeded", "failed", "interrupted", "cancelled"].includes(
@@ -241,6 +242,7 @@ export function OrganizationPanel({
               ) && (
                 <Button
                   variant="outline"
+                  size="sm"
                   disabled={
                     preview.isPending ||
                     restore.isPending ||
@@ -255,6 +257,7 @@ export function OrganizationPanel({
             </li>
           ))}
         </ul>
+        </section>}
         {historyId && (
           <section className="space-y-2">
             <h3>
@@ -282,7 +285,6 @@ export function OrganizationPanel({
           </section>
         )}
       </section>
-    </Card>
   );
 }
 export function LocalCandidates({
@@ -353,7 +355,7 @@ function LocalCandidateDetail({
     return <ErrorNotice error={new DesktopError("invalid_response")} />;
   return (
     <>
-      <Card asChild>
+      <Card asChild className="bg-muted/20 p-4 sm:p-5">
         <section>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-semibold">{detail.data.media.title}</h2>
@@ -362,31 +364,32 @@ function LocalCandidateDetail({
                 ["movie", "tv_series", "anime"].includes(
                   detail.data.media.kind,
                 ) && (
-                  <Button asChild>
+                  <Button asChild size="sm">
                     <Link to="/scraper" search={{ media: mediaId }}>
                       {t("scraperThisMedia")}
                     </Link>
                   </Button>
                 )}
               {onClose && (
-                <Button variant="ghost" onClick={onClose}>
+                <Button variant="ghost" size="sm" onClick={onClose}>
                   {t("toolsCloseDetail")}
                 </Button>
               )}
             </div>
           </div>
-          <ul>
+          <ul className="divide-y divide-border text-sm">
             {detail.data.files.map((file) => (
-              <li className="break-all" key={file.id}>
-                {file.relative_path}
+              <li className="flex items-start gap-2.5 py-2 first:pt-0 last:pb-0" key={file.id}>
+                <FileVideo size={16} className="mt-0.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+                <span className="min-w-0 break-all">{file.relative_path}</span>
               </li>
             ))}
           </ul>
         </section>
       </Card>
-      <Details>
-        <DetailsSummary>{t("organize")}</DetailsSummary>
-        <div className="mt-4"><OrganizationPanel key={mediaId} mediaId={mediaId} adult={adult} /></div>
+      <Details className="bg-muted/20 p-4 sm:px-5">
+        <DetailsSummary className="font-medium">{t("organize")}</DetailsSummary>
+        <div className="mt-5 border-t border-border pt-5"><OrganizationPanel key={mediaId} mediaId={mediaId} adult={adult} /></div>
       </Details>
       {adult && (
         <Suspense fallback={<Loading />}>
@@ -419,15 +422,15 @@ function Maintenance({ search }: { search: ToolsRouteSearch }) {
     mutationFn: (next: string | null) => maintenanceApi.health(next),
   });
   return (
-    <>
-      <Card asChild>
-        <section className="space-y-4">
-          <h2 className="mb-4 font-semibold">{t("watcherTitle")}</h2>
-          <p className="text-sm leading-relaxed text-muted-foreground">{t("watcherHelp")}</p>
-          {watchers.isPending && <Loading />}
+    <div className="space-y-8">
+        <section aria-labelledby="tools-watchers" className="border-t border-border pt-6">
+          <h2 id="tools-watchers" className="text-lg font-semibold">{t("watcherTitle")}</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">{t("watcherHelp")}</p>
+          {watchers.isPending && <p role="status" className="py-6 text-sm text-muted-foreground">{t("loading")}</p>}
+          <ul className="mt-4 divide-y divide-border">
           {watchers.data?.map((w) => (
-            <div key={w.root_id} className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-4 last:border-0">
-              <Label className="flex items-center gap-3">
+            <li key={w.root_id} className="flex flex-wrap items-center justify-between gap-3 py-4">
+              <Label className="flex min-w-0 items-center gap-3 text-sm font-medium">
                 <Checkbox
                   checked={w.opted_in}
                   disabled={configure.isPending}
@@ -435,7 +438,6 @@ function Maintenance({ search }: { search: ToolsRouteSearch }) {
                     configure.mutate({ id: w.root_id, enabled: e.target.checked })
                   }
                 />
-                {t("watcherEnable")}:{" "}
                 {roots.data?.find((r) => r.id === w.root_id)?.name ?? t("root")}
               </Label>
               <div className="flex flex-wrap gap-2">
@@ -443,33 +445,40 @@ function Maintenance({ search }: { search: ToolsRouteSearch }) {
                 {w.pending_rescan && <Badge variant="secondary">{t("watcherPending")}</Badge>}
                 {w.error_code && <Badge variant="destructive">{t("watcherError")}</Badge>}
               </div>
-            </div>
+            </li>
           ))}
-          {watchers.error && <ErrorNotice error={watchers.error} />}
+          </ul>
+          {watchers.error && <ErrorNotice error={watchers.error} retry={() => void watchers.refetch()} />}
           {configure.error && <ErrorNotice error={configure.error} />}
           {roots.error && <ErrorNotice error={roots.error} retry={() => void roots.refetch()} />}
-          {watchers.isSuccess && watchers.data.length === 0 && <Button asChild variant="outline"><Link to="/roots">{t("roots")}</Link></Button>}
+          {watchers.isSuccess && watchers.data.length === 0 && (
+            <div className="flex flex-wrap items-center gap-4 py-4">
+              <p className="text-sm text-muted-foreground">{t("toolsWatchersEmpty")}</p>
+              <Button asChild variant="outline" size="sm"><Link to="/roots">{t("roots")}</Link></Button>
+            </div>
+          )}
         </section>
-      </Card>
-      <Card asChild>
-        <section className="space-y-4">
+        <section aria-labelledby="tools-health" aria-busy={health.isPending} className="space-y-4 border-t border-border pt-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-semibold">{t("healthIssues")}</h2>
+            <h2 id="tools-health" className="text-lg font-semibold">{t("healthIssues")}</h2>
             <Button
+              size="sm"
               disabled={health.isPending}
               onClick={() => {
                 setCursor(null);
                 health.mutate(null);
               }}
             >
+              {health.isPending && <LoaderCircle size={15} className="motion-safe:animate-spin" aria-hidden="true" />}
               {t("healthCheck")}
             </Button>
           </div>
-          {health.error && <ErrorNotice error={health.error} />}
-          {health.isPending && <Loading />}
-          {health.isSuccess && health.data.items.length === 0 && <Empty title={t("toolsHealthClear")} />}
-          <ul className="divide-y divide-border">
-            {health.data?.items.map((i) => (
+          {health.error && <ErrorNotice error={health.error} retry={() => health.mutate(cursor)} />}
+          {health.isIdle && <p role="status" className="flex items-center gap-3 py-4 text-sm text-muted-foreground"><Activity size={18} aria-hidden="true" />{t("toolsHealthIdle")}</p>}
+          {health.isPending && <p role="status" className="py-4 text-sm text-muted-foreground">{t("toolsHealthChecking")}</p>}
+          {health.isSuccess && health.data.items.length === 0 && <p role="status" className="flex items-center gap-3 py-4 text-sm text-muted-foreground"><CheckCircle2 size={18} aria-hidden="true" />{t("toolsHealthClear")}</p>}
+          {health.isSuccess && <ul className="divide-y divide-border">
+            {health.data.items.map((i) => (
               <li className="flex flex-wrap items-center justify-between gap-3 py-4" key={i.media_id}>
                 <div className="min-w-0 space-y-2">
                   <p className="font-medium wrap-anywhere">{i.title}</p>
@@ -480,9 +489,11 @@ function Maintenance({ search }: { search: ToolsRouteSearch }) {
                 <Button asChild variant="outline" size="sm"><Link to="/tools" search={{ ...search, view: undefined, media: i.media_id }}>{t("toolsRepair")}</Link></Button>
               </li>
             ))}
-          </ul>
-          {health.data?.next_cursor && (
+          </ul>}
+          {health.isSuccess && health.data.next_cursor && (
             <Button
+              variant="outline"
+              size="sm"
               disabled={health.isPending}
               onClick={() => {
                 const next = health.data?.next_cursor ?? cursor;
@@ -494,8 +505,7 @@ function Maintenance({ search }: { search: ToolsRouteSearch }) {
             </Button>
           )}
         </section>
-      </Card>
-    </>
+    </div>
   );
 }
 export function MediaToolsPage({
@@ -532,15 +542,17 @@ function MediaToolsWorkspace({
 
   return (
     <>
-      <PageHeading title={t("videoTools")}>
-        <Button asChild variant="outline">
+      <PageHeading title={t(!adult && context.view === "health" ? "toolsHealth" : "toolsLocal")}>
+        <div className="flex flex-wrap items-center gap-2">
+        <Button asChild variant="outline" size="sm">
           <Link to="/scanner">{t("scanner")}</Link>
         </Button>
-        <Button asChild variant="outline">
+        <Button asChild variant="outline" size="sm">
           <Link to="/library" search={{ kind: search?.kind }}>
             {t("library")}
           </Link>
         </Button>
+        </div>
       </PageHeading>
       <ToolsSectionNavigation current={context.view === "health" ? "health" : "local"} search={context} />
       {adult || context.view !== "health" ? (

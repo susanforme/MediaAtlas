@@ -6,6 +6,7 @@ import i18n from "../../i18n";
 import { NfoPage, NfoStandalone } from "./page";
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
+vi.mock("@tauri-apps/api/window", () => ({ getCurrentWindow: () => ({ label: "nfo-11111111-1111-4111-8111-111111111111" }) }));
 vi.mock("../../api/nfo", () => ({ nfoApi: { takeOpened: vi.fn() } }));
 
 const document: NfoDocument = {
@@ -15,15 +16,19 @@ const document: NfoDocument = {
 };
 
 beforeEach(async () => {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
   vi.mocked(nfoApi.takeOpened).mockReset().mockResolvedValue(null);
   await i18n.changeLanguage("en-US");
 });
 
-it("shows only core content in an independent window without shell controls", async () => {
+it("shows core content with a dedicated draggable titlebar and no application shell", async () => {
   vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce(document);
   const { container } = render(<NfoStandalone />);
   await screen.findByRole("heading", { name: "Atlas" });
   expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
+  expect(screen.getByRole("banner")).toHaveAttribute("data-slot", "window-titlebar");
+  expect(screen.getByRole("banner")).toHaveAttribute("data-tauri-drag-region", "deep");
+  expect(screen.getByRole("banner")).toHaveAttribute("data-window-platform", "macos");
   expect(container.querySelector('[data-slot="app-shell"],nav,.app-toolbar')).toBeNull();
   expect(screen.queryByRole("button", { name: "Open NFO" })).not.toBeInTheDocument();
   expect(container.querySelector("img,video,audio,iframe")).toBeNull();

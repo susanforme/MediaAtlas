@@ -4,8 +4,10 @@ const values = {
   "zh-CN": {
     reviewQueues: "已保存的核对队列",
     reviewResume: "继续核对",
-    reviewSummary:
-      "{{count}} 项 · 已确认 {{confirmed}} 项 · 暂缓 {{deferred}} 项 · 失败 {{failed}} 项",
+    reviewItemCount: "{{count}} 项",
+    reviewCount_confirmed: "已确认 {{count}} 项",
+    reviewCount_deferred: "暂缓 {{count}} 项",
+    reviewCount_failed: "失败 {{count}} 项",
     reviewState_pending: "待核对",
     reviewState_deferred: "已暂缓",
     reviewState_confirmed: "已确认",
@@ -27,8 +29,10 @@ const values = {
   "en-US": {
     reviewQueues: "Saved review queues",
     reviewResume: "Resume review",
-    reviewSummary:
-      "{{count}} items · {{confirmed}} confirmed · {{deferred}} deferred · {{failed}} failed",
+    reviewItemCount: "{{count}} items",
+    reviewCount_confirmed: "{{count}} confirmed",
+    reviewCount_deferred: "{{count}} deferred",
+    reviewCount_failed: "{{count}} failed",
     reviewState_pending: "Pending review",
     reviewState_deferred: "Deferred",
     reviewState_confirmed: "Confirmed",

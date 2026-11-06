@@ -209,7 +209,7 @@ function ScraperWorkspace({
   if (review && !review.canWork)
     return (
       <>
-        <PageHeading title={t("scraper")} />
+        <PageHeading title={t("toolsScraper")} />
         {reviewNavigation}
         {recovery}
         {error && error !== run.error && error !== restore.error && (
@@ -219,10 +219,7 @@ function ScraperWorkspace({
     );
   return (
     <>
-      <PageHeading
-        title={t(metadata ? "mergeTitle" : "scraper")}
-        description={metadata ? t("mergeDescription") : undefined}
-      />
+      <PageHeading title={t(metadata ? "mergeTitle" : "toolsScraper")} />
       {reviewNavigation}
       {queue && mediaId && (
         <ScraperQueueNavigation
@@ -236,7 +233,7 @@ function ScraperWorkspace({
         />
       )}
       <div hidden={Boolean(metadata && validTarget)}>
-          <section className="mb-5 space-y-3 border-b border-border pb-4 [&_[data-slot=input]]:h-9 [&_[data-slot=select]]:h-9">
+          <section className="mb-4 space-y-3 rounded-xl border border-border bg-surface/40 px-4 py-3 [&_[data-slot=input]]:h-9 [&_[data-slot=select]]:h-9">
             {mediaId ? (
               targetDetail.isPending ? (
                 <Loading />
@@ -251,9 +248,16 @@ function ScraperWorkspace({
                 </div>
               ) : null
             ) : (
-              <>
+              <Details className="rounded-none border-0 p-0">
+                <DetailsSummary className="text-sm [&::marker]:text-muted-foreground">
+                  <span>{t("scraperTarget")}</span>
+                  <span className="ml-3 font-normal text-muted-foreground">
+                    {validTarget ? targetDetail.data?.media.title : t("scraperAnonymous")}
+                  </span>
+                </DetailsSummary>
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
                 <form
-                  className="flex max-w-2xl flex-wrap items-end gap-3"
+                  className="flex min-w-0 flex-wrap items-end gap-2"
                   onSubmit={(event) => {
                     event.preventDefault();
                     setLocalQuery(localSearch.trim());
@@ -271,7 +275,7 @@ function ScraperWorkspace({
                     {t("scraperLocalSearch")}
                   </Button>
                 </form>
-                <Label className="flex min-w-0 max-w-2xl flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
+                <Label className="flex min-w-0 flex-col gap-2 text-[13px] leading-[var(--text-sm--line-height)]">
                   <span>{t("scraperTarget")}</span>
                   <Select
                     value={target}
@@ -289,11 +293,12 @@ function ScraperWorkspace({
                       ))}
                   </Select>
                 </Label>
+                </div>
                 {local.isPending && <Loading />}
                 {local.error && <ErrorNotice error={local.error} />}
-                {targetDetail.error && <ErrorNotice error={targetDetail.error} />}
-              </>
+              </Details>
             )}
+            {!mediaId && targetDetail.error && <ErrorNotice error={targetDetail.error} />}
             {target && targetDetail.data && !validTarget && (
               <Alert asChild variant="destructive">
                 <p role="alert">
@@ -305,7 +310,7 @@ function ScraperWorkspace({
         {snapshot.isPending && <Loading />}
         {snapshot.error && <ErrorNotice error={snapshot.error} />}
           <form
-            className="max-w-5xl pb-5 [&_[data-slot=input]]:h-9 [&_[data-slot=select]]:h-9"
+            className="rounded-xl border border-border bg-surface/40 p-4 sm:p-5 [&_[data-slot=input]]:h-10 [&_[data-slot=select]]:h-10"
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
@@ -318,7 +323,7 @@ function ScraperWorkspace({
                 run.mutate();
               }
             }}>
-            <div className="grid grid-cols-[minmax(0,1fr)_160px_100px] items-end gap-3 [@media(max-width:640px)]:grid-cols-[minmax(0,1fr)_100px] [@media(max-width:640px)]:[&>:first-child]:col-span-full">
+            <div className="grid grid-cols-[minmax(0,1fr)_140px_100px_auto] items-end gap-3 [@media(max-width:1050px)]:grid-cols-[minmax(0,1fr)_100px] [@media(max-width:1050px)]:[&>:first-child]:col-span-full">
               <Label className="flex min-w-0 flex-col gap-[5px] text-[13px] leading-[var(--text-sm--line-height)]">
                 <span>{t("scraperTitle")}</span>
                 <Input
@@ -372,6 +377,13 @@ function ScraperWorkspace({
                   disabled={busy}
                 />
               </Label>
+              <Button
+                className="h-10 [@media(max-width:1050px)]:col-span-full"
+                type="submit"
+                disabled={busy || !snapshot.data || !searchValid}
+              >
+                {run.isPending ? t("scraperSearching") : t("scraperSearch")}
+              </Button>
             </div>
             {selectedProviders.includes("wikipedia.html") && (
               <p
@@ -404,16 +416,16 @@ function ScraperWorkspace({
                 </Label>
               </div>
             </Details>
-            <fieldset className="my-4">
-              <legend className="mb-2 font-medium">
+            <fieldset className="mt-4 border-t border-border pt-4">
+              <legend className="px-1 text-xs font-medium text-muted-foreground">
                 {t("scraperProviders")}
               </legend>
-              <div className="flex flex-wrap gap-5">
-                {providerChoices.map((id) => (
-                  <Label key={id} className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+                {providerChoices.filter(available).map((id) => (
+                  <Label key={id} className="flex min-h-8 items-center gap-2 text-sm">
                     <Checkbox
                       checked={selectedProviders.includes(id)}
-                      disabled={busy || !available(id)}
+                      disabled={busy}
                       onChange={(e) =>
                         setProviders((old) =>
                           e.target.checked
@@ -422,20 +434,14 @@ function ScraperWorkspace({
                         )
                       }
                     />
-                    <span>
-                      {providerNames[id]}{" "}
-                      {providerState(id) !== "ready" &&
-                        `(${t(`scraperProviderState_${providerState(id)}`)})`}
-                    </span>
+                    <span>{providerNames[id]}</span>
                   </Label>
                 ))}
-              </div>
-            </fieldset>
             {providerChoices.some((id) =>
               ["disabled", "credentials"].includes(providerState(id)),
             ) && (
-              <div className="mb-4 flex flex-wrap gap-3">
-                <Button asChild variant="outline" size="sm">
+              <div className="flex flex-wrap gap-1 sm:ml-auto">
+                <Button asChild variant="ghost" size="sm">
                   <Link
                     to="/settings"
                     search={{
@@ -449,7 +455,7 @@ function ScraperWorkspace({
                     {t("scraperConfigureProviders")}
                   </Link>
                 </Button>
-                <Button asChild variant="outline" size="sm">
+                <Button asChild variant="ghost" size="sm">
                   <Link
                     to="/settings"
                     search={{
@@ -466,6 +472,16 @@ function ScraperWorkspace({
                 </Button>
               </div>
             )}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                {providerChoices.filter((id) => !available(id)).map((id) => (
+                  <Label key={id} className="flex min-h-7 items-center gap-2 text-xs font-normal text-muted-foreground">
+                    <Checkbox checked={selectedProviders.includes(id)} disabled />
+                    <span>{providerNames[id]} ({t(`scraperProviderState_${providerState(id)}`)})</span>
+                  </Label>
+                ))}
+              </div>
+            </fieldset>
             {invalid && (
               <Alert asChild variant="destructive">
                 <p role="alert" className="mb-3">
@@ -473,15 +489,9 @@ function ScraperWorkspace({
                 </p>
               </Alert>
             )}
-            <Button
-              type="submit"
-              disabled={busy || !snapshot.data || !searchValid}
-            >
-              {run.isPending ? t("scraperSearching") : t("scraperSearch")}
-            </Button>
             {(run.isPending || restore.isPending) && (
               <Button
-                className="ml-3"
+                className="mt-3"
                 variant="outline"
                 onClick={() => {
                   clearDetail();
@@ -500,16 +510,17 @@ function ScraperWorkspace({
           </div>
         )}
         {search && (
-          <section className="mt-7" aria-labelledby="scraper-results">
-            <h2 id="scraper-results" className="text-lg font-semibold">
-              {t("scraperResults")}
-            </h2>
-            <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(min(100%,16rem),1fr))] gap-4">
+          <section className="mt-6" aria-labelledby="scraper-results">
+            <div className="flex items-center gap-3">
+              <h2 id="scraper-results" className="text-lg font-semibold">{t("scraperResults")}</h2>
+              <span className="text-sm text-muted-foreground">{format.number(search.candidates.length)} {t("candidates")}</span>
+            </div>
+            <div className="mt-3 grid grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-3">
               {search.candidates.map((c, index) => (
                 <Card
                   asChild
                   key={index}
-                  className={candidateIndex === index ? "border-primary shadow-[0_0_0_1px_var(--color-primary)]" : ""}
+                  className={`flex flex-col p-4 sm:p-4 ${candidateIndex === index ? "border-primary shadow-[0_0_0_1px_var(--color-primary)]" : ""}`}
                 >
                   <article>
                     <h3 className="font-semibold">
@@ -538,7 +549,7 @@ function ScraperWorkspace({
                       </p>
                     )}
                     <Button
-                      className="mt-4"
+                      className="mt-4 self-start"
                       variant="outline"
                       disabled={busy}
                       onClick={() => selectCandidate(index)}
@@ -579,8 +590,8 @@ function ScraperWorkspace({
       )}
       {output && (
         <Card asChild>
-          <section className="mt-7" aria-labelledby="scraper-output">
-            <h2 id="scraper-output" className="text-lg font-semibold">
+          <section className="mt-6" aria-labelledby="scraper-output">
+            <h2 id="scraper-output" className="text-base font-semibold">
               {t("scraperOutputTitle")}
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -594,62 +605,64 @@ function ScraperWorkspace({
                 )}
                 <div className="mt-[0.7rem] grid grid-cols-2 gap-4 [&_pre]:max-h-80 [&_pre]:overflow-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:text-[0.75rem] [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere] [@media(max-width:640px)]:grid-cols-[1fr]">
                   <div>
-                    <h4>{t("scraperOld")}</h4>
+                    <h4 className="mb-2 text-xs font-medium text-muted-foreground">{t("scraperOld")}</h4>
                     <pre>{file.old_text ?? t("none")}</pre>
                   </div>
                   <div>
-                    <h4>{t("scraperNew")}</h4>
+                    <h4 className="mb-2 text-xs font-medium text-muted-foreground">{t("scraperNew")}</h4>
                     <pre>{file.new_text ?? file.content_hash}</pre>
                   </div>
                 </div>
               </article>
             ))}
-            <Button
-              className="mt-4"
-              disabled={busy || write.isSuccess || output.files.length === 0}
-              onClick={() => write.mutate()}
-            >
-              {t("scraperOutputExecute")}
-            </Button>
-            <Button
-              className="mt-4 ml-3"
-              variant="outline"
-              disabled={busy}
-              onClick={() => discard.mutate()}
-            >
-              {t("scraperOutputDiscard")}
-            </Button>
+            <div className="mt-5 flex flex-wrap gap-3 border-t border-border pt-4">
+              <Button
+                className="w-full sm:w-auto"
+                disabled={busy || write.isSuccess || output.files.length === 0}
+                onClick={() => write.mutate()}
+              >
+                {t("scraperOutputExecute")}
+              </Button>
+              <Button
+                className="w-full sm:w-auto"
+                variant="outline"
+                disabled={busy}
+                onClick={() => discard.mutate()}
+              >
+                {t("scraperOutputDiscard")}
+              </Button>
+            </div>
           </section>
         </Card>
       )}
       {!metadata && (
-        <Card asChild>
-          <section className="mt-7" aria-labelledby="scraper-history">
-            <h2 id="scraper-history" className="text-lg font-semibold">
+          <section className="mt-6 border-t border-border pt-5" aria-labelledby="scraper-history">
+            <h2 id="scraper-history" className="text-base font-semibold">
               {t("scraperHistory")}
             </h2>
+            {history.isPending && <Loading />}
             {history.error && <ErrorNotice error={history.error} />}
-            <ul className="mt-3 space-y-2">
+            <ul className="mt-3 divide-y divide-border">
               {history.data?.map((entry) => (
                 <li
                   key={entry.id}
-                  className="flex flex-wrap justify-between gap-2 text-sm"
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3 text-sm"
                 >
-                  <span>
+                  <span className="min-w-0 flex-1 break-words">
                     {entry.query.title ||
                       entry.query.external_ids
                         .map((id) => `${id.namespace}:${id.value}`)
                         .join(" · ")}{" "}
                     · {format.date(entry.created_at)}
                   </span>
-                  <span>
-                    {t(`state_${entry.state}`, {
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                    <Badge variant="secondary">{t(`state_${entry.state}`, {
                       defaultValue: t("needsReview"),
-                    })}{" "}
-                    · {format.number(entry.candidate_count)} {t("candidates")}
-                  </span>
+                    })}</Badge>
+                    <span>{format.number(entry.candidate_count)} {t("candidates")}</span>
+                  </div>
                   <Button
-                    variant="outline"
+                    variant="ghost"
                     size="sm"
                     disabled={busy || entry.candidate_count === 0}
                     onClick={() => restore.mutate(entry.id)}
@@ -665,7 +678,6 @@ function ScraperWorkspace({
               </p>
             )}
           </section>
-        </Card>
       )}
     </>
   );

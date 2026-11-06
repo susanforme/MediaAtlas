@@ -32,8 +32,8 @@ const stopFocus = vi.fn();
 let maximized: boolean;
 let focused: boolean;
 
-function Harness() {
-  const chrome = useWindowChrome();
+function Harness({ linuxControls = false }: { linuxControls?: boolean }) {
+  const chrome = useWindowChrome({ linuxControls });
   return (
     <div data-testid="shell" data-window-platform={chrome.platform ?? "none"}>
       <WindowControls chrome={chrome} />
@@ -43,6 +43,7 @@ function Harness() {
 
 beforeEach(async () => {
   vi.resetAllMocks();
+  native.label = "main";
   await i18n.changeLanguage("en-US");
   vi.spyOn(navigator, "platform", "get").mockReturnValue("Win32");
   vi.mocked(isTauri).mockReturnValue(true);
@@ -114,6 +115,30 @@ it("uses real window actions and tracks maximize/restore and focus from native s
   );
   fireEvent.click(screen.getByRole("button", { name: "Close window" }));
   await waitFor(() => expect(native.close).toHaveBeenCalledTimes(1));
+});
+
+it("uses the current NFO window for caption operations", async () => {
+  native.label = "nfo-11111111-1111-4111-8111-111111111111";
+  await showReady();
+  fireEvent.click(screen.getByRole("button", { name: "Close window" }));
+  await waitFor(() => expect(native.close).toHaveBeenCalledTimes(1));
+});
+
+it("enables Linux caption controls only for the explicitly frameless preview", async () => {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("Linux x86_64");
+  render(<Harness linuxControls />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Close window" })).toBeEnabled());
+  expect(screen.getByTestId("shell")).toHaveAttribute("data-window-platform", "linux");
+  fireEvent.click(screen.getByRole("button", { name: "Close window" }));
+  await waitFor(() => expect(native.close).toHaveBeenCalledTimes(1));
+});
+
+it("does not enable caption operations for unrelated window labels", () => {
+  native.label = "settings";
+  render(<Harness />);
+  expect(screen.queryByRole("group", { name: "Window controls" })).not.toBeInTheDocument();
+  expect(native.isMaximized).not.toHaveBeenCalled();
+  expect(native.close).not.toHaveBeenCalled();
 });
 
 it("prevents title-bar dragging and deduplicates rapid actions before a render", async () => {

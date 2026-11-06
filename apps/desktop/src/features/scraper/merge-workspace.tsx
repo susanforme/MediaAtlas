@@ -157,17 +157,16 @@ export function MetadataMergeWorkspace({
   return (
     <Card asChild className="overflow-clip rounded-2xl bg-surface/50 p-0 sm:p-0">
       <section aria-label={t("mergeTitle")}>
-        <div className="grid min-w-0 lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.65fr)]">
+        <div className="grid min-w-0 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.7fr)]">
           <div className="min-w-0 border-b border-border lg:border-r lg:border-b-0">
             <section
-              className="space-y-4 border-b border-border p-5"
+              className="space-y-3 border-b border-border p-4"
               aria-labelledby="merge-sources"
             >
               <h2
                 id="merge-sources"
-                className="flex items-center gap-3 font-semibold"
+                className="font-semibold"
               >
-                <span className="text-xs text-muted-foreground">01</span>
                 {t("mergeSources")}
               </h2>
               <div className="space-y-1 border-l-2 border-border pl-3 text-sm">
@@ -204,14 +203,13 @@ export function MetadataMergeWorkspace({
               </Details>
             </section>
           <section
-            className="space-y-3 border-b border-border p-5"
+            className="space-y-3 border-b border-border p-4"
             aria-labelledby="merge-fields"
           >
             <h2
               id="merge-fields"
-              className="flex items-center gap-3 font-semibold"
+              className="font-semibold"
             >
-              <span className="text-xs text-muted-foreground">02</span>
               {t("mergeFields")}
             </h2>
             <div className="flex flex-wrap gap-2">
@@ -318,14 +316,7 @@ export function MetadataMergeWorkspace({
               </Details>
             )}
           </section>
-          <section className="space-y-4 p-5" aria-labelledby="merge-options">
-            <h2
-              id="merge-options"
-              className="flex items-center gap-3 font-semibold"
-            >
-              <span className="text-xs text-muted-foreground">03</span>
-              {t("mergeOptions")}
-            </h2>
+          <div className="p-4">
             <Label className="flex items-center gap-3 text-sm">
               <Checkbox
                 checked={workspace.onlyMissing}
@@ -340,11 +331,11 @@ export function MetadataMergeWorkspace({
                   : "mergeOnlyMissing",
               )}
             </Label>
-          </section>
+          </div>
         </div>
-        <div className="min-w-0 p-5 lg:p-6">
+        <div className="min-w-0 p-4 lg:p-5">
           <Tabs value={tab} onValueChange={setTab}>
-            <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-semibold">{t("mergeLivePreview")}</h2>
               <TabsList aria-label={t("mergePreviewMode")}>
                 <TabsTrigger value="merged">{t("mergeAfter")}</TabsTrigger>
@@ -489,7 +480,7 @@ export function MetadataMergeWorkspace({
               <p className="mb-3 text-sm text-muted-foreground">{t("scraperIdentityCorrection")}</p>
             )}
             <div className="overflow-x-auto">
-              <Table className="w-full table-fixed text-left text-sm">
+              <Table className="w-full min-w-[540px] table-fixed text-left text-sm">
                 <TableHeader className="text-xs text-muted-foreground">
                   <TableRow>
                     <TableHead className="w-1/5 py-3 pr-3">{t("scraperField")}</TableHead>
@@ -559,7 +550,7 @@ export function MetadataMergeWorkspace({
           </section>
         </div>
       </div>
-      <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-surface p-5">
+      <footer className="flex flex-wrap items-center justify-between gap-4 border-t border-border bg-surface px-4 py-4 sm:px-5">
         <div className="min-w-0 space-y-1" role="status" aria-live="polite">
           {done ? (
             <Badge variant="secondary">{t("reviewState_confirmed")}</Badge>

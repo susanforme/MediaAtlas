@@ -69,14 +69,15 @@ export function PersistentQueueNavigation({
       asChild
       className={
         compact
-          ? "mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-4 sm:py-3"
-          : "mb-6 space-y-4"
+          ? "mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3 sm:px-4 sm:py-3"
+          : "mb-4 grid gap-3 rounded-xl px-4 py-3 sm:px-4 sm:py-3 xl:grid-cols-[minmax(0,1fr)_auto]"
       }
     >
       <section aria-label={t("reviewQueues")}>
-        <p aria-live="polite" className="text-sm">
-          {t("reviewSummary", { count: queue.items.length, ...counts })}
-        </p>
+        <div aria-live="polite" className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>{t("reviewItemCount", { count: queue.items.length })}</span>
+          {(["confirmed", "deferred", "failed"] as const).filter((state) => counts[state] > 0).map((state) => <Badge key={state} variant={state === "failed" ? "destructive" : "secondary"}>{t(`reviewCount_${state}`, { count: counts[state] })}</Badge>)}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button
             size="sm"
@@ -125,7 +126,7 @@ export function PersistentQueueNavigation({
             {t("reviewNext")}
           </Button>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 xl:col-span-full">
           {selected.state === "pending" &&
             queue.current_media_id === selected.media_id &&
             !selected.needs_recheck && (
@@ -183,7 +184,7 @@ export function PersistentQueueNavigation({
         {(selected.needs_recheck ||
           selected.state === "failed" ||
           selected.state === "deferred") && (
-          <Alert asChild>
+          <Alert asChild className="w-full xl:col-span-full">
             <p role="status">
               {t(
                 unavailable
@@ -198,12 +199,12 @@ export function PersistentQueueNavigation({
           </Alert>
         )}
         {queue.current_media_id === null && (
-          <p role="status" className="text-sm text-muted-foreground">
+          <p role="status" className="w-full text-sm text-muted-foreground xl:col-span-full">
             {t("reviewFinished")}
           </p>
         )}
         {review.error && (
-          <ErrorNotice error={review.error} retry={review.refresh} />
+          <div className="w-full xl:col-span-full"><ErrorNotice error={review.error} retry={review.refresh} /></div>
         )}
       </section>
     </Card>
