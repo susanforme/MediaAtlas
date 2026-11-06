@@ -4,6 +4,7 @@ const values = {
   "zh-CN": {
     videoDetailStatus: "资料与媒体状态",
     videoDetailPoster: "海报",
+    videoDetailVotes: "{{count}} 票",
     videoDetailOverview: "简介",
     videoDetailCast: "演职人员",
     videoDetailDirector: "导演",
@@ -25,6 +26,7 @@ const values = {
   "en-US": {
     videoDetailStatus: "Metadata and media status",
     videoDetailPoster: "Poster",
+    videoDetailVotes: "{{count}} votes",
     videoDetailOverview: "Overview",
     videoDetailCast: "Cast and crew",
     videoDetailDirector: "Director",

@@ -1,4 +1,5 @@
 import type { MediaDetail, MetadataValue } from "../../api/library";
+import { castNames } from "./media-metadata-model";
 
 /** The library values include field locks and edits; provider snapshots do not override them. */
 export function videoDetailFields(
@@ -33,10 +34,11 @@ export function videoDetailFields(
   }
   const runtime = field("runtime_minutes")?.value ?? field("runtime")?.value;
   const rating = field("rating");
+  const cast = castNames(field("cast")?.value);
   return {
     overview: text("overview") || text("outline"),
     genres: names("genres"),
-    cast: names("cast").length ? names("cast") : names("people"),
+    cast: cast.length ? cast : castNames(field("people")?.value),
     directors: names("directors"),
     premiered: text("release_date") || text("first_air_date") || text("premiered"),
     language: text("original_language") || text("language"),

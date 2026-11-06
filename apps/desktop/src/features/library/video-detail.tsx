@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { ArrowLeft, FileVideo, Film, LockKeyhole, Wrench } from "lucide-react";
+import { ArrowLeft, FileVideo, Film, Wrench } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { MediaDetail } from "../../api/library";
@@ -8,10 +8,10 @@ import { scraperApi, type SeasonDetail } from "../../api/scraper";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
-import { TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { VideoSourceDetails } from "../scraper/source-detail";
 import { DetailRecoveryAction } from "./detail-recovery-action";
-import { MediaDetailTabs, MediaDetailView } from "./media-detail-view";
+import { MediaDetailSections, MediaDetailView } from "./media-detail-view";
+import { MediaCast, MediaMetadataFields } from "./media-metadata";
 import { NativeOpen, playableFiles } from "./native-open";
 import { ErrorNotice, HealthBadges, useFormat } from "./shared";
 import { videoDetailFields } from "./video-detail-model";
@@ -95,7 +95,6 @@ export function VideoDetail({
   const { t, i18n } = useTranslation();
   const { number } = useFormat();
   const isSeries = detail.media.kind === "tv_series";
-  const [tab, setTab] = useState(isSeries ? "seasons" : "files");
   const source = useQuery({
     queryKey: ["video-source-detail", detail.media.id],
     queryFn: () => scraperApi.mediaDetail(detail.media.id),
@@ -200,24 +199,8 @@ export function VideoDetail({
       }
     >
           {sourceDetail}
-          <MediaDetailTabs value={tab} onValueChange={setTab}>
-            <TabsList aria-label={t("detailsAction")}>
-              <TabsTrigger value="files">{t("videoDetailFiles")}</TabsTrigger>
-              {isSeries && (
-                <TabsTrigger value="seasons">{t("videoDetailSeasons")}</TabsTrigger>
-              )}
-              {fields.cast.length > 0 && (
-                <TabsTrigger value="cast">{t("videoDetailCast")}</TabsTrigger>
-              )}
-              <TabsTrigger value="metadata">{t("metadata")}</TabsTrigger>
-              {detail.relations.length > 0 && (
-                <TabsTrigger value="related">{t("relations")}</TabsTrigger>
-              )}
-              {detail.artworks.length > 0 && (
-                <TabsTrigger value="artwork">{t("artworks")}</TabsTrigger>
-              )}
-            </TabsList>
-            <TabsContent value="files">
+          <MediaDetailSections initialTab={isSeries ? "seasons" : "files"} sections={{
+            files: <>
               {detail.files.length ? (
                 <ul className="m-0 list-none p-0">
                   {detail.files.map((file) => (
@@ -246,9 +229,9 @@ export function VideoDetail({
               ) : (
                 <p className="text-muted-foreground">{t("noFiles")}</p>
               )}
-            </TabsContent>
-            {isSeries && (
-              <TabsContent value="seasons" aria-busy={source.isFetching}>
+            </>,
+            seasons: isSeries ? (
+              <div aria-busy={source.isFetching}>
                 {source.isPending ? (
                   <p className="text-muted-foreground" role="status">
                     {t("loading")}
@@ -260,49 +243,17 @@ export function VideoDetail({
                     seasons={source.data?.kind === "tv" ? source.data.data.seasons : []}
                   />
                 )}
-              </TabsContent>
-            )}
-            {fields.cast.length > 0 && (
-              <TabsContent value="cast">
-                <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-3 p-0">
-                  {fields.cast.map((name) => (
-                    <Card asChild key={name} className="p-4 sm:p-4">
-                      <li>{name}</li>
-                    </Card>
-                  ))}
-                </ul>
-              </TabsContent>
-            )}
-            <TabsContent value="metadata">
+              </div>
+            ) : undefined,
+            cast: fields.cast.length ? <MediaCast names={fields.cast} /> : undefined,
+            metadata: <>
               {detail.metadata_values.length ? (
-                <dl className="[&>div]:border-b [&>div]:border-border [&>div]:py-4 [&_dt]:flex [&_dt]:flex-wrap [&_dt]:items-center [&_dt]:gap-2 [&_dt]:text-[14px] [&_dt]:font-medium [&_dd]:mt-2 [&_dd]:[overflow-wrap:anywhere]">
-                  {detail.metadata_values.map((field) => (
-                    <div key={field.id}>
-                      <dt>
-                        {t(`scraperField_${field.field_key}`, {
-                          defaultValue: field.field_key,
-                        })}
-                        {field.locale && <Badge variant="secondary">{field.locale}</Badge>}
-                        {field.is_locked && (
-                          <Badge variant="secondary">
-                            <LockKeyhole size={12} aria-hidden="true" />{t("locked")}
-                          </Badge>
-                        )}
-                        {field.is_user_modified && (
-                          <Badge variant="secondary">{t("userEdited")}</Badge>
-                        )}
-                      </dt>
-                      <dd className="text-[14px]">
-                        {typeof field.value === "string"
-                          ? field.value
-                          : JSON.stringify(field.value)}
-                      </dd>
-                      <dd className="text-[12px] text-muted-foreground">
-                        {t("source")}: {field.provider_id ?? t("localMetadata")}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
+                <MediaMetadataFields fields={detail.metadata_values.map((field) => ({
+                  key: field.id, field: field.field_key,
+                  label: t(`scraperField_${field.field_key}`, { defaultValue: field.field_key }),
+                  value: field.value, locale: field.locale, locked: field.is_locked,
+                  edited: field.is_user_modified, provider: field.provider_id,
+                }))} />
               ) : (
                 <p className="text-muted-foreground">{t("noMetadata")}</p>
               )}
@@ -320,9 +271,8 @@ export function VideoDetail({
                   <p className="text-muted-foreground">{t("scraperLibrarySourceEmpty")}</p>
                 )}
               </section>
-            </TabsContent>
-            {detail.relations.length > 0 && (
-              <TabsContent value="related">
+            </>,
+            related: detail.relations.length > 0 ? (
                 <ul className="m-0 grid list-none gap-2.5 p-0 [&_a]:flex [&_a]:h-auto [&_a]:justify-between [&_a]:p-4 [&_a]:whitespace-normal [&_span]:text-[12px] [&_span]:text-muted-foreground">
                   {detail.relations.map((item) => (
                     <li key={item.id}>
@@ -338,10 +288,8 @@ export function VideoDetail({
                     </li>
                   ))}
                 </ul>
-              </TabsContent>
-            )}
-            {detail.artworks.length > 0 && (
-              <TabsContent value="artwork">
+            ) : undefined,
+            artwork: detail.artworks.length > 0 ? (
                 <ul className="m-0 grid list-none gap-2.5 p-0">
                   {detail.artworks.map((art) => (
                     <Card asChild key={art.id} className="flex items-center justify-between gap-3 p-4 sm:p-4">
@@ -354,9 +302,8 @@ export function VideoDetail({
                     </Card>
                   ))}
                 </ul>
-              </TabsContent>
-            )}
-          </MediaDetailTabs>
+            ) : undefined,
+          }} />
     </MediaDetailView>
   );
 }

@@ -1,6 +1,5 @@
 import { Link, Outlet, useLocation, useNavigate } from "@tanstack/react-router";
 import {
-  FileText,
   FolderOpen,
   Layers3,
   ListTodo,
@@ -12,7 +11,6 @@ import {
 } from "lucide-react";
 import { type FormEvent, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { NfoOpenListener } from "../../features/nfo/page";
 import { setTheme, useTheme } from "../../lib/theme";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -76,18 +74,6 @@ function Sidebar({ chrome }: { chrome: WindowChrome }) {
         </ul>
       </nav>
       <div className="app-sidebar-bottom mt-auto shrink-0 border-t border-border px-[13px] pt-4 pb-[22px] [@media(600px<width<=1050px)]:px-[11px] [@media(max-width:600px)]:px-1.5 [@media(max-width:600px)]:py-3">
-        <Button asChild variant="ghost" className={navItemClassName}>
-          <Link
-            to="/nfo"
-            activeProps={{ className: "active" }}
-            aria-label={t("openNfo")}
-          >
-            <FileText size={20} aria-hidden="true" />
-            <span className="app-nav-label overflow-hidden text-ellipsis [@media(max-width:1050px)]:hidden">
-              {t("openNfo")}
-            </span>
-          </Link>
-        </Button>
         <Button asChild variant="ghost" className={navItemClassName}>
           <Link
             to="/settings"
@@ -198,7 +184,6 @@ export function AppShell() {
       data-window-platform={chrome.platform ?? undefined}
     >
       <Sidebar chrome={chrome} />
-      <NfoOpenListener />
       <div
         className="app-main ml-[var(--sidebar-width)] h-full min-w-0 overflow-x-hidden overflow-y-auto overscroll-y-contain scroll-pt-[calc(var(--toolbar-height)_+_12px)] [scrollbar-gutter:stable]"
         id="app-main-scroll"

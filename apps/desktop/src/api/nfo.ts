@@ -5,6 +5,8 @@ export interface NfoDocument {
   name: string;
   format: "xml" | "text";
   source: string;
+  poster_uri: string | null;
+  backdrop_uri: string | null;
   metadata: {
     fields: Record<string, unknown>;
     external_ids: { provider_id: string; namespace: string; value: string }[];
@@ -20,6 +22,8 @@ function document(value: unknown): value is NfoDocument {
     record(value) &&
     typeof value.name === "string" &&
     typeof value.source === "string" &&
+    imageUri(value.poster_uri) &&
+    imageUri(value.backdrop_uri) &&
     (value.format === "xml" || value.format === "text") &&
     record(value.metadata) &&
     record(value.metadata.fields) &&
@@ -32,6 +36,10 @@ function document(value: unknown): value is NfoDocument {
         typeof id.value === "string",
     )
   );
+}
+
+function imageUri(value: unknown): value is string | null {
+  return value === null || (typeof value === "string" && value.startsWith("data:image/png;base64,"));
 }
 
 const optionalDocument = (value: unknown): value is NfoDocument | null =>
@@ -47,13 +55,5 @@ export function isNfoStartup(): Promise<boolean> {
 }
 
 export const nfoApi = {
-  hasOpened: () =>
-    request(
-      "nfo_has_opened",
-      {},
-      (value): value is boolean => typeof value === "boolean",
-    ),
   takeOpened: () => request("nfo_take_opened", {}, optionalDocument),
-  open: (language: string) =>
-    request("nfo_open_dialog", { language }, optionalDocument),
 };

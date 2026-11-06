@@ -31,9 +31,7 @@ pub fn run() {
         .manage(nfo::NfoState::from_args())
         .invoke_handler(tauri::generate_handler![
             nfo::nfo_startup_mode,
-            nfo::nfo_has_opened,
             nfo::nfo_take_opened,
-            nfo::nfo_open_dialog,
             commands::get_app_info,
             commands::maintenance_status,
             commands::maintenance_backup_preview,
@@ -159,6 +157,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("Desktop application could not be started")
         .run(|_app, _event| {
+            if let tauri::RunEvent::WindowEvent { label, event: tauri::WindowEvent::Destroyed, .. } = &_event {
+                _app.state::<nfo::NfoState>().forget(label);
+            }
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = _event {
                 _app.state::<nfo::NfoState>().receive(_app, urls);

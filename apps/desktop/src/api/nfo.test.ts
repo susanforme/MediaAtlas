@@ -20,3 +20,13 @@ it("rejects malformed preview responses and never accepts a path from the webvie
   await expect(nfoApi.takeOpened()).rejects.toEqual(new DesktopError("invalid_response"));
   expect(invoke).toHaveBeenCalledWith("nfo_take_opened", { input: {} });
 });
+
+it("accepts backend raster data but rejects raw metadata URLs and SVG payloads", async () => {
+  const data = { name: "movie.nfo", source: "<movie/>", format: "xml", metadata: { fields: {}, external_ids: [] }, poster_uri: "data:image/png;base64,cG5n", backdrop_uri: null };
+  vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data });
+  expect(await nfoApi.takeOpened()).toEqual(data);
+  for (const uri of ["https://example.test/poster.jpg", "file:///private/a.png", "data:image/svg+xml,<svg/>"]) {
+    vi.mocked(invoke).mockResolvedValue({ schema_version: 1, data: { ...data, poster_uri: uri } });
+    await expect(nfoApi.takeOpened()).rejects.toEqual(new DesktopError("invalid_response"));
+  }
+});

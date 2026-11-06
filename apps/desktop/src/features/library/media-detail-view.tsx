@@ -3,7 +3,7 @@ import { type ComponentProps, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
-import { Tabs } from "../../components/ui/tabs";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { cn } from "../../lib/utils";
 import { MediaArtwork } from "./media-artwork";
 import { useFormat } from "./shared";
@@ -18,6 +18,7 @@ export function MediaDetailView({
   genres = [],
   rating,
   poster,
+  backdrop,
   overview,
   facts = [],
   navigation,
@@ -33,6 +34,7 @@ export function MediaDetailView({
   genres?: string[];
   rating?: { value: number; provider: string | null } | null;
   poster?: { uri: string | null; updatedAt?: string };
+  backdrop?: string | null;
   overview?: string;
   facts?: { key: string; label: string; value: ReactNode }[];
   navigation?: ReactNode;
@@ -44,12 +46,13 @@ export function MediaDetailView({
   const { number, date } = useFormat();
   const [expanded, setExpanded] = useState(false);
   const canExpand = (overview?.length ?? 0) > 240;
+  const background = backdrop || poster?.uri;
   return (
     <article data-slot="media-detail" className="min-w-0 [&_h2:not([data-slot=video-status-heading])]:mb-3 [&_h2:not([data-slot=video-status-heading])]:text-[20px] [&_h2:not([data-slot=video-status-heading])]:font-semibold">
-      <header className={cn("relative isolate pt-0 pb-9", poster && "min-h-[300px] [@media(width<=760px)]:min-h-0")}>
-        {poster?.uri && (
-          <div className="pointer-events-none absolute -top-[104px] -right-10 -bottom-[70px] left-[35%] -z-1 overflow-hidden opacity-40 [mask-image:linear-gradient(to_right,transparent,black_35%),linear-gradient(to_bottom,black_40%,transparent)] [mask-composite:intersect] [&_img]:object-contain [&_img]:object-[right_top] [&_[data-slot=poster-placeholder]]:hidden [@media(width<=760px)]:-right-6 [@media(width<=760px)]:left-[20%] [@media(width<=760px)]:opacity-25" aria-hidden="true">
-            <MediaArtwork uri={poster.uri} title="" eager />
+      <header className={cn("relative isolate pt-0 pb-9", (poster || backdrop) && "min-h-[300px] [@media(width<=760px)]:min-h-0")}>
+        {background && (
+          <div data-slot="media-backdrop" className={cn("pointer-events-none absolute -top-[104px] -right-10 -bottom-[70px] left-[35%] -z-1 overflow-hidden opacity-40 [mask-image:linear-gradient(to_right,transparent,black_35%),linear-gradient(to_bottom,black_40%,transparent)] [mask-composite:intersect] [&_img]:object-[right_top] [&_[data-slot=poster-placeholder]]:hidden [@media(width<=760px)]:-right-6 [@media(width<=760px)]:left-[20%] [@media(width<=760px)]:opacity-25", backdrop ? "[&_img]:object-cover" : "[&_img]:object-contain")} aria-hidden="true">
+            <MediaArtwork uri={background} title="" eager />
           </div>
         )}
         <div className="max-w-[900px]">
@@ -118,4 +121,28 @@ export function MediaDetailView({
 
 export function MediaDetailTabs({ className, ...props }: ComponentProps<typeof Tabs>) {
   return <Tabs {...props} className={cn("[&>[data-slot=tabs-list]]:flex [&>[data-slot=tabs-list]]:w-full [&>[data-slot=tabs-list]]:justify-start [&>[data-slot=tabs-list]]:gap-2 [&>[data-slot=tabs-list]]:overflow-x-auto [&>[data-slot=tabs-list]]:rounded-none [&>[data-slot=tabs-list]]:border-b [&>[data-slot=tabs-list]]:border-border [&>[data-slot=tabs-list]]:bg-transparent [&>[data-slot=tabs-list]]:p-0 [&>[data-slot=tabs-list]]:pb-2.5 [&_[data-slot=tabs-trigger]]:shrink-0 [&_[data-slot=tabs-trigger]]:min-h-10 [&_[data-slot=tabs-trigger]]:rounded-[10px] [&_[data-slot=tabs-trigger]]:bg-muted [&_[data-slot=tabs-trigger]]:px-[18px] [&_[data-slot=tabs-trigger]]:whitespace-nowrap [&_[data-slot=tabs-trigger][data-state=active]]:bg-primary [&_[data-slot=tabs-trigger][data-state=active]]:text-primary-foreground [&>[data-slot=tabs-content]]:mt-[18px]", className)} />;
+}
+
+const sectionLabels = {
+  files: "videoDetailFiles", seasons: "videoDetailSeasons", cast: "videoDetailCast",
+  metadata: "metadata", related: "relations", artwork: "artworks",
+} as const;
+type DetailSection = keyof typeof sectionLabels;
+
+export function MediaDetailSections({ sections, initialTab }: {
+  sections: Partial<Record<DetailSection, ReactNode>>;
+  initialTab?: DetailSection;
+}) {
+  const { t } = useTranslation();
+  const available = (Object.keys(sectionLabels) as DetailSection[]).filter((key) => sections[key] != null && sections[key] !== false);
+  const [tab, setTab] = useState<string>(initialTab ?? available[0] ?? "metadata");
+  if (!available.length) return null;
+  return (
+    <MediaDetailTabs value={available.includes(tab as DetailSection) ? tab : available[0]} onValueChange={setTab}>
+      <TabsList aria-label={t("detailsAction")}>
+        {available.map((key) => <TabsTrigger key={key} value={key}>{t(sectionLabels[key])}</TabsTrigger>)}
+      </TabsList>
+      {available.map((key) => <TabsContent key={key} value={key}>{sections[key]}</TabsContent>)}
+    </MediaDetailTabs>
+  );
 }

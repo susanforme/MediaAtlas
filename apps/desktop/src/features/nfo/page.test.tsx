@@ -1,106 +1,92 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { nfoApi, type NfoDocument } from "../../api/nfo";
 import i18n from "../../i18n";
-import { NfoPage } from "./page";
+import { NfoPage, NfoStandalone } from "./page";
 
-const events = vi.hoisted(() => ({ opened: (() => {}) as () => void }));
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
-vi.mock("@tauri-apps/api/event", () => ({
-  listen: vi.fn(async (_name: string, callback: () => void) => {
-    events.opened = callback;
-    return () => {};
-  }),
-}));
-vi.mock("../../api/nfo", () => ({
-  nfoApi: { takeOpened: vi.fn(), open: vi.fn() },
-}));
+vi.mock("../../api/nfo", () => ({ nfoApi: { takeOpened: vi.fn() } }));
 
 const document: NfoDocument = {
-  name: "sample.nfo",
-  format: "xml",
-  source: "<movie><title>Atlas</title></movie>",
+  name: "sample.nfo", format: "xml", source: "<movie><title>Atlas</title></movie>",
+  poster_uri: null, backdrop_uri: null,
   metadata: { fields: { title: "Atlas", overview: "<img src=x onerror=alert(1)>" }, external_ids: [] },
 };
 
 beforeEach(async () => {
   vi.mocked(nfoApi.takeOpened).mockReset().mockResolvedValue(null);
-  vi.mocked(nfoApi.open).mockReset();
   await i18n.changeLanguage("en-US");
 });
 
-it("previews escaped text and keeps the document when file selection is cancelled", async () => {
+it("shows only core content in an independent window without shell controls", async () => {
   vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce(document);
-  vi.mocked(nfoApi.open).mockResolvedValueOnce(null);
-  const { container } = render(<NfoPage />);
+  const { container } = render(<NfoStandalone />);
   await screen.findByRole("heading", { name: "Atlas" });
   expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
+  expect(container.querySelector('[data-slot="app-shell"],nav,.app-toolbar')).toBeNull();
+  expect(screen.queryByRole("button", { name: "Open NFO" })).not.toBeInTheDocument();
   expect(container.querySelector("img,video,audio,iframe")).toBeNull();
-  expect(screen.getByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Open NFO" }));
-  await waitFor(() => expect(nfoApi.open).toHaveBeenCalledWith("en-US"));
-  expect(screen.getByRole("heading", { name: "Atlas" })).toBeInTheDocument();
+  expect(screen.getAllByText("<img src=x onerror=alert(1)>").length).toBeGreaterThan(0);
 });
 
-it("serializes startup and opened events so an empty replay cannot discard the preview", async () => {
+it("retains the single selected document across StrictMode effect replay", async () => {
   let finish!: (value: NfoDocument) => void;
   vi.mocked(nfoApi.takeOpened).mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
-  render(<NfoPage />);
+  render(<StrictMode><NfoPage /></StrictMode>);
   await waitFor(() => expect(nfoApi.takeOpened).toHaveBeenCalledTimes(1));
-  act(() => events.opened());
-  expect(nfoApi.takeOpened).toHaveBeenCalledTimes(1);
   await act(async () => finish(document));
-  await waitFor(() => expect(nfoApi.takeOpened).toHaveBeenCalledTimes(2));
-  expect(screen.getByRole("heading", { name: "Atlas" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Atlas" })).toBeInTheDocument();
 });
 
-it("shows Kodi actor roles once and treats every image reference as inert text", async () => {
+it("shares cast and metadata tabs and renders ratings and collections without JSON", async () => {
   vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({
     ...document,
-    metadata: {
-      external_ids: [],
-      fields: {
-        title: "Atlas",
-        cast: [
-          { name: "Actor A", role: "Lead", thumb: "https://image.tmdb.org/actor.jpg" },
-          { name: "Actor B", role: "<img src=x onerror=alert(1)>" },
-        ],
-        people: ["Actor A", "Actor B"],
-        writers: ["Writer"],
-        nfo_artwork: [
-          { kind: "poster", url: "https://image.tmdb.org/poster.jpg" },
-          { kind: "backdrop", url: "Atlas-fanart.jpg" },
-        ],
-      },
-    },
+    metadata: { external_ids: [], fields: {
+      title: "Atlas", cast: [{ name: "Actor A", role: "Lead", thumb: "https://example.test/actor.jpg" }],
+      people: ["Actor A"], ratings: [{ name: "tmdb", value: 8.4, max: 10, votes: 123 }],
+      collection: { name: "Atlas collection", overview: "Collection story" },
+      nfo_artwork: [{ kind: "poster", url: "https://example.test/poster.jpg" }],
+    } },
   });
   const { container } = render(<NfoPage />);
-  expect(await screen.findByText("Actor A (Lead)", { exact: false })).toBeInTheDocument();
-  expect(screen.getByText("Cast and roles")).toBeInTheDocument();
-  expect(screen.queryByText("People")).not.toBeInTheDocument();
-  expect(screen.getByText("Actor B (<img src=x onerror=alert(1)>)", { exact: false })).toBeInTheDocument();
-  expect(screen.queryByText(/actor\.jpg/)).not.toBeInTheDocument();
-  expect(screen.getByText("Image references")).toBeInTheDocument();
-  expect(screen.getByText(/https:\/\/image\.tmdb\.org\/poster\.jpg/)).toBeInTheDocument();
-  expect(container.querySelector("img,video,audio,iframe,object,embed,a[href]")).toBeNull();
-});
-
-it("reuses the detail view without library controls, invented status or missing field labels", async () => {
-  vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({ ...document, metadata: { fields: { title: "Sparse NFO", directors: [], studios: null }, external_ids: [] } });
-  const { container } = render(<NfoPage />);
-  await screen.findByRole("heading", { level: 1, name: "Sparse NFO" });
-  expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
-  expect(container.querySelector("aside,img,a[href]")).toBeNull();
-  expect(screen.queryByText("Director")).not.toBeInTheDocument();
-  expect(screen.queryByText("Studios")).not.toBeInTheDocument();
-  expect(screen.queryByText("Metadata and media status")).not.toBeInTheDocument();
-  expect(screen.queryByRole("button", { name: /Open in system app/ })).not.toBeInTheDocument();
+  await screen.findByRole("heading", { name: "Atlas" });
+  expect(screen.getByRole("tab", { name: "Metadata and sources" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByText("8.4 / 10")).toBeInTheDocument();
+  expect(screen.getByText("123 votes")).toBeInTheDocument();
+  expect(screen.getByText("Atlas collection")).toBeInTheDocument();
+  expect(screen.getByText("Collection story")).toBeInTheDocument();
+  expect(container.textContent).not.toContain('"name":');
+  expect(container.textContent).not.toContain("https://example.test");
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Metadata and sources" }), { key: "ArrowLeft" });
+  expect(screen.getByRole("tab", { name: "Cast and crew" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getByRole("tabpanel")).toHaveTextContent("Actor A (Lead)");
   expect(screen.queryByRole("tab", { name: "Local files" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("tab", { name: "Seasons and episodes" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Metadata and media status")).not.toBeInTheDocument();
 });
 
-it("uses the filename once when the NFO has no title", async () => {
-  vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({ ...document, metadata: { fields: {}, external_ids: [] } });
-  render(<NfoPage />);
+it("uses only validated image data for the shared hero, poster and artwork tab", async () => {
+  const poster = "data:image/png;base64,cG9zdGVy";
+  const backdrop = "data:image/png;base64,YmFja2Ryb3A=";
+  vi.mocked(nfoApi.takeOpened).mockResolvedValueOnce({ ...document, poster_uri: poster, backdrop_uri: backdrop });
+  const { container } = render(<NfoPage />);
+  await screen.findByRole("heading", { name: "Atlas" });
+  expect(container.querySelector('[data-slot="media-backdrop"] img')).toHaveAttribute("src", backdrop);
+  expect(container.querySelector("aside img")).toHaveAttribute("src", poster);
+  fireEvent.click(screen.getByRole("tab", { name: "Artwork" }));
+  expect(screen.getByRole("tabpanel").querySelectorAll("img")).toHaveLength(2);
+  fireEvent.error(container.querySelector("aside img")!);
+  expect(container.querySelector("aside img")).toBeNull();
+});
+
+it("omits missing regions and retries a read failure for the same selected file", async () => {
+  vi.mocked(nfoApi.takeOpened).mockRejectedValueOnce({ code: "local_file_unreadable" })
+    .mockResolvedValueOnce({ ...document, metadata: { fields: {}, external_ids: [] } });
+  const { container } = render(<NfoPage />);
+  fireEvent.click(await screen.findByRole("button", { name: "Check again" }));
   await screen.findByRole("heading", { level: 1, name: "sample.nfo" });
   expect(screen.getAllByText("sample.nfo")).toHaveLength(1);
+  expect(container.querySelector("aside,img,a[href]")).toBeNull();
+  expect(screen.queryByText("Director")).not.toBeInTheDocument();
 });

@@ -3,10 +3,9 @@ import i18n from "../../i18n";
 const translations = {
   "zh-CN": {
     nfoViewer: "NFO 预览",
-    nfoOpen: "打开 NFO",
-    nfoEmpty: "选择 NFO 文件预览",
+    nfoEmpty: "未收到 NFO 文件",
     nfoSource: "NFO 原文",
-    nfoReadOnly: "只读预览，不入库或修改文件。",
+    nfoBackdrop: "背景图",
     nfoField_title: "标题",
     nfoField_original_title: "原名",
     nfoField_overview: "简介",
@@ -47,10 +46,9 @@ const translations = {
   },
   "en-US": {
     nfoViewer: "NFO preview",
-    nfoOpen: "Open NFO",
-    nfoEmpty: "Choose an NFO file to preview",
+    nfoEmpty: "No NFO file received",
     nfoSource: "NFO source",
-    nfoReadOnly: "Read-only preview. Files are neither imported nor modified.",
+    nfoBackdrop: "Backdrop",
     nfoField_title: "Title",
     nfoField_original_title: "Original title",
     nfoField_overview: "Overview",

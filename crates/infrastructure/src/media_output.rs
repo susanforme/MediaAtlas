@@ -1961,6 +1961,18 @@ fn decode_budget() -> Arc<Semaphore> {
     static BUDGET: OnceLock<Arc<Semaphore>> = OnceLock::new();
     BUDGET.get_or_init(|| Arc::new(Semaphore::new(2))).clone()
 }
+/// In-memory NFO artwork shares the decoder budget and never writes a cache or source file.
+pub(crate) async fn preview_image(bytes: Vec<u8>) -> Result<String, ProviderFailure> {
+    let permit = decode_budget().acquire_owned().await.map_err(|_| ProviderFailure::Cancelled)?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let (_, image) = decode_validated(&bytes)?;
+        let mut png = Cursor::new(Vec::new());
+        image.thumbnail(1280, 960).write_to(&mut png, ImageFormat::Png)
+            .map_err(|_| ProviderFailure::ParseError)?;
+        Ok(format!("data:image/png;base64,{}", base64::Engine::encode(&base64::engine::general_purpose::STANDARD, png.into_inner())))
+    }).await.map_err(|_| ProviderFailure::ParseError)?
+}
 async fn decode_image(bytes: &[u8], cancel: Option<&CancellationToken>) -> Result<(ImageFormat, u32, u32), ProviderFailure> {
     let uncancelled = CancellationToken::new();
     let cancel = cancel.unwrap_or(&uncancelled);

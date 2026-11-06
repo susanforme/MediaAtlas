@@ -73,3 +73,7 @@ it("prefers typed runtime and cast fields and keeps missing facts empty", () => 
     rating: null,
   });
 });
+
+it("uses structured Kodi cast roles in the shared detail presentation", () => {
+  expect(fields([value("cast", [{ name: "Actor", role: "Lead" }]), value("people", ["Actor"]) ]).cast).toEqual(["Actor (Lead)"]);
+});
