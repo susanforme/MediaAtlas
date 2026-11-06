@@ -12,6 +12,10 @@ import { syntheticMerge, syntheticMetadata, syntheticOutput, syntheticSearch } f
 import { useScraper } from "./use-scraper";
 
 vi.mock("../../components/ui/sonner", () => ({ toast: { success: vi.fn(), info: vi.fn() } }));
+vi.mock("../../api/scraper", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../api/scraper")>();
+  return { ...actual, scraperOutputApi: { ...actual.scraperOutputApi, history: vi.fn() } };
+});
 
 let local: MediaDetail;
 beforeEach(async () => {
@@ -30,7 +34,7 @@ beforeEach(async () => {
     provider_id: "tmdb", supported_methods: ["bearer"], method: "bearer", storage: "system", configured: true, status: "configured",
   });
   vi.spyOn(libraryApi, "toolsDetail").mockImplementation(async () => local);
-  vi.spyOn(scraperOutputApi, "history").mockResolvedValue([]);
+  vi.mocked(scraperOutputApi.history).mockResolvedValue([]);
   vi.spyOn(scraperOutputApi, "defaultMode").mockResolvedValue("online");
   vi.spyOn(scraperOutputApi, "preview").mockResolvedValue(syntheticOutput);
   vi.spyOn(scraperOutputApi, "discard").mockResolvedValue(null);

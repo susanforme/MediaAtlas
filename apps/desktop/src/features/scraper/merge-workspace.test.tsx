@@ -109,7 +109,7 @@ it("keeps output-mode retry available before a zero-change export", () => {
   value.outputModeReady = false;
   value.outputModeError = new DesktopError("request_failed");
   show(value);
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  fireEvent.click(screen.getByRole("button", { name: "Check again" }));
   expect(value.retryOutputMode).toHaveBeenCalledOnce();
   expect(value.outputPlan.mutate).not.toHaveBeenCalled();
 });
