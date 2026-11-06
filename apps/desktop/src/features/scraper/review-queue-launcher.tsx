@@ -10,6 +10,7 @@ import { Details, DetailsSummary } from "../../components/ui/details";
 import { ErrorNotice, useFormat } from "../library/shared";
 import { type ToolsRouteSearch, validateToolsSearch } from "../tools/search";
 import { MAX_SCRAPE_QUEUE } from "./search";
+import { reviewQueuesQuery } from "./queries";
 import "./review-queue-translations";
 
 export function ReviewQueueLauncher({
@@ -35,11 +36,7 @@ export function ReviewQueueLauncher({
       active.current = false;
     };
   }, []);
-  const sessions = useQuery({
-    queryKey: ["review-queues"],
-    queryFn: reviewQueueApi.list,
-    retry: false,
-  });
+  const sessions = useQuery(reviewQueuesQuery);
   const create = useMutation({
     mutationFn: async () => {
       if (

@@ -5,8 +5,7 @@ import { Link } from "@tanstack/react-router";
 import { LockKeyhole } from "lucide-react";
 import { lazy, type ReactNode, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { adultApi } from "../../api/adult";
-import { libraryApi } from "../../api/library";
+import { mediaDetailQuery } from "./queries";
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { usePrivacy } from "./context";
@@ -46,9 +45,7 @@ export function MediaDetailPage({
   const { settings, includeAdult } = usePrivacy();
   const allowed = !adult || (settings.entry_visible && includeAdult);
   const detail = useQuery({
-    queryKey: adult ? ["adult", "media", mediaId] : ["detail", mediaId, false],
-    queryFn: () =>
-      adult ? adultApi.getMedia(mediaId) : libraryApi.detail(mediaId, false),
+    ...mediaDetailQuery(mediaId, adult),
     enabled: allowed,
   });
   if (!allowed)

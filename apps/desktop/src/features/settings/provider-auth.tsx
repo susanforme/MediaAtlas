@@ -15,6 +15,7 @@ import {
   type ProviderSetupSearch,
   type SetupComplete,
   suggestedProvider,
+  PUBLIC_SETUP_PROVIDERS,
 } from "./setup-search";
 import { SourceSetupActions } from "./source-setup-actions";
 import { useProviderAuth } from "./use-provider-auth";
@@ -406,7 +407,7 @@ function ProviderAuthForm({
             )}
           </Select>
         </Label>
-        {["musicbrainz", "coverartarchive", "tvmaze", "douban", "bangumi"].includes(selectedProvider) ? (
+        {PUBLIC_SETUP_PROVIDERS.some((id) => id === selectedProvider) ? (
           <PublicSourceEditor
             key={selectedProvider}
             providerId={selectedProvider}

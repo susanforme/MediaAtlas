@@ -1,6 +1,6 @@
 import "../scraper/translations";
-import { Link } from "@tanstack/react-router";
-import { lazy, Suspense, useState } from "react";
+import { lazyRouteComponent, Link } from "@tanstack/react-router";
+import { Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "../../components/ui/button";
 import { Card } from "../../components/ui/card";
@@ -26,26 +26,21 @@ import {
 } from "./setup-search";
 import "./setup-translations";
 
-const ProviderAuthSettings = lazy(() =>
-  import("./provider-auth").then((module) => ({
-    default: module.ProviderAuthSettings,
-  })),
-);
-const ProvidersPage = lazy(() =>
-  import("../providers/pages").then((module) => ({
-    default: module.ProvidersPage,
-  })),
-);
-const NetworkInspectorPage = lazy(() =>
-  import("../providers/pages").then((module) => ({
-    default: module.NetworkInspectorPage,
-  })),
-);
-const MaintenancePage = lazy(() =>
-  import("../maintenance/page").then((module) => ({
-    default: module.MaintenancePage,
-  })),
-);
+const loadAuth = () => import("./provider-auth");
+const loadProviders = () => import("../providers/pages");
+const loadMaintenance = () => import("../maintenance/page");
+const ProviderAuthSettings = lazyRouteComponent(loadAuth, "ProviderAuthSettings");
+const ProvidersPage = lazyRouteComponent(loadProviders, "ProvidersPage");
+const NetworkInspectorPage = lazyRouteComponent(loadProviders, "NetworkInspectorPage");
+const MaintenancePage = lazyRouteComponent(loadMaintenance, "MaintenancePage");
+
+export async function preloadSettingsTab(setup: ProviderSetupSearch) {
+  const tab = setup.tab ?? (setup.from || setup.provider ? "auth" : "general");
+  if (tab === "auth") { await loadAuth(); await ProviderAuthSettings.preload?.(); }
+  if (tab === "providers") { await loadProviders(); await ProvidersPage.preload?.(); }
+  if (tab === "network") { await loadProviders(); await NetworkInspectorPage.preload?.(); }
+  if (tab === "diagnostics") { await loadMaintenance(); await MaintenancePage.preload?.(); }
+}
 
 export function SettingsPage({
   returnMediaId,
@@ -75,8 +70,8 @@ export function SettingsPage({
     localTab ??
     (setup.from || setup.provider ? "auth" : "general");
   function changeTab(next: SettingsTab) {
-    setLocalTab(next);
-    onTabChange?.(next);
+    if (onTabChange) onTabChange(next);
+    else setLocalTab(next);
   }
   return (
     <>

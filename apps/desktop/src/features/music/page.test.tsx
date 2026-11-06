@@ -13,6 +13,13 @@ import { toast } from "../../components/ui/sonner";
 import i18n from "../../i18n";
 import { chooseSelectOption } from "../../test/select";
 
+vi.mock("@tanstack/react-router", () => ({
+  Link: ({ to, params, children, ...props }: { to: string; params?: Record<string, string>; children: React.ReactNode; className?: string }) => {
+    const href = Object.entries(params ?? {}).reduce((path, [key, value]) => path.replace(`$${key}`, encodeURIComponent(value)), to);
+    return <a {...props} href={href}>{children}</a>;
+  },
+}));
+
 vi.mock("../../components/ui/sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));

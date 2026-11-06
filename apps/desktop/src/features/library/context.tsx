@@ -30,10 +30,18 @@ const PrivacyContext = createContext({
   saveSettings: async (_value: Omit<AdultSettings, "unlocked">) => {},
   unlock: async () => {},
   lock: async () => {},
+  readSettings: () => defaults,
 });
-export function PrivacyProvider({ children }: { children: ReactNode }) {
+export function PrivacyProvider({ children, onAccessRevoked }: { children: ReactNode; onAccessRevoked?: () => void }) {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState(defaults);
+  const currentSettings = useRef(defaults);
+  const publishSettings = useCallback((update: AdultSettings | ((previous: AdultSettings) => AdultSettings)) => {
+    const next = typeof update === "function" ? update(currentSettings.current) : update;
+    currentSettings.current = next;
+    setSettings(next);
+  }, []);
+  const readSettings = useCallback(() => currentSettings.current, []);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>();
   const generation = useRef(0);
@@ -59,7 +67,7 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
         if (!active || epoch !== generation.current) return;
         // The persisted content-type setting is the user's opt-in. Establish
         // the revocable backend session without a second frontend unlock flow.
-        setSettings(value);
+        publishSettings(value);
         const preferences =
           value.entry_visible &&
           (!value.covers_visible || value.remember_recent)
@@ -74,7 +82,7 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
           preferences.entry_visible && !preferences.unlocked
             ? await adultApi.unlock()
             : preferences;
-        if (active && epoch === generation.current) setSettings(current);
+        if (active && epoch === generation.current) publishSettings(current);
       })
       .catch((failure) => {
         if (active && epoch === generation.current) setError(failure);
@@ -86,10 +94,12 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
       active = false;
       generation.current += 1;
     };
-  }, [persistSettings]);
+  }, [persistSettings, publishSettings]);
   function clearPrivate() {
+    currentSettings.current = { ...currentSettings.current, unlocked: false };
     void queryClient.cancelQueries();
     queryClient.clear();
+    onAccessRevoked?.();
   }
   async function saveSettings(value: Omit<AdultSettings, "unlocked">) {
     const epoch = ++generation.current;
@@ -97,7 +107,7 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     if (!value.entry_visible) {
       clearPrivate();
-      setSettings((previous) => ({ ...previous, ...value, unlocked: false }));
+      publishSettings((previous) => ({ ...previous, ...value, unlocked: false }));
     }
     try {
       const result = await persistSettings({
@@ -106,10 +116,10 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
         remember_recent: value.remember_recent,
       });
       if (epoch !== generation.current) return;
-      setSettings(result);
+      publishSettings(result);
       if (result.entry_visible && !result.unlocked) {
         const current = await adultApi.unlock();
-        if (epoch === generation.current) setSettings(current);
+        if (epoch === generation.current) publishSettings(current);
       }
     } catch (failure) {
       if (epoch === generation.current) setError(failure);
@@ -129,7 +139,7 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
     setError(undefined);
     try {
       const result = await adultApi.unlock();
-      if (epoch === generation.current) setSettings(result);
+      if (epoch === generation.current) publishSettings(result);
     } catch (failure) {
       if (epoch === generation.current) setError(failure);
     }
@@ -137,12 +147,12 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
   async function lock() {
     const epoch = ++generation.current;
     clearPrivate();
-    setSettings((previous) => ({ ...previous, unlocked: false }));
+    publishSettings((previous) => ({ ...previous, unlocked: false }));
     setError(undefined);
     try {
       const result = await adultApi.lock();
       if (epoch === generation.current)
-        setSettings({ ...result, unlocked: false });
+        publishSettings({ ...result, unlocked: false });
     } catch (failure) {
       if (epoch === generation.current) setError(failure);
     }
@@ -158,6 +168,7 @@ export function PrivacyProvider({ children }: { children: ReactNode }) {
         saveSettings,
         unlock,
         lock,
+        readSettings,
       }}
     >
       {children}

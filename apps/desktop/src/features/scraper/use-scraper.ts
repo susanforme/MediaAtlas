@@ -13,9 +13,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { DesktopError } from "../../api/desktop";
-import { defaultBrowse, libraryApi } from "../../api/library";
 import { providerAuthApi } from "../../api/provider-auth";
-import { providerApi } from "../../api/providers";
 import {
   type NfoExportMode,
   type OutputPreview,
@@ -26,6 +24,9 @@ import {
   type VideoMetadata,
 } from "../../api/scraper";
 import { toast } from "../../components/ui/sonner";
+import { providersQuery } from "../providers/queries";
+import { toolsDetailQuery } from "../tools/queries";
+import { outputDefaultQuery, scraperHistoryQuery, scraperLocalQuery } from "./queries";
 import { type FieldPreset, selectScraperFields } from "./field-selection";
 import {
   buildMergePreview,
@@ -111,28 +112,14 @@ export function useScraper(
       });
     };
   }, [output?.preview_id, releaseOutput]);
-  const snapshot = useQuery({
-    queryKey: ["providers"],
-    queryFn: providerApi.snapshot,
-  });
-  const history = useQuery({
-    queryKey: ["scraper-history"],
-    queryFn: scraperOutputApi.history,
-  });
+  const snapshot = useQuery(providersQuery());
+  const history = useQuery(scraperHistoryQuery);
   const local = useQuery({
-    queryKey: ["scraper-local", kind, localQuery],
+    ...scraperLocalQuery(kind, localQuery),
     enabled: !mediaId,
-    queryFn: () =>
-      libraryApi.toolsMedia({
-        ...defaultBrowse(false),
-        kind: kind === "tv" ? "tv_series" : kind,
-        query: localQuery || null,
-        limit: 48,
-      }),
   });
   const targetDetail = useQuery({
-    queryKey: ["tools-detail", target],
-    queryFn: () => libraryApi.toolsDetail(target),
+    ...toolsDetailQuery(target),
     enabled: Boolean(target),
   });
   const targetKind = targetDetail.data
@@ -142,11 +129,8 @@ export function useScraper(
     targetDetail.data && targetKind && targetDetail.data.media.id === target,
   );
   const outputDefault = useQuery({
-    queryKey: ["roots", "nfo-export-mode", target],
-    queryFn: () => scraperOutputApi.defaultMode(target),
+    ...outputDefaultQuery(target),
     enabled: validTarget,
-    retry: false,
-    refetchOnWindowFocus: false,
   });
   const outputOverride = outputChoice?.target === target ? outputChoice.mode : undefined;
   const outputMode = outputOverride ?? outputDefault.data ?? "online";

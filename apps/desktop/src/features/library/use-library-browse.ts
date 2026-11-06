@@ -1,9 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { adultApi } from "../../api/adult";
-import { libraryApi } from "../../api/library";
-import { type LibrarySearch, libraryBrowseQuery } from "./browse-model";
+import type { LibrarySearch } from "./browse-model";
 import { usePrivacy } from "./context";
+import { browseQuery, facetsQuery, mediaQuery, rootsQuery } from "./queries";
 import { useLibraryActivity } from "./use-library-activity";
 
 export function useLibraryBrowse(
@@ -13,30 +12,15 @@ export function useLibraryBrowse(
 ) {
   const [history, setHistory] = useState<(string | undefined)[]>([undefined]);
   const { settings, includeAdult } = usePrivacy();
-  const query = {
-    ...libraryBrowseQuery(search, adult),
-    ...(adult
-      ? {
-          include_adult: true,
-          genre: null,
-          person: null,
-          studio: null,
-          year: null,
-        }
-      : {}),
-  };
+  const query = browseQuery(search, adult);
   const allowed = !adult || (settings.entry_visible && includeAdult);
   const activity = useLibraryActivity(search.root, !adult);
   const roots = useQuery({
-    queryKey: adult ? ["adult", "roots"] : ["roots", false],
-    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
+    ...rootsQuery(adult),
     enabled: allowed,
   });
   const media = useQuery({
-    queryKey: adult
-      ? ["adult", "library", query, settings.covers_visible]
-      : ["media", query],
-    queryFn: () => (adult ? adultApi.media(query) : libraryApi.media(query)),
+    ...mediaQuery(query, adult, settings.covers_visible),
     select: (result) => ({
       ...result,
       items: result.items
@@ -54,8 +38,7 @@ export function useLibraryBrowse(
     enabled: allowed,
   });
   const facets = useQuery({
-    queryKey: ["facets", { ...query, cursor: null }],
-    queryFn: () => libraryApi.facets({ ...query, cursor: null }),
+    ...facetsQuery(query),
     enabled: allowed && !adult,
   });
   function filter(patch: LibrarySearch) {

@@ -16,7 +16,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { adultApi } from "../../api/adult";
 import {
   type ProviderConfig,
   type ProviderView,
@@ -29,6 +28,7 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { toast } from "../../components/ui/sonner";
 import { usePrivacy } from "../library/context";
+import { providersQuery } from "./queries";
 import {
   Empty,
   ErrorNotice,
@@ -45,8 +45,7 @@ import {
 function useSnapshot(adult = false) {
   const { includeAdult } = usePrivacy();
   return useQuery({
-    queryKey: adult ? ["adult", "providers"] : ["providers"],
-    queryFn: adult ? adultApi.providers : providerApi.snapshot,
+    ...providersQuery(adult),
     enabled: !adult || includeAdult,
     refetchInterval: 2000,
   });

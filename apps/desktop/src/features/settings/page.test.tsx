@@ -3,9 +3,12 @@ import { beforeEach, expect, it, vi } from "vitest";
 import i18n from "../../i18n";
 import { chooseSelectOption } from "../../test/select";
 import { initializeTheme, THEME_STORAGE_KEY } from "../../lib/theme";
+import { useState } from "react";
 import { SettingsPage } from "./page";
+import type { SettingsTab } from "./setup-search";
 
-vi.mock("@tanstack/react-router", () => ({
+vi.mock("@tanstack/react-router", async (original) => ({
+  ...(await original<typeof import("@tanstack/react-router")>()),
   Link: ({
     to,
     search,
@@ -115,7 +118,11 @@ it("preserves the ordered review queue when returning from credentials", () => {
 
 it("hosts management pages as keyboard-accessible tabs without loading inactive panels", async () => {
   const change = vi.fn();
-  render(<SettingsPage onTabChange={change} />);
+  function ControlledSettings() {
+    const [tab, setTab] = useState<SettingsTab>("general");
+    return <SettingsPage setup={{ tab }} onTabChange={(next) => { change(next); setTab(next); }} />;
+  }
+  render(<ControlledSettings />);
   const general = screen.getByRole("tab", { name: "General" });
   expect(general).toHaveAttribute("tabindex", "0");
   expect(general).toHaveAttribute(
@@ -154,6 +161,18 @@ it("hosts management pages as keyboard-accessible tabs without loading inactive 
     "diagnostics",
   ]);
   expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
+});
+
+it("keeps the displayed settings panel until its router-controlled tab is ready", async () => {
+  const change = vi.fn();
+  const view = render(<SettingsPage setup={{ tab: "general" }} onTabChange={change} />);
+  fireEvent.click(screen.getByRole("tab", { name: "Authentication" }));
+  expect(change).toHaveBeenCalledWith("auth");
+  expect(screen.getByRole("tab", { name: "General" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("region", { name: "Authentication" })).not.toBeInTheDocument();
+  view.rerender(<SettingsPage setup={{ tab: "auth" }} onTabChange={change} />);
+  await screen.findByRole("region", { name: "Authentication" });
+  expect(screen.getByRole("tab", { name: "Authentication" })).toHaveAttribute("aria-selected", "true");
 });
 
 it("follows the tab supplied by route state and labels its active panel", async () => {

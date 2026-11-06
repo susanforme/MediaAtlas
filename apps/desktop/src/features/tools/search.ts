@@ -110,7 +110,7 @@ export function changeToolsFilters(
     page: undefined,
   });
 }
-export function toolsFilterKey(search: ToolsSearch): string {
+export function toolsFilterKey(search: ToolsRouteFilters): string {
   return JSON.stringify([
     search.q ?? "",
     search.root ?? "",

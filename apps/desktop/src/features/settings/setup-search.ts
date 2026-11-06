@@ -34,6 +34,7 @@ export const SETTINGS_TABS = [
   "diagnostics",
 ] as const;
 export type SettingsTab = (typeof SETTINGS_TABS)[number];
+export const PUBLIC_SETUP_PROVIDERS = ["musicbrainz", "coverartarchive", "tvmaze", "douban", "bangumi"] as const;
 export type SetupReturn =
   | { to: "library"; search: LibrarySearch }
   | { to: "roots" }

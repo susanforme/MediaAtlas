@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -27,6 +28,7 @@ import {
 import { Empty, ErrorNotice, Loading, PageHeading } from "../library/shared";
 import { tagFields } from "./tag-model";
 import { useTagEditor } from "./use-tag-editor";
+import { musicAlbumQuery, musicArtistQuery, musicCoverQuery, musicLibraryQuery, musicToolsLibraryQuery } from "./queries";
 import "./translations";
 
 function Albums({ albums }: { albums: MusicAlbumView[] }) {
@@ -36,10 +38,8 @@ function Albums({ albums }: { albums: MusicAlbumView[] }) {
     <div className="grid gap-3 md:grid-cols-2">
       {albums.map((album) => (
         <Card asChild key={album.release_id}>
-          <Anchor
-            className="block"
-            href={`/music/album/${encodeURIComponent(album.release_id)}`}
-          >
+          <Button asChild variant="link" className="block h-auto justify-start whitespace-normal p-[18px] text-left sm:p-6">
+            <Link to="/music/album/$releaseId" params={{ releaseId: album.release_id }}>
             <h2 className="font-semibold">{album.title}</h2>
             <p>{album.artist}</p>
             <p className="text-sm text-muted-foreground">
@@ -47,7 +47,8 @@ function Albums({ albums }: { albums: MusicAlbumView[] }) {
               {album.date ?? t("musicUnknown")} · {t("musicDiscs")}:{" "}
               {album.medium_count} · {t("musicTracks")}: {album.track_count}
             </p>
-          </Anchor>
+            </Link>
+          </Button>
         </Card>
       ))}
     </div>
@@ -55,16 +56,11 @@ function Albums({ albums }: { albums: MusicAlbumView[] }) {
 }
 export function MusicPage() {
   const { t } = useTranslation();
-  const albums = useQuery({
-    queryKey: ["music-library"],
-    queryFn: musicApi.library,
-  });
+  const albums = useQuery(musicLibraryQuery);
   return (
     <div className="space-y-6">
       <PageHeading title={t("music")}>
-        <Anchor href="/music/tools" className="underline">
-          {t("musicTools")}
-        </Anchor>
+        <Button asChild variant="link" className="h-auto justify-start p-0 whitespace-normal underline"><Link to="/music/tools">{t("musicTools")}</Link></Button>
       </PageHeading>
       {albums.isPending ? (
         <Loading />
@@ -79,10 +75,7 @@ export function MusicPage() {
 export function MusicToolsPage() {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const albums = useQuery({
-    queryKey: ["music-tools-library"],
-    queryFn: musicApi.toolsLibrary,
-  });
+  const albums = useQuery(musicToolsLibraryQuery);
   const [albumId, setAlbumId] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<MusicReleaseGraph>();
@@ -252,13 +245,11 @@ function ReleaseContents({ graph }: { graph: MusicReleaseGraph }) {
       <p>
         {t("musicArtist")}:{" "}
         {graph.artists.map((a) => (
-          <Anchor
-            className="mr-2 underline"
+          <Button asChild variant="link" className="mr-2 h-auto justify-start p-0 whitespace-normal underline"
             key={a.media_item_id}
-            href={`/music/artist/${encodeURIComponent(a.media_item_id)}`}
           >
-            {a.name}
-          </Anchor>
+            <Link to="/music/artist/$artistId" params={{ artistId: a.media_item_id }}>{a.name}</Link>
+          </Button>
         ))}
       </p>
       <p className="text-sm">
@@ -350,18 +341,13 @@ function ReleaseContents({ graph }: { graph: MusicReleaseGraph }) {
 }
 export function MusicArtistPage({ artistId }: { artistId: string }) {
   const { t } = useTranslation();
-  const query = useQuery({
-    queryKey: ["music-artist", artistId],
-    queryFn: () => musicApi.artist(artistId),
-  });
+  const query = useQuery(musicArtistQuery(artistId));
   if (query.isPending) return <Loading />;
   if (query.error) return <ErrorNotice error={query.error} />;
   if (!query.data) return null;
   return (
     <div className="space-y-5">
-      <Anchor className="underline" href="/music">
-        {t("musicBack")}
-      </Anchor>
+      <Button asChild variant="link" className="h-auto justify-start p-0 whitespace-normal underline"><Link to="/music">{t("musicBack")}</Link></Button>
       <PageHeading
         title={query.data.artist.name}
         description={query.data.artist.sort_name ?? undefined}
@@ -375,23 +361,15 @@ export function MusicArtistPage({ artistId }: { artistId: string }) {
 }
 export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
   const { t } = useTranslation();
-  const album = useQuery({
-    queryKey: ["music-album", releaseId],
-    queryFn: () => musicApi.album(releaseId),
-  });
-  const cover = useQuery({
-    queryKey: ["music-cached-cover", releaseId],
-    queryFn: () => musicApi.cachedCover(releaseId),
-  });
+  const album = useQuery(musicAlbumQuery(releaseId));
+  const cover = useQuery(musicCoverQuery(releaseId));
   if (album.isPending) return <Loading />;
   if (album.error) return <ErrorNotice error={album.error} />;
   if (!album.data) return null;
   const graph = album.data;
   return (
     <div className="space-y-6">
-      <Anchor className="underline" href="/music">
-        {t("musicBack")}
-      </Anchor>
+      <Button asChild variant="link" className="h-auto justify-start p-0 whitespace-normal underline"><Link to="/music">{t("musicBack")}</Link></Button>
       <Card asChild>
         <section>
           <ReleaseContents graph={graph} />
@@ -493,9 +471,7 @@ export function MusicAlbumPage({ releaseId }: { releaseId: string }) {
           <LocalAudioFiles graph={graph} />
         </section>
       </Card>
-      <Anchor className="underline" href="/music/tools">
-        {t("musicTools")}
-      </Anchor>
+      <Button asChild variant="link" className="h-auto justify-start p-0 whitespace-normal underline"><Link to="/music/tools">{t("musicTools")}</Link></Button>
     </div>
   );
 }

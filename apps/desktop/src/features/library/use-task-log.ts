@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { adultApi } from "../../api/adult";
 import { libraryApi } from "../../api/library";
 import { providerApi } from "../../api/providers";
+import { providersQuery } from "../providers/queries";
+import { scanTasksQuery } from "./queries";
 import { taskLogEntries, type TaskLogEntry } from "./task-log-model";
 import { useLibraryDirectories } from "./use-library-directories";
 
@@ -9,19 +10,16 @@ export function useTaskLog() {
   const client = useQueryClient();
   const { roots, adultAvailable } = useLibraryDirectories();
   const ordinary = useQuery({
-    queryKey: ["tasks", false],
-    queryFn: () => libraryApi.tasks(false),
+    ...scanTasksQuery(),
     refetchInterval: 2000,
   });
   const privateTasks = useQuery({
-    queryKey: ["adult", "scan-tasks"],
-    queryFn: adultApi.tasks,
+    ...scanTasksQuery(true),
     enabled: adultAvailable,
     refetchInterval: adultAvailable ? 2000 : false,
   });
   const providers = useQuery({
-    queryKey: ["providers"],
-    queryFn: providerApi.snapshot,
+    ...providersQuery(),
     refetchInterval: 2000,
   });
   const cancel = useMutation({

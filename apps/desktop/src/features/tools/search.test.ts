@@ -3,11 +3,21 @@ import {
   changeToolsFilters,
   changeToolsRouteFilters,
   toolsBrowseQuery,
+  toolsFilterKey,
   toolsRouteBrowseQuery,
   toolsSectionLocation,
   validateToolsRouteSearch,
   validateToolsSearch,
 } from "./search";
+
+it("keys workspace lifetime by filters while retaining it across pagination and detail navigation", () => {
+  const base = validateToolsRouteSearch({ kind: "movie", root: "folder", q: "Atlas" });
+  const nextPage = validateToolsRouteSearch({ ...base, cursor: "next", page: 2, media: "film", view: "health" });
+  expect(toolsFilterKey(nextPage)).toBe(toolsFilterKey(base));
+  expect(toolsFilterKey({ ...base, sort: "updated_desc" })).toBe(toolsFilterKey(base));
+  expect(toolsFilterKey({ ...base, q: "Another" })).not.toBe(toolsFilterKey(base));
+  expect(toolsFilterKey({ ...base, kind: "adult_video" })).not.toBe(toolsFilterKey(base));
+});
 
 it("routes the adult type separately without granting ordinary query visibility", () => {
   expect(

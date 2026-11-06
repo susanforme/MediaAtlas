@@ -1,9 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { adultApi } from "../../api/adult";
 import { libraryApi, type ScanTask } from "../../api/library";
 import { recentScanTasks } from "./library-model";
 import type { ScannerSearch } from "./scanner-navigation";
+import { scanTasksQuery } from "./queries";
 import { useLibraryDirectories } from "./use-library-directories";
 
 /** A unified directory workflow with separate authorized query/cache lanes. */
@@ -26,13 +26,11 @@ export function useScannerPreview(
     };
   }, []);
   const ordinaryTasks = useQuery({
-    queryKey: ["tasks", false],
-    queryFn: () => libraryApi.tasks(false),
+    ...scanTasksQuery(),
     refetchInterval: 2000,
   });
   const privateTasks = useQuery({
-    queryKey: ["adult", "scan-tasks"],
-    queryFn: adultApi.tasks,
+    ...scanTasksQuery(true),
     enabled: adultAvailable,
     refetchInterval: adultAvailable ? 2000 : false,
   });

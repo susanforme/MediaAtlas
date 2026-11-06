@@ -8,6 +8,7 @@ import {
   providerAuthApi,
 } from "../../api/provider-auth";
 import { toast } from "../../components/ui/sonner";
+import { providerAuthQuery } from "../providers/queries";
 
 export function useProviderAuth(providerId: string) {
   const { t } = useTranslation();
@@ -25,8 +26,7 @@ export function useProviderAuth(providerId: string) {
   const [error, setError] = useState<unknown>();
   const [invalid, setInvalid] = useState(false);
   const status = useQuery({
-    queryKey: ["provider-auth", providerId],
-    queryFn: () => providerAuthApi.status(providerId),
+    ...providerAuthQuery(providerId),
     retry: false,
   });
   useEffect(() => {

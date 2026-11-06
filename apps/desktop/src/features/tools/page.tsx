@@ -3,9 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { Activity, CheckCircle2, FileVideo, LoaderCircle } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { adultApi } from "../../api/adult";
 import { DesktopError } from "../../api/desktop";
-import { libraryApi } from "../../api/library";
 import {
   maintenanceApi,
   type OrganizationStrategy,
@@ -19,7 +17,9 @@ import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Select } from "../../components/ui/select";
 import { ErrorNotice, Loading, PageHeading } from "../library/shared";
+import { rootsQuery } from "../library/queries";
 import { OrdinaryCandidates } from "./ordinary-candidates";
+import { toolsDetailQuery, watchersQuery } from "./queries";
 import { ToolsSectionNavigation } from "./section-navigation";
 import { type ToolsRouteSearch, validateToolsRouteSearch } from "./search";
 import { useOrganization } from "./use-organization";
@@ -334,13 +334,7 @@ function LocalCandidateDetail({
   onClose?: () => void;
 }) {
   const { t } = useTranslation();
-  const detail = useQuery({
-    queryKey: adult
-      ? ["adult", "tools-detail", mediaId]
-      : ["tools-detail", mediaId],
-    queryFn: () =>
-      adult ? adultApi.toolsDetail(mediaId) : libraryApi.toolsDetail(mediaId),
-  });
+  const detail = useQuery(toolsDetailQuery(mediaId, adult));
   if (detail.isPending) return <Loading />;
   if (detail.isError)
     return (
@@ -405,14 +399,10 @@ function Maintenance({ search }: { search: ToolsRouteSearch }) {
   const { t } = useTranslation();
   const [cursor, setCursor] = useState<string | null>(null);
   const watchers = useQuery({
-    queryKey: ["watchers"],
-    queryFn: maintenanceApi.watchers,
+    ...watchersQuery,
     refetchInterval: 2500,
   });
-  const roots = useQuery({
-    queryKey: ["roots", false],
-    queryFn: () => libraryApi.roots(false),
-  });
+  const roots = useQuery(rootsQuery());
   const configure = useMutation({
     mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
       maintenanceApi.configure(id, enabled),

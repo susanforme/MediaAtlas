@@ -7,6 +7,8 @@ import { libraryApi, type RootView } from "../../api/library";
 import { providerApi } from "../../api/providers";
 import { toast } from "../../components/ui/sonner";
 import { usePrivacy } from "../library/context";
+import { rootsQuery } from "../library/queries";
+import { providersQuery } from "../providers/queries";
 import type {
   ProviderSetupSearch,
   SetupComplete,
@@ -18,8 +20,7 @@ export function useSetupRoot(setup: ProviderSetupSearch) {
   const adult = setup.kind === "adult_video";
   const requested = setup.from === "library" && Boolean(setup.root);
   const roots = useQuery({
-    queryKey: adult ? ["adult", "roots"] : ["roots", false],
-    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
+    ...rootsQuery(adult),
     enabled: requested && (!adult || includeAdult),
   });
   const root = roots.data?.find((entry) => entry.id === setup.root);
@@ -46,8 +47,7 @@ export function useProviderSetup(
   const getSnapshot = () =>
     adult ? adultApi.providers() : providerApi.snapshot();
   const snapshot = useQuery({
-    queryKey: adult ? ["adult", "providers"] : ["providers"],
-    queryFn: getSnapshot,
+    ...providersQuery(adult),
     enabled: !adult || includeAdult,
   });
   useEffect(() => {

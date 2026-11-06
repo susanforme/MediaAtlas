@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { libraryApi } from "../../api/library";
+import { scanTasksQuery } from "./queries";
 import {
   latestLibraryRefreshes,
   refreshIsRunning,
@@ -13,8 +13,7 @@ export function useLibraryActivity(rootId?: string, enabled = true) {
   const client = useQueryClient();
   const previousSnapshot = useRef<string | undefined>(undefined);
   const tasks = useQuery({
-    queryKey: ["tasks", false],
-    queryFn: () => libraryApi.tasks(false),
+    ...scanTasksQuery(),
     enabled,
     refetchInterval: (query) =>
       query.state.data?.some(

@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLayoutEffect, useRef, useState } from "react";
-import { adultApi } from "../../api/adult";
-import { libraryApi, type MediaCard } from "../../api/library";
+import type { MediaCard } from "../../api/library";
 import { usePrivacy } from "../library/context";
+import { rootsQuery } from "../library/queries";
+import { toolsMediaQuery } from "./queries";
 import {
   adultCandidates,
   changeCandidateSelection,
@@ -13,6 +14,7 @@ import {
   type ToolsRouteFilters,
   type ToolsRouteSearch,
   toolsRouteBrowseQuery,
+  toolsFilterKey,
   validateToolsRouteSearch,
 } from "./search";
 
@@ -29,13 +31,7 @@ export function useCandidateBrowser(
   const { includeAdult, settings, loading, error } = usePrivacy();
   const adult = rawSearch.kind === "adult_video";
   const allowed = !adult || includeAdult;
-  const scope = JSON.stringify([
-    rawSearch.q,
-    rawSearch.root,
-    rawSearch.kind,
-    rawSearch.health,
-    rawSearch.sort,
-  ]);
+  const scope = toolsFilterKey(rawSearch);
   const [selection, setSelection] = useState<{
     scope: string;
     cards: MediaCard[];
@@ -62,14 +58,11 @@ export function useCandidateBrowser(
   });
   const query = toolsRouteBrowseQuery(search);
   const roots = useQuery({
-    queryKey: adult ? ["adult", "roots"] : ["roots", false],
-    queryFn: () => (adult ? adultApi.roots() : libraryApi.roots(false)),
+    ...rootsQuery(adult),
     enabled: allowed,
   });
   const media = useQuery({
-    queryKey: adult ? ["adult", "tools-media", query] : ["tools-media", query],
-    queryFn: () =>
-      adult ? adultApi.toolsMedia(query) : libraryApi.toolsMedia(query),
+    ...toolsMediaQuery(query, adult),
     enabled: allowed,
     select: (value) => ({
       ...value,

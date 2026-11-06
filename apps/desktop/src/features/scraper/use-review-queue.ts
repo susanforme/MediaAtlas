@@ -7,16 +7,14 @@ import {
   reviewQueueApi,
 } from "../../api/review-queue";
 import { scraperApi } from "../../api/scraper";
+import { reviewCanWork, reviewMediaId, reviewQueueQuery } from "./queries";
 
 /** A session only restores data. Every write below requires an explicit user action. */
 export function useReviewQueue(sessionId: string, mediaId?: string) {
   const client = useQueryClient();
-  const key = ["review-queue", sessionId];
-  const query = useQuery({
-    queryKey: key,
-    queryFn: () => reviewQueueApi.get(sessionId),
-    retry: false,
-  });
+  const options = reviewQueueQuery(sessionId);
+  const key = options.queryKey;
+  const query = useQuery(options);
   const latest = useRef(query.data);
   latest.current = query.data;
   const active = useRef(true);
@@ -68,10 +66,7 @@ export function useReviewQueue(sessionId: string, mediaId?: string) {
       id: string;
     }) => update(action, id),
   });
-  const selectedId =
-    mediaId && query.data?.items.some((item) => item.media_id === mediaId)
-      ? mediaId
-      : (query.data?.current_media_id ?? query.data?.items[0]?.media_id);
+  const selectedId = reviewMediaId(query.data, mediaId);
   const selected = query.data?.items.find(
     (item) => item.media_id === selectedId,
   );
@@ -147,13 +142,7 @@ export function useReviewQueue(sessionId: string, mediaId?: string) {
     selected,
     selectedId,
     isActive,
-    canWork: Boolean(
-      selected &&
-        !selected.needs_recheck &&
-        ((selected.state === "pending" &&
-          query.data?.current_media_id === selectedId) ||
-          (selected.state === "confirmed" && confirmedHere === selectedId)),
-    ),
+    canWork: reviewCanWork(query.data, selectedId, confirmedHere),
     busy: transition.isPending || confirmation.isPending,
     error: transition.error ?? confirmation.error,
     transition: (action: ReviewUpdate["action"], id: string) =>

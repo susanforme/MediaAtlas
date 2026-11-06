@@ -1,20 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { adultApi } from "../../api/adult";
-import { libraryApi } from "../../api/library";
 import { usePrivacy } from "./context";
+import { rootsQuery } from "./queries";
 
 /** One directory list; private requests remain behind the backend grant. */
 export function useLibraryDirectories() {
   const { includeAdult, settings } = usePrivacy();
   const adultVisible = Boolean(settings?.entry_visible);
   const adultAvailable = adultVisible && includeAdult;
-  const ordinary = useQuery({
-    queryKey: ["roots", false],
-    queryFn: () => libraryApi.roots(false),
-  });
+  const ordinary = useQuery(rootsQuery());
   const privateRoots = useQuery({
-    queryKey: ["adult", "roots"],
-    queryFn: adultApi.roots,
+    ...rootsQuery(true),
     enabled: adultAvailable,
   });
   const roots = {

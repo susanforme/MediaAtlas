@@ -9,6 +9,7 @@ import {
 } from "../../api/maintenance";
 import { toast } from "../../components/ui/sonner";
 import { usePrivacy } from "../library/context";
+import { maintenanceStatusQuery } from "./queries";
 
 type Preview =
   | { kind: "backup"; value: BackupPreview }
@@ -23,10 +24,7 @@ export function useMaintenance() {
   const [preview, setPreview] = useState<Preview | null>(null);
   const [error, setError] = useState<unknown>();
   const [exportPath, setExportPath] = useState("");
-  const status = useQuery({
-    queryKey: ["database-maintenance"],
-    queryFn: api.status,
-  });
+  const status = useQuery(maintenanceStatusQuery);
   useEffect(() => {
     generation.current += 1;
     if (!includeAdult) setExportPath("");

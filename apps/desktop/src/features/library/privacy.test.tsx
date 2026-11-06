@@ -99,6 +99,30 @@ it("uses the saved content setting and grants the backend session without a seco
   expect(adultApi.unlock).toHaveBeenCalledTimes(1);
 });
 
+it("revokes imperative route access and clears private queries before notifying navigation", async () => {
+  vi.mocked(adultApi.settings).mockResolvedValue(enabled);
+  const saved = deferred<AdultSettings>();
+  vi.mocked(adultApi.saveSettings).mockReturnValue(saved.promise);
+  const client = new QueryClient();
+  let readSettings = () => closed;
+  function Inspect() {
+    readSettings = usePrivacy().readSettings;
+    return <Controls />;
+  }
+  const revoked = vi.fn(() => {
+    expect(readSettings().unlocked).toBe(false);
+    expect(client.getQueryCache().findAll()).toHaveLength(0);
+  });
+  render(<QueryClientProvider client={client}><PrivacyProvider onAccessRevoked={revoked}><Inspect /></PrivacyProvider></QueryClientProvider>);
+  await screen.findByText("Fixture content");
+  client.setQueryData(["adult", "fixture"], "private");
+  fireEvent.click(screen.getByText("Fixture disable"));
+  expect(revoked).toHaveBeenCalledTimes(1);
+  expect(readSettings()).toMatchObject({ entry_visible: false, unlocked: false });
+  expect(screen.getByText("Fixture hidden")).toBeVisible();
+  await act(async () => saved.resolve(closed));
+});
+
 it("restores an enabled type automatically and clears private caches immediately when disabled", async () => {
   vi.mocked(adultApi.settings).mockResolvedValue({
     ...enabled,
