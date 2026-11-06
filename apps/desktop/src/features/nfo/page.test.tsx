@@ -26,9 +26,10 @@ it("shows core content with a dedicated draggable titlebar and no application sh
   const { container } = render(<NfoStandalone />);
   await screen.findByRole("heading", { name: "Atlas" });
   expect(container.querySelector('[data-slot="media-detail"]')).not.toBeNull();
-  expect(screen.getByRole("banner")).toHaveAttribute("data-slot", "window-titlebar");
-  expect(screen.getByRole("banner")).toHaveAttribute("data-tauri-drag-region", "deep");
-  expect(screen.getByRole("banner")).toHaveAttribute("data-window-platform", "macos");
+  const titlebar = container.querySelector('[data-slot="window-titlebar"]');
+  expect(titlebar).not.toBeNull();
+  expect(titlebar).toHaveAttribute("data-tauri-drag-region", "deep");
+  expect(titlebar).toHaveAttribute("data-window-platform", "macos");
   expect(container.querySelector('[data-slot="app-shell"],nav,.app-toolbar')).toBeNull();
   expect(screen.queryByRole("button", { name: "Open NFO" })).not.toBeInTheDocument();
   expect(container.querySelector("img,video,audio,iframe")).toBeNull();

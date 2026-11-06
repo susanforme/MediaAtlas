@@ -288,7 +288,7 @@ it("keeps optional local targeting collapsed until requested without sending a p
   const chooser = summary.closest("details");
   await screen.findByText("TMDB");
   expect(chooser).not.toHaveAttribute("open");
-  expect(screen.queryByRole("combobox", { name: "Local media item" })).not.toBeInTheDocument();
+  expect(screen.getByRole("combobox", { name: "Local media item", hidden: true })).not.toBeVisible();
   expect(screen.getByRole("button", { name: "Search providers" })).toBeDisabled();
   fireEvent.click(summary);
   expect(chooser).toHaveAttribute("open");
@@ -653,7 +653,7 @@ it("localizes the workflow in Chinese and snapshots the query language", async (
   await i18n.changeLanguage("zh-CN");
   show();
   await screen.findByText("TMDB");
-  expect(screen.getByText("刮削工作台")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { level: 1, name: "资料刮削" })).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("片名、链接或 ID"), {
     target: { value: "动画标题" },
   });

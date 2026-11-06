@@ -266,7 +266,7 @@ it("distinguishes an unchecked library, a running check and an empty completed b
   expect(within(section).getByRole("status")).toHaveTextContent("Checking library…");
   expect(within(section).getByRole("button", { name: "Check library health" })).toBeDisabled();
   await act(async () => finish({ items: [], next_cursor: null }));
-  expect(within(section).getByRole("status")).toHaveTextContent("No health findings in this batch");
+  await waitFor(() => expect(within(section).getByRole("status")).toHaveTextContent("No health findings in this batch"));
   expect(section).toHaveAttribute("aria-busy", "false");
   expect(maintenanceApi.health).toHaveBeenCalledTimes(1);
   expect(api.execute).not.toHaveBeenCalled();
